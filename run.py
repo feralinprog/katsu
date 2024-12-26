@@ -7,6 +7,8 @@ source_path = "./source.src"
 with open("source.src", "r") as f:
     source = f.read()
 
+parser.should_log = False
+
 try:
     tokens = get_all_tokens(source, source_path)
 

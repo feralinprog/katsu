@@ -90,9 +90,6 @@ class SequenceExpr(Expr):
         return f"sequence({repr(self.sequence)})"
 
 
-depth = 0
-
-
 class PrattParser:
     # prefix parselets:
     #   .parse(token_stream, pratt_parser, current_token)
@@ -104,10 +101,12 @@ class PrattParser:
         self.prefix_parselets = {}
         self.infix_parselets = {}
 
+        self.should_log = False
+        self.depth = 0
+
     def parse(self, stream: TokenStream, precedence: Optional[int] = 0) -> Expr:
         """Parses an expression. Precondition: stream.peek() is not an EOF."""
-        global depth
-        depth += 1
+        self.depth += 1
         token = stream.consume()
         if token._type == TokenType.EOF:
             raise ParseError("Unexpected EOF.", token.span)
@@ -115,10 +114,11 @@ class PrattParser:
         if token._type not in self.prefix_parselets:
             raise ParseError(f"No prefix parselet available for {token}.", token.span)
         prefix = self.prefix_parselets[token._type]
-        print(
-            "| " * (depth - 1)
-            + f"parsing prefix {token._type}, prec={precedence}, token={repr(token.value)}"
-        )
+        if self.should_log:
+            print(
+                "| " * (self.depth - 1)
+                + f"parsing prefix {token._type}, prec={precedence}, token={repr(token.value)}"
+            )
         expr = prefix.parse(stream, self, token)
 
         def active_precedence(token):
@@ -130,23 +130,26 @@ class PrattParser:
 
         while active_precedence(stream.peek()) > precedence:
             token = stream.consume()
-            print(
-                "| " * (depth - 1)
-                + f"got infix token {token._type}, prec={precedence}, token={repr(token.value)}"
-            )
+            if self.should_log:
+                print(
+                    "| " * (self.depth - 1)
+                    + f"got infix token {token._type}, prec={precedence}, token={repr(token.value)}"
+                )
             if token._type == TokenType.EOF:
                 raise ParseError("Unexpected EOF.", token.span)
             if token._type not in self.infix_parselets:
                 raise ParseError(f"No infix parselet available for {token}.", token.span)
-            print("| " * (depth - 1) + f"parsing infix {token._type}, prec={precedence}")
+            if self.should_log:
+                print("| " * (self.depth - 1) + f"parsing infix {token._type}, prec={precedence}")
             infix = self.infix_parselets[token._type]
             expr = infix.parse(stream, self, expr, token)
 
-        print(
-            "| " * (depth - 1)
-            + f"finished parsing at prec={precedence} since next token {stream.peek()._type} ({repr(stream.peek().value)}) has active_prec={active_precedence(stream.peek())}"
-        )
-        depth -= 1
+        if self.should_log:
+            print(
+                "| " * (self.depth - 1)
+                + f"finished parsing at prec={precedence} since next token {stream.peek()._type} ({repr(stream.peek().value)}) has active_prec={active_precedence(stream.peek())}"
+            )
+        self.depth -= 1
         return expr
 
 
