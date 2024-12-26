@@ -1,6 +1,6 @@
 method: {sum: a and: b and: c} does: {
     mut. x
-    x .= a + b
+    x = a + b
     # equiv: :x = a + b (which is desugared to invoking =: with args :x, a+b)
     let. y =: x + c
     # equiv: let: :y =: x + c
