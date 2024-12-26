@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Optional
 
+from error import ParseError
 from lexer import Token, TokenStream, TokenType
 from span import SourceSpan, combine_spans
 
@@ -109,10 +110,10 @@ class PrattParser:
         depth += 1
         token = stream.consume()
         if token._type == TokenType.EOF:
-            raise ValueError("Unexpected EOF")
+            raise ParseError("Unexpected EOF.", token.span)
 
         if token._type not in self.prefix_parselets:
-            raise ValueError(f"No prefix parselet available for {token}")
+            raise ParseError(f"No prefix parselet available for {token}.", token.span)
         prefix = self.prefix_parselets[token._type]
         print(
             "| " * (depth - 1)
@@ -134,9 +135,9 @@ class PrattParser:
                 + f"got infix token {token._type}, prec={precedence}, token={repr(token.value)}"
             )
             if token._type == TokenType.EOF:
-                raise ValueError("Unexpected EOF")
+                raise ParseError("Unexpected EOF.", token.span)
             if token._type not in self.infix_parselets:
-                raise ValueError(f"No infix parselet available for {token}")
+                raise ParseError(f"No infix parselet available for {token}.", token.span)
             print("| " * (depth - 1) + f"parsing infix {token._type}, prec={precedence}")
             infix = self.infix_parselets[token._type]
             expr = infix.parse(stream, self, expr, token)

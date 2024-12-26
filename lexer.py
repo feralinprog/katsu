@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Optional
 
+from error import ParseError
 from span import SourceLocation, SourceSpan
 
 
@@ -92,12 +93,12 @@ def next_token(loc: SourceLocation, source: str) -> Token:
             return Token(span=SourceSpan(start, end), _type=token_type, value=handler(match))
 
     # Didn't find any matches...
-    raise ValueError(f"Couldn't parse input at {start}")
+    raise ParseError("Couldn't determine next token.", span=SourceSpan(start, start))
 
 
 def get_all_tokens(source: str, source_path: str) -> list[Token]:
     tokens = []
-    loc = SourceLocation(source=source_path, index=0, line=0, column=0)
+    loc = SourceLocation(source_path=source_path, source=source, index=0, line=0, column=0)
     while True:
         token = next_token(loc, source)
         tokens.append(token)
@@ -129,6 +130,6 @@ class TokenStream:
         token = self.tokens[self.pos]
         self.pos += 1
         if token_type is not None and token._type != token_type:
-            raise ValueError(f"Expected {token_type}, got {token._type} at {token.span}")
+            raise ParseError(f"Expected {token_type}, got {token._type}.", token.span)
         # print(f"CONSUMED: {token}")
         return token

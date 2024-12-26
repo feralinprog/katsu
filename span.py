@@ -4,6 +4,8 @@ from dataclasses import dataclass
 @dataclass
 class SourceLocation:
     # filename, or could be a representation of e.g. internal source or REPL UI
+    source_path: str
+    # Reference to full source (don't make a copy!)
     source: str
     # index of character, just incrementing from 0 to end of file
     index: int
