@@ -1,7 +1,8 @@
 from parser import parser
 
-from error import ParseError
-from lexer import TokenStream, TokenType, get_all_tokens
+from error import ParseError, RunError
+from interpreter import eval, global_context
+from lexer import SourceSpan, TokenStream, TokenType, get_all_tokens
 
 source_path = "./source.src"
 with open("source.src", "r") as f:
@@ -9,63 +10,44 @@ with open("source.src", "r") as f:
 
 parser.should_log = False
 
+
+def show_error(header_prefix: str, span: SourceSpan):
+    start, end = span.start, span.end
+    print(f"{header_prefix} (at <{start.source_path}> {start.line + 1}:{start.column + 1}):")
+
+    context_lines = 2  # excluding error line itself
+
+    text_lines = start.source.split("\n")
+    for line, text in enumerate(text_lines):
+        if start.line - context_lines <= line <= end.line + context_lines:
+            print(f"| {text}")
+        if line == start.line:
+            end_col = end.column if end.line == start.line else len(text)
+            print("  " + " " * start.column + "^" * (end_col - start.column))
+        elif start.line < line < end.line:
+            print("  " + "^" * len(text))
+        elif line == end.line:
+            print("  " + "^" * end.column)
+
+
 try:
     tokens = get_all_tokens(source, source_path)
 
     stream = TokenStream(tokens)
     while stream.peek()._type != TokenType.EOF:
         top_level_expr = parser.parse(stream)
-        print(top_level_expr)
+        print("result:", eval(top_level_expr, global_context))
 except ParseError as e:
-    span = e.span
-    start, end = span.start, span.end
-    print(f"Parse error (at <{start.source_path}> {start.line + 1}:{start.column + 1}):")
-
-    context_lines = 2  # excluding error line itself
-
-    # TODO: improve, this is easy but probably quite slow.
-    index, line, col = 0, 0, 0
-    while index < len(start.source):
-        if start.line - context_lines <= line <= end.line + context_lines:
-            # Print the source line.
-            print("| ", end="")
-            for i in range(index, len(start.source)):
-                c = start.source[i]
-                if c == "\n":
-                    break
-                if c != "\r":
-                    print(c, end="")
-            print()
-            # Go back and print error carets, if applicable.
-            if start.line <= line <= end.line:
-                print("+-", end="")
-            while index < len(start.source):
-                c = start.source[index]
-                if c == "\n":
-                    if start.line <= line <= end.line:
-                        print()
-                    line += 1
-                    col = 0
-                    index += 1
-                    break
-                else:
-                    if start.line <= line <= end.line:
-                        if start.index <= index < end.index or (index == start.index == end.index):
-                            print("^", end="")
-                        elif index < start.index:
-                            print("-", end="")
-                        else:
-                            print(" ", end="")
-                    col += 1
-                index += 1
-        elif start.line - context_lines > line:
-            if c == "\n":
-                line += 1
-                col = 0
-            else:
-                col += 1
-            index += 1
+    show_error("Parse error", e.span)
+    print(e)
+except RunError as e:
+    while e:
+        if isinstance(e, RunError):
+            show_error("Evaluation error", e.span)
+            print(e)
         else:
-            break
-
-    print(f"{e}")
+            raise e
+        e = e.__cause__
+        if e:
+            print()
+            print("(Due to:)")
