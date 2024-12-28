@@ -189,8 +189,7 @@ class Method:
             parts = parts[:-1]
             assert len(self.param_names) == len(parts)
         else:
-            assert len(self.param_names) == 1
-            body_ctxt.definitions[self.param_names[0]]
+            assert len(self.param_names) == 0
         assert len(args) == len(self.param_names)
         for param_name, arg in zip(self.param_names, args):
             body_ctxt.definitions[param_name] = arg
