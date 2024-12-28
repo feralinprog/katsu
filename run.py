@@ -110,7 +110,9 @@ try:
     stream = TokenStream(tokens)
     while stream.peek()._type != TokenType.EOF:
         top_level_expr = parser.parse(stream, is_toplevel=True)
-        eval(top_level_expr, global_context)
+        print(">> " + colored(pf(top_level_expr), "green"))
+        result = eval(top_level_expr, global_context)
+        print(colored(str(result), "blue"))
 except ParseError as e:
     show_error("Parse error", e.span)
     print(e)
