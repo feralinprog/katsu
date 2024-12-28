@@ -24,11 +24,13 @@ def show_error(header_prefix: str, span: SourceSpan):
             print(f"| {text}")
         if line == start.line:
             end_col = end.column if end.line == start.line else len(text)
-            print("  " + " " * start.column + "^" * (end_col - start.column))
+            print("+ " + " " * start.column + "^" * (end_col - start.column))
         elif start.line < line < end.line:
-            print("  " + "^" * len(text))
+            ws = len(text) - len(text.lstrip(" "))
+            print("+ " + " " * ws + "^" * (len(text) - ws))
         elif line == end.line:
-            print("  " + "^" * end.column)
+            ws = len(text) - len(text.lstrip(" "))
+            print("+ " + " " * ws + "^" * (end.column - ws))
 
 
 try:
