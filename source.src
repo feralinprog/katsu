@@ -27,3 +27,30 @@ let: :a =: 5
 print: a
 {a} = 10
 print: a
+
+method: {while: cond do: body} does: {
+    if: cond eval then: {
+        body eval
+        while: cond do: body
+    }
+}
+
+method: {test-while} does: {
+    let: {i} =: 10
+    while: {i > 0} do: {
+        print: i
+        {i} = i - 1
+    }
+}
+test-while
+
+method: {for: name from: low to<: high do: body} does: {
+    let: :i =: low
+    while: {i < high} do: {
+        body eval-with: name =: i
+        {i} = i + 1
+    }
+}
+for: {i} from: 0 to<: 10 do: {
+    print: i
+}
