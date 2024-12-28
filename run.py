@@ -114,6 +114,10 @@ try:
         result = eval(top_level_expr, global_context)
         if not isinstance(result, NullValue):
             print(colored(str(result), "blue"))
+
+        # Ratchet past any newlines.
+        while stream.peek()._type == TokenType.NEWLINE:
+            stream.consume()
 except ParseError as e:
     show_error("Parse error", e.span)
     print(e)

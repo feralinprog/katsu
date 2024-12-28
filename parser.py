@@ -112,8 +112,9 @@ class PrattParser:
         token = stream.consume()
         while token._type == TokenType.NEWLINE:
             token = stream.consume()
-        if token._type == TokenType.EOF:
-            raise ParseError("Unexpected EOF.", token.span)
+        assert (
+            token._type != TokenType.EOF
+        ), "parse() requires there to be a remaining token that is not NEWLINE or EOF."
 
         if token._type not in self.prefix_parselets:
             raise ParseError(f"No prefix parselet available for {token}.", token.span)
