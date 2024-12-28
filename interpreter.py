@@ -279,6 +279,54 @@ def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, val
 builtin("local:is:", handle__local_is_)
 
 
+# TODO: alias? or just fully rename...
+def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value: Value) -> Value:
+    if receiver:
+        raise ValueError("let:=: does not take a receiver")
+    if isinstance(decl, ExprValue):
+        if isinstance(decl.expr, NameExpr):
+            local_name = decl.expr.name.value
+        else:
+            raise ValueError(
+                f"let:=: 'declaration' argument should be a symbol or quoted name; got {decl}"
+            )
+    elif isinstance(decl, SymbolValue):
+        local_name = decl.symbol
+    else:
+        raise ValueError("let:=: 'declaration' argument should be a symbol or quoted name")
+
+    if local_name in ctxt.definitions:
+        raise ValueError(f"Message '{local_name}' is already defined.")
+    ctxt.definitions[local_name] = value
+    return value
+
+
+builtin("let:=:", handle__local_is_)
+
+
+def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
+    assert receiver
+    if isinstance(receiver, ExprValue):
+        if isinstance(receiver.expr, NameExpr):
+            slot = receiver.expr.name.value
+        else:
+            raise ValueError(
+                f"=: 'slot' argument should be a symbol or quoted name; got {receiver}"
+            )
+    elif isinstance(receiver, SymbolValue):
+        slot = receiver.symbol
+    else:
+        raise ValueError("=: receiver should be a symbol or quoted name")
+
+    if slot not in ctxt.definitions:
+        raise ValueError(f"'{slot}' is not yet defined.")
+    ctxt.definitions[slot] = value
+    return value
+
+
+builtin("=", handle__set)
+
+
 def generic_binary_op_handler(
     op: str,
     handlers: list[Tuple[Type, Type, Callable[[Any, Any], Value]]],
