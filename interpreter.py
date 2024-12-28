@@ -278,3 +278,40 @@ builtin("print:", handle__print_)
 builtin("t", BoolValue(True))
 builtin("f", BoolValue(False))
 builtin("null", NullValue())
+
+
+def handle__to_string(ctxt: Context, value: Value) -> Value:
+    return StringValue(str(value))
+
+
+builtin(">string", handle__to_string)
+
+
+# def handle__if_then_(ctxt: Context, receiver: Optional[Value], cond: Value, tbody: Value) -> Value:
+#    if receiver:
+#        raise ValueError("if:then: does not take a receiver")
+#    if isinstance(cond, BoolValue) and cond.value:
+#        if isinstance(tbody, ExprValue):
+#            return eval(tbody.expr, tbody.context)
+#        else:
+#            return tbody
+#    else:
+#        return NullValue()
+def handle__if_then_else_(
+    ctxt: Context, receiver: Optional[Value], cond: Value, tbody: Value, fbody: Value
+) -> Value:
+    if receiver:
+        raise ValueError("if:then:else: does not take a receiver")
+    if isinstance(cond, BoolValue) and cond.value:
+        if isinstance(tbody, ExprValue):
+            return eval(tbody.expr, tbody.context)
+        else:
+            return tbody
+    else:
+        if isinstance(fbody, ExprValue):
+            return eval(fbody.expr, fbody.context)
+        else:
+            return fbody
+
+
+builtin("if:then:else:", handle__if_then_else_)
