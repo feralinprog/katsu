@@ -294,12 +294,20 @@ class OperatorInfixParselet:
     }
 
     def parse(self, stream: TokenStream, parser: PrattParser, left: Expr, token: Token) -> Expr:
+        if not token.value in self.infix_precedence:
+            raise ParseError(f"Missing infix precedence for operator '{token.value}'.", token.span)
+        if not token.value in self.infix_associativity:
+            raise ParseError(
+                f"Missing infix associativity for operator '{token.value}'.", token.span
+            )
         op_prec = self.infix_precedence[token.value].value
         op_assoc = self.infix_associativity[token.value]
         right = parser.parse(stream, op_prec if op_assoc == Associativity.LEFT else op_prec - 1)
         return BinaryOpExpr(combine_spans(left.span, token.span, right.span), token, left, right)
 
     def precedence(self, token: Token) -> int:
+        if not token.value in self.infix_precedence:
+            raise ParseError(f"Missing infix precedence for operator '{token.value}'.", token.span)
         return self.infix_precedence[token.value].value
 
 
