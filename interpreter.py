@@ -122,7 +122,9 @@ def message_invoke(
         return handler
     else:
         # handler is something which can be called with a context, receiver, and arguments
-        return handler(ctxt, receiver, *args)
+        result = handler(ctxt, receiver, *args)
+        assert isinstance(result, Value), f"Message result '{result}' is not a Value!"
+        return result
 
 
 def lookup_handler(ctxt: Context, message: str):
@@ -219,6 +221,7 @@ def handle__method_does_(
         if message in ctxt.definitions:
             raise ValueError(f"Message '{message}' is already defined.")
         ctxt.definitions[message] = method
+        return NullValue()
     else:
         raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
 
@@ -244,6 +247,7 @@ def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, val
     if local_name in ctxt.definitions:
         raise ValueError(f"Message '{local_name}' is already defined.")
     ctxt.definitions[local_name] = value
+    return value
 
 
 builtin("local:is:", handle__local_is_)
