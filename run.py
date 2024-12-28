@@ -15,7 +15,7 @@ from parser import (
 from termcolor import colored, cprint
 
 from error import ParseError, RunError
-from interpreter import eval, global_context
+from interpreter import NullValue, eval, global_context
 from lexer import TokenStream, TokenType, get_all_tokens
 from span import SourceFile, SourceSpan
 
@@ -112,7 +112,8 @@ try:
         top_level_expr = parser.parse(stream, is_toplevel=True)
         print(">> " + colored(pf(top_level_expr), "green"))
         result = eval(top_level_expr, global_context)
-        print(colored(str(result), "blue"))
+        if not isinstance(result, NullValue):
+            print(colored(str(result), "blue"))
 except ParseError as e:
     show_error("Parse error", e.span)
     print(e)
