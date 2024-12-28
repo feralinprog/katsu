@@ -467,3 +467,36 @@ def handle__if_then_else_(
 
 
 builtin("if:then:else:", handle__if_then_else_)
+
+
+def handle__eval(ctxt: Context, receiver: Optional[Value]) -> Value:
+    assert receiver
+    if isinstance(receiver, ExprValue):
+        return eval(receiver.expr, receiver.context)
+    else:
+        return receiver
+
+
+builtin("eval", handle__eval)
+
+
+def handle__eval_with_eq_(
+    ctxt: Context, receiver: Optional[Value], slot: Value, value: Value
+) -> Value:
+    if isinstance(slot, ExprValue):
+        if isinstance(slot.expr, NameExpr):
+            slot = slot.expr.name.value
+        else:
+            raise ValueError(f"eval-with:=: 'slot' should be a symbol or quoted name; got {slot}")
+    elif isinstance(slot, SymbolValue):
+        slot = slot.symbol
+    else:
+        raise ValueError(f"eval-with:=: 'slot' should be a symbol or quoted name; got {slot}")
+
+    if isinstance(receiver, ExprValue):
+        return eval(receiver.expr, Context(definitions={slot: value}, base=receiver.context))
+    else:
+        return receiver
+
+
+builtin("eval-with:=:", handle__eval_with_eq_)
