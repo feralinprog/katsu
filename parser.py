@@ -104,7 +104,9 @@ class PrattParser:
         self.should_log = False
         self.depth = 0
 
-    def parse(self, stream: TokenStream, precedence: Optional[int] = 0) -> Expr:
+    def parse(
+        self, stream: TokenStream, precedence: Optional[int] = 0, is_toplevel: bool = False
+    ) -> Expr:
         """Parses an expression. Precondition: stream.peek() is not an EOF."""
         self.depth += 1
         token = stream.consume()
@@ -130,7 +132,11 @@ class PrattParser:
                 # raise ValueError(f"No infix parselets available to determine precedence for {token}")
                 return 0
 
-        while active_precedence(stream.peek()) > precedence:
+        while active_precedence(stream.peek()) > precedence and (
+            stream.peek()._type not in [TokenType.SEMICOLON, TokenType.NEWLINE]
+            if is_toplevel
+            else True
+        ):
             token = stream.consume()
             if self.should_log:
                 print(

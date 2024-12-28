@@ -63,7 +63,7 @@ try:
 
     stream = TokenStream(tokens)
     while stream.peek()._type != TokenType.EOF:
-        top_level_expr = parser.parse(stream)
+        top_level_expr = parser.parse(stream, is_toplevel=True)
         print("result:", eval(top_level_expr, global_context))
 except ParseError as e:
     show_error("Parse error", e.span)
