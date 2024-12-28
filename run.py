@@ -2,7 +2,8 @@ from parser import parser
 
 from error import ParseError, RunError
 from interpreter import eval, global_context
-from lexer import SourceFile, SourceSpan, TokenStream, TokenType, get_all_tokens
+from lexer import TokenStream, TokenType, get_all_tokens
+from span import SourceFile, SourceSpan
 
 source_path = "./source.src"
 with open("source.src", "r") as f:
