@@ -34,5 +34,5 @@ def combine_spans(*spans: list[SourceSpan]) -> SourceSpan:
         raise ValueError("There are no spans, or they come from different sources.")
     return SourceSpan(
         min([span.start for span in spans], key=lambda loc: loc.index),
-        max([span.start for span in spans], key=lambda loc: loc.index),
+        max([span.end for span in spans], key=lambda loc: loc.index),
     )
