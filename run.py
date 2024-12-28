@@ -1,4 +1,16 @@
-from parser import parser
+from parser import (
+    BinaryOpExpr,
+    BlockExpr,
+    Expr,
+    LiteralExpr,
+    NameExpr,
+    NAryMessageExpr,
+    ParenExpr,
+    SequenceExpr,
+    UnaryMessageExpr,
+    UnaryOpExpr,
+    parser,
+)
 
 from termcolor import colored, cprint
 
@@ -57,6 +69,40 @@ def show_error(header_prefix: str, span: SourceSpan):
                 print("! " + " " * ws + "^" * (end.column - ws))
 
 
+# pretty-format into a string
+# TODO: line wrapping, indenting
+def pf(expr: Expr) -> str:
+    # Note: doesn't produce trailing newline.
+    if isinstance(expr, UnaryOpExpr):
+        return "(" + expr.op.value + " " + pf(expr.arg) + ")"
+    elif isinstance(expr, BinaryOpExpr):
+        return "(" + pf(expr.left) + " " + expr.op.value + " " + pf(expr.right) + ")"
+    elif isinstance(expr, NameExpr):
+        return expr.name.value
+    elif isinstance(expr, LiteralExpr):
+        return "lit(" + repr(expr.literal.value) + ")"
+    elif isinstance(expr, UnaryMessageExpr):
+        return "(" + pf(expr.target) + " " + expr.message.value + ")"
+    elif isinstance(expr, NAryMessageExpr):
+        return (
+            "("
+            + (pf(expr.target) + " " if expr.target else "")
+            + " ".join(
+                message.value + ": " + pf(arg) for message, arg in zip(expr.messages, expr.args)
+            )
+            + ")"
+        )
+    elif isinstance(expr, ParenExpr):
+        return pf(expr.inner)
+    elif isinstance(expr, BlockExpr):
+        return "{ " + pf(expr.inner) + " }"
+    elif isinstance(expr, SequenceExpr):
+        assert expr.sequence != []
+        return "; ".join(pf(part) for part in expr.sequence)
+    else:
+        raise AssertionError(f"Forgot an expression type! {type(expr)}")
+
+
 try:
     file = SourceFile(source_path=source_path, source=source)
     tokens = get_all_tokens(file)
@@ -64,7 +110,7 @@ try:
     stream = TokenStream(tokens)
     while stream.peek()._type != TokenType.EOF:
         top_level_expr = parser.parse(stream, is_toplevel=True)
-        print("result:", eval(top_level_expr, global_context))
+        eval(top_level_expr, global_context)
 except ParseError as e:
     show_error("Parse error", e.span)
     print(e)
