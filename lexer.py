@@ -49,30 +49,53 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
     if loc.index == len(source):
         return Token(span=SourceSpan(file, loc, loc), _type=TokenType.EOF, value=None)
 
+    def word_to_token(match):
+        word = match.group(0)
+
+        if ":" in word:
+            if word == ":" or len([c for c in word if c == ":"]) > 1:
+                return (TokenType.ERROR, word)
+            if word.startswith(":"):
+                sym = word[1:]
+                if not sym:
+                    return (TokenType.ERROR, word)
+                return (TokenType.SYMBOL, sym)
+            elif word.endswith(":"):
+                msg = word[:-1]
+                return (TokenType.MESSAGE, msg)
+            else:
+                return (TokenType.ERROR, word)
+
+        op_chars = "`~!@#$%^&*-+=\\|\"',<.>/?"
+        if set(word) <= set(op_chars):
+            return (TokenType.OPERATOR, word)
+
+        num_chars = "0123456789"
+        if set(word) <= set(num_chars):
+            return (TokenType.NUMBER, int(word))
+
+        return (TokenType.NAME, word)
+
     regex_handlers = [
         # token _type | regex | (regex match -> value) function
+        # or "<defer>" | regex | (regex match -> (token _type, value)) function
         (TokenType.SEMICOLON, r";", lambda match: match.group(0)),
         (TokenType.NEWLINE, r"\n", lambda match: match.group(0)),
         (TokenType.WHITESPACE, r"[ \t\r\n]+", lambda match: match.group(0)),
-        (TokenType.COMMENT, r"#.*\n?", lambda match: match.group(0)),
+        (TokenType.COMMENT, r"#.*", lambda match: match.group(0)),
         (TokenType.LPAREN, r"\(", lambda match: match.group(0)),
         (TokenType.RPAREN, r"\)", lambda match: match.group(0)),
         (TokenType.LCURLY, r"\{", lambda match: match.group(0)),
         (TokenType.RCURLY, r"\}", lambda match: match.group(0)),
-        (
-            TokenType.MESSAGE,
-            r"([^ \t\r\n\(\)\{\}\[\];:.,]+)([:.])",
-            lambda match: (match.group(1), match.group(2)),
-        ),
-        (TokenType.SYMBOL, r"(:([^ \t\r\n\(\)\{\}\[\];:.,]+))+", lambda match: match.group(0)[1:]),
-        (TokenType.NUMBER, r"[0-9]+", lambda match: int(match.group(0))),
+        # Handle specially to allow parsing as an operator even if not surrounded by spaces.
+        (TokenType.OPERATOR, r",", lambda match: match.group(0)),
         (
             TokenType.STRING,
             r"\"([^\"]|\\\")*\"",
             lambda match: match.group(0)[1:-1].replace('\\"', '"'),
         ),
-        (TokenType.OPERATOR, r"[`~!@#$%^&*\-+=|/\\\(\)\{\}\[\],]+", lambda match: match.group(0)),
-        (TokenType.NAME, r"[^ \t\r\n;:.,\(\)\{\}\[\]]+", lambda match: match.group(0)),
+        # word_to_token handles anything that looks like a message, symbol, number, operator, or name
+        ("<defer>", r"([^ \t\r\n\(\)\{\}\[\];,])+", word_to_token),
     ]
 
     start = dataclasses.replace(loc)
@@ -93,7 +116,11 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
                     end.column += 1
                 end.index += 1
 
-            return Token(span=SourceSpan(file, start, end), _type=token_type, value=handler(match))
+            if token_type == "<defer>":
+                token_type, value = handler(match)
+            else:
+                value = handler(match)
+            return Token(span=SourceSpan(file, start, end), _type=token_type, value=value)
 
     # Didn't find any matches...
     raise ParseError("Couldn't determine next token.", span=SourceSpan(file, start, start))

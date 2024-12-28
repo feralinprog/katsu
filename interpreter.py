@@ -83,10 +83,9 @@ def eval(expr: Expr, ctxt: Context) -> Value:
         elif isinstance(expr, UnaryMessageExpr):
             return message_invoke(ctxt, expr.message.value, eval(expr.target, ctxt), [])
         elif isinstance(expr, NAryMessageExpr):
-            # TODO: handle '.' vs ':' message portions (or delete '.')
             return message_invoke(
                 ctxt,
-                "".join(message.value[0] + ":" for message in expr.messages),
+                "".join(message.value + ":" for message in expr.messages),
                 eval(expr.target, ctxt) if expr.target is not None else None,
                 [eval(arg, ctxt) for arg in expr.args],
             )
@@ -204,8 +203,7 @@ def handle__method_does_(
                     raise ValueError(
                         "When the method:does: 'declaration' argument is an n-ary message, it must be a simple n-ary message of the form {[target-name] message: param-name ...}"
                     )
-            # TODO: handle '.' vs ':' message portions (or delete '.')
-            message = "".join(message.value[0] + ":" for message in decl.expr.messages)
+            message = "".join(message.value + ":" for message in decl.expr.messages)
             receiver_name = decl.expr.target.name.value if decl.expr.target else "self"
             param_names = [arg.name.value for arg in decl.expr.args]
         else:
