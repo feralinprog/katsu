@@ -11,7 +11,7 @@ from parser import (
     UnaryMessageExpr,
     UnaryOpExpr,
 )
-from typing import Optional
+from typing import Callable, Optional, Union
 
 from error import RunError
 from lexer import Token, TokenType
@@ -21,7 +21,9 @@ from lexer import Token, TokenType
 class Context:
     # Each definition is either a Value, or a python callable of the form
     #   (self, ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value
-    definitions: dict[str, "Value"]
+    definitions: dict[
+        str, Union["Value", Callable[["Context", Optional["Value"], list["Value"]], "Value"]]
+    ]
     base: Optional["Context"]
 
 
