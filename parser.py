@@ -163,13 +163,15 @@ class PrattParser:
 
 class Precedence(Enum):
     SEQUENCING = 10
+    # TODO: delete assignment?
     ASSIGNMENT = 20
 
     N_ARY_MESSAGE = 50
 
-    SUM_DIFFERENCE = 100
-    DIVISION = 110
-    PRODUCT = 120
+    COMPARISON = 100
+    SUM_DIFFERENCE = 110
+    DIVISION = 120
+    PRODUCT = 130
 
     PREFIX = 500
 
@@ -286,6 +288,12 @@ class Associativity(Enum):
 class OperatorInfixParselet:
     infix_precedence = {
         "=": Precedence.ASSIGNMENT,
+        "==": Precedence.COMPARISON,
+        "!=": Precedence.COMPARISON,
+        "<": Precedence.COMPARISON,
+        "<=": Precedence.COMPARISON,
+        ">": Precedence.COMPARISON,
+        ">=": Precedence.COMPARISON,
         "+": Precedence.SUM_DIFFERENCE,
         "-": Precedence.SUM_DIFFERENCE,
         "*": Precedence.PRODUCT,
@@ -293,6 +301,12 @@ class OperatorInfixParselet:
     }
     infix_associativity = {
         "=": Associativity.RIGHT,
+        "==": Associativity.LEFT,
+        "!=": Associativity.LEFT,
+        "<": Associativity.LEFT,
+        "<=": Associativity.LEFT,
+        ">": Associativity.LEFT,
+        ">=": Associativity.LEFT,
         "+": Associativity.LEFT,
         "-": Associativity.LEFT,
         "*": Associativity.LEFT,
