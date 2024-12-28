@@ -226,6 +226,29 @@ def handle__method_does_(
 builtin("method:does:", handle__method_does_)
 
 
+def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, value: Value) -> Value:
+    if receiver:
+        raise ValueError("local:is: does not take a receiver")
+    if isinstance(decl, ExprValue):
+        if isinstance(decl.expr, NameExpr):
+            local_name = decl.expr.name.value
+        else:
+            raise ValueError(
+                f"local:is: 'declaration' argument should be a symbol or quoted name; got {decl}"
+            )
+    elif isinstance(decl, SymbolValue):
+        local_name = decl.symbol
+    else:
+        raise ValueError("local:is: 'declaration' argument should be a symbol or quoted name")
+
+    if local_name in ctxt.definitions:
+        raise ValueError(f"Message '{local_name}' is already defined.")
+    ctxt.definitions[local_name] = value
+
+
+builtin("local:is:", handle__local_is_)
+
+
 def handle__plus(ctxt: Context, left: Optional[Value], right: Value) -> Value:
     assert left
     if isinstance(left, NumberValue) and isinstance(right, NumberValue):
