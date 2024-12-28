@@ -311,7 +311,6 @@ builtin_binary_op(
     "+",
     [
         (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value + b.value))),
-        (StringValue, StringValue, (lambda a, b: StringValue(a.value + b.value))),
     ],
 )
 builtin_binary_op(

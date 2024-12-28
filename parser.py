@@ -168,10 +168,11 @@ class Precedence(Enum):
 
     N_ARY_MESSAGE = 50
 
-    COMPARISON = 100
-    SUM_DIFFERENCE = 110
-    DIVISION = 120
-    PRODUCT = 130
+    CONCATENATION = 100
+    COMPARISON = 110
+    SUM_DIFFERENCE = 120
+    DIVISION = 130
+    PRODUCT = 140
 
     PREFIX = 500
 
@@ -288,6 +289,7 @@ class Associativity(Enum):
 class OperatorInfixParselet:
     infix_precedence = {
         "=": Precedence.ASSIGNMENT,
+        "~": Precedence.CONCATENATION,
         "==": Precedence.COMPARISON,
         "!=": Precedence.COMPARISON,
         "<": Precedence.COMPARISON,
@@ -301,6 +303,7 @@ class OperatorInfixParselet:
     }
     infix_associativity = {
         "=": Associativity.RIGHT,
+        "~": Associativity.LEFT,
         "==": Associativity.LEFT,
         "!=": Associativity.LEFT,
         "<": Associativity.LEFT,
