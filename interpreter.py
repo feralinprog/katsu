@@ -15,6 +15,7 @@ from typing import Any, Callable, Optional, Tuple, Type, Union
 
 from error import RunError
 from lexer import Token, TokenType
+from span import SourceSpan
 
 
 @dataclass
@@ -89,39 +90,37 @@ class ExprValue(Value):
 
 def eval(expr: Expr, ctxt: Context) -> Value:
     assert expr is not None
-    try:
-        if isinstance(expr, UnaryOpExpr):
-            return message_invoke(ctxt, expr.op.value, eval(expr.arg, ctxt), [])
-        elif isinstance(expr, BinaryOpExpr):
-            return message_invoke(
-                ctxt, expr.op.value, eval(expr.left, ctxt), [eval(expr.right, ctxt)]
-            )
-        elif isinstance(expr, NameExpr):
-            return message_invoke(ctxt, expr.name.value, None, [])
-        elif isinstance(expr, LiteralExpr):
-            return literal_to_value(expr.literal)
-        elif isinstance(expr, UnaryMessageExpr):
-            return message_invoke(ctxt, expr.message.value, eval(expr.target, ctxt), [])
-        elif isinstance(expr, NAryMessageExpr):
-            return message_invoke(
-                ctxt,
-                "".join(message.value + ":" for message in expr.messages),
-                eval(expr.target, ctxt) if expr.target is not None else None,
-                [eval(arg, ctxt) for arg in expr.args],
-            )
-        elif isinstance(expr, ParenExpr):
-            return eval(expr.inner, ctxt)
-        elif isinstance(expr, BlockExpr):
-            return ExprValue(expr=expr.inner, context=ctxt)
-        elif isinstance(expr, SequenceExpr):
-            assert expr.sequence != []
-            for part in expr.sequence:
-                last_value = eval(part, ctxt)
-            return last_value
-        else:
-            raise AssertionError(f"Forgot an expression type! {type(expr)}")
-    except Exception as exc:
-        raise RunError("Couldn't evaluate expression.", span=expr.span) from exc
+    if isinstance(expr, UnaryOpExpr):
+        return message_invoke(expr.span, ctxt, expr.op.value, eval(expr.arg, ctxt), [])
+    elif isinstance(expr, BinaryOpExpr):
+        return message_invoke(
+            expr.span, ctxt, expr.op.value, eval(expr.left, ctxt), [eval(expr.right, ctxt)]
+        )
+    elif isinstance(expr, NameExpr):
+        return message_invoke(expr.span, ctxt, expr.name.value, None, [])
+    elif isinstance(expr, LiteralExpr):
+        return literal_to_value(expr.literal)
+    elif isinstance(expr, UnaryMessageExpr):
+        return message_invoke(expr.span, ctxt, expr.message.value, eval(expr.target, ctxt), [])
+    elif isinstance(expr, NAryMessageExpr):
+        return message_invoke(
+            expr.span,
+            ctxt,
+            "".join(message.value + ":" for message in expr.messages),
+            eval(expr.target, ctxt) if expr.target is not None else None,
+            [eval(arg, ctxt) for arg in expr.args],
+        )
+    elif isinstance(expr, ParenExpr):
+        return eval(expr.inner, ctxt)
+    elif isinstance(expr, BlockExpr):
+        return ExprValue(expr=expr.inner, context=ctxt)
+    elif isinstance(expr, SequenceExpr):
+        assert expr.sequence != []
+        for part in expr.sequence:
+            last_value = eval(part, ctxt)
+        return last_value
+    else:
+        raise AssertionError(f"Forgot an expression type! {type(expr)}")
 
 
 def literal_to_value(literal: Token) -> Value:
@@ -136,16 +135,23 @@ def literal_to_value(literal: Token) -> Value:
 
 
 def message_invoke(
-    ctxt: Context, message: str, receiver: Optional[Value], args: list[Value]
+    source_span: SourceSpan,
+    ctxt: Context,
+    message: str,
+    receiver: Optional[Value],
+    args: list[Value],
 ) -> Value:
-    handler = lookup_handler(ctxt, message)
-    if isinstance(handler, Value):
-        return handler
-    else:
-        # handler is something which can be called with a context, receiver, and arguments
-        result = handler(ctxt, receiver, *args)
-        assert isinstance(result, Value), f"Message result '{result}' is not a Value!"
-        return result
+    try:
+        handler = lookup_handler(ctxt, message)
+        if isinstance(handler, Value):
+            return handler
+        else:
+            # handler is something which can be called with a context, receiver, and arguments
+            result = handler(ctxt, receiver, *args)
+            assert isinstance(result, Value), f"Message result '{result}' is not a Value!"
+            return result
+    except Exception as exc:
+        raise RunError("Couldn't evaluate message.", span=source_span) from exc
 
 
 def lookup_handler(ctxt: Context, message: str):
