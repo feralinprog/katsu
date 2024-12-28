@@ -8,6 +8,12 @@ class SourceFile:
     # Reference to full source (don't make a copy!)
     source: str
 
+    def __str__(self):
+        return f"<{self.source_path}>"
+
+    def __repr__(self):
+        return f"SourceFile(source_path={repr(self.source_path)}, source=...)"
+
     def __hash__(self) -> int:
         return hash((self.source_path, self.source))
 
@@ -33,7 +39,7 @@ class SourceSpan:
     end: SourceLocation
 
     def __str__(self):
-        return f"<self.file.source_path> ({self.start} to {self.end})"
+        return f"<{self.file.source_path}> ({self.start} to {self.end})"
 
 
 def combine_spans(*spans: list[SourceSpan]) -> SourceSpan:
