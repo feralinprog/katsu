@@ -59,10 +59,10 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         (TokenType.RCURLY, r"\}", lambda match: match.group(0)),
         (
             TokenType.MESSAGE,
-            r"([^ \t\r\n\(\)\{\}\[\];:.]+)([:.])",
+            r"([^ \t\r\n\(\)\{\}\[\];:.,]+)([:.])",
             lambda match: (match.group(1), match.group(2)),
         ),
-        (TokenType.SYMBOL, r"(:([^ \t\r\n\(\)\{\}\[\];:.]+))+", lambda match: match.group(0)[1:]),
+        (TokenType.SYMBOL, r"(:([^ \t\r\n\(\)\{\}\[\];:.,]+))+", lambda match: match.group(0)[1:]),
         (TokenType.NUMBER, r"[0-9]+", lambda match: int(match.group(0))),
         (
             TokenType.STRING,
@@ -70,7 +70,7 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
             lambda match: match.group(0)[1:-1].replace('\\"', '"'),
         ),
         (TokenType.OPERATOR, r"[`~!@#$%^&*\-+=|/\\\(\)\{\}\[\],]+", lambda match: match.group(0)),
-        (TokenType.NAME, r"[^ \t\r\n;:.\(\)\{\}\[\]]+", lambda match: match.group(0)),
+        (TokenType.NAME, r"[^ \t\r\n;:.,\(\)\{\}\[\]]+", lambda match: match.group(0)),
     ]
 
     start = dataclasses.replace(loc)
