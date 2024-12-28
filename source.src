@@ -1,11 +1,11 @@
 method: {sum: a and: b and: c} does: {
-    local: {x} is: a + b;
-    local: :y is: x + c;
+    local: {x} is: a + b
+    local: :y is: x + c
     y
-};
-print: (sum: 1 and: 2 and: 3);
+}
+print: (sum: 1 and: 2 and: 3)
 
 method: {a plus: b} does: {
     a + b
-};
+}
 print: (1 plus: 2)

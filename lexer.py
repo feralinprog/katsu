@@ -12,6 +12,7 @@ class TokenType(Enum):
     EOF = auto()
     ERROR = auto()
     SEMICOLON = auto()
+    NEWLINE = auto()
     WHITESPACE = auto()
     COMMENT = auto()
     NAME = auto()  # same as operator, except operators have different character set
@@ -51,6 +52,7 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
     regex_handlers = [
         # token _type | regex | (regex match -> value) function
         (TokenType.SEMICOLON, r";", lambda match: match.group(0)),
+        (TokenType.NEWLINE, r"\n", lambda match: match.group(0)),
         (TokenType.WHITESPACE, r"[ \t\r\n]+", lambda match: match.group(0)),
         (TokenType.COMMENT, r"#.*\n?", lambda match: match.group(0)),
         (TokenType.LPAREN, r"\(", lambda match: match.group(0)),

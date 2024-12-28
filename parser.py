@@ -108,6 +108,8 @@ class PrattParser:
         """Parses an expression. Precondition: stream.peek() is not an EOF."""
         self.depth += 1
         token = stream.consume()
+        while token._type == TokenType.NEWLINE:
+            token = stream.consume()
         if token._type == TokenType.EOF:
             raise ParseError("Unexpected EOF.", token.span)
 
@@ -154,7 +156,7 @@ class PrattParser:
 
 
 class Precedence(Enum):
-    SEMICOLON = 10
+    SEQUENCING = 10
     ASSIGNMENT = 20
 
     N_ARY_MESSAGE = 50
@@ -243,33 +245,31 @@ class MessageInfixParselet:
         return Precedence.N_ARY_MESSAGE.value
 
 
-class SemicolonInfixParselet:
+class SequencingInfixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, left: Expr, token: Token) -> Expr:
         sequence = [left]
-        semicolons = [token]
+        separators = [token]
 
         def parse_next_expr_or_trailing_semicolon():
             # Hack: allow trailing semicolon. Check for a following token that cannot be a prefix.
             token = stream.peek()
             if token and token._type in [TokenType.RPAREN, TokenType.RCURLY, TokenType.EOF]:
                 return
-            sequence.append(parser.parse(stream, Precedence.SEMICOLON.value + 1))
+            sequence.append(parser.parse(stream, Precedence.SEQUENCING.value + 1))
 
         parse_next_expr_or_trailing_semicolon()
-        while stream.next_has_type(TokenType.SEMICOLON):
-            semicolons.append(stream.consume(TokenType.SEMICOLON))
+        while stream.next_has_type(TokenType.SEMICOLON) or stream.next_has_type(TokenType.NEWLINE):
+            separators.append(stream.consume())
             parse_next_expr_or_trailing_semicolon()
         return SequenceExpr(
             span=combine_spans(
-                left.span,
-                *[expr.span for expr in sequence],
-                *[semicolon.span for semicolon in semicolons],
+                left.span, *[expr.span for expr in sequence], *[sep.span for sep in separators]
             ),
             sequence=sequence,
         )
 
     def precedence(self, token: Token) -> int:
-        return Precedence.SEMICOLON.value
+        return Precedence.SEQUENCING.value
 
 
 class Associativity(Enum):
@@ -324,5 +324,6 @@ parser.prefix_parselets[TokenType.SYMBOL] = LiteralPrefixParselet()
 
 parser.infix_parselets[TokenType.NAME] = NameInfixParselet()
 parser.infix_parselets[TokenType.MESSAGE] = MessageInfixParselet()
-parser.infix_parselets[TokenType.SEMICOLON] = SemicolonInfixParselet()
+parser.infix_parselets[TokenType.SEMICOLON] = SequencingInfixParselet()
+parser.infix_parselets[TokenType.NEWLINE] = SequencingInfixParselet()
 parser.infix_parselets[TokenType.OPERATOR] = OperatorInfixParselet()
