@@ -5,7 +5,7 @@ from enum import Enum, auto
 from typing import Optional
 
 from error import ParseError
-from span import SourceLocation, SourceSpan
+from span import SourceFile, SourceLocation, SourceSpan
 
 
 class TokenType(Enum):
@@ -37,15 +37,16 @@ class Token:
         return f"{self._type}:{repr(self.value)}"
 
 
-def next_token(loc: SourceLocation, source: str) -> Token:
+def next_token(loc: SourceLocation, file: SourceFile) -> Token:
     """
     Arguments:
-        loc: current location in the _input
-        source: the full input source code
+        loc: current location in the file
+        file: the source file to read from
     Returns: a token (which could be an error token or EOF token).
     """
+    source = file.source
     if loc.index == len(source):
-        return Token(span=SourceSpan(loc, loc), _type=TokenType.EOF, value=None)
+        return Token(span=SourceSpan(file, loc, loc), _type=TokenType.EOF, value=None)
 
     regex_handlers = [
         # token _type | regex | (regex match -> value) function
@@ -90,17 +91,17 @@ def next_token(loc: SourceLocation, source: str) -> Token:
                     end.column += 1
                 end.index += 1
 
-            return Token(span=SourceSpan(start, end), _type=token_type, value=handler(match))
+            return Token(span=SourceSpan(file, start, end), _type=token_type, value=handler(match))
 
     # Didn't find any matches...
-    raise ParseError("Couldn't determine next token.", span=SourceSpan(start, start))
+    raise ParseError("Couldn't determine next token.", span=SourceSpan(file, start, start))
 
 
-def get_all_tokens(source: str, source_path: str) -> list[Token]:
+def get_all_tokens(file: SourceFile) -> list[Token]:
     tokens = []
-    loc = SourceLocation(source_path=source_path, source=source, index=0, line=0, column=0)
+    loc = SourceLocation(index=0, line=0, column=0)
     while True:
-        token = next_token(loc, source)
+        token = next_token(loc, file)
         tokens.append(token)
         if token._type == TokenType.EOF:
             break

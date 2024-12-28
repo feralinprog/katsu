@@ -2,7 +2,7 @@ from parser import parser
 
 from error import ParseError, RunError
 from interpreter import eval, global_context
-from lexer import SourceSpan, TokenStream, TokenType, get_all_tokens
+from lexer import SourceFile, SourceSpan, TokenStream, TokenType, get_all_tokens
 
 source_path = "./source.src"
 with open("source.src", "r") as f:
@@ -13,11 +13,11 @@ parser.should_log = False
 
 def show_error(header_prefix: str, span: SourceSpan):
     start, end = span.start, span.end
-    print(f"{header_prefix} (at <{start.source_path}> {start.line + 1}:{start.column + 1}):")
+    print(f"{header_prefix} (at {span}):")
 
     context_lines = 2  # excluding error line itself
 
-    text_lines = start.source.split("\n")
+    text_lines = span.file.source.split("\n")
     for line, text in enumerate(text_lines):
         if start.line - context_lines <= line <= end.line + context_lines:
             print(f"| {text}")
@@ -31,7 +31,8 @@ def show_error(header_prefix: str, span: SourceSpan):
 
 
 try:
-    tokens = get_all_tokens(source, source_path)
+    file = SourceFile(source_path=source_path, source=source)
+    tokens = get_all_tokens(file)
 
     stream = TokenStream(tokens)
     while stream.peek()._type != TokenType.EOF:
