@@ -16,6 +16,21 @@ method: {a str~: b} does: {
 print: ("abc" str~: 2)
 
 # TODO: precompute <null> and use this, so it's not looked up at runtime.
-# (really, figure out how this can work.)
+# (really, figure out how this can work. maybe something like:
+# >> method: {if: cond then: body} does: (bake: { if: cond then: body else: $null })
+# where :bake: replaces any instances of a `$ expr` unary operator with `expr eval`)
 method: {if: cond then: body} does: { if: cond then: body else: null }
 if: 2 > 1 then: { print: "good: 2 > 1" }
+if: t == f then: { print: "bad! t == f" } else: { print: "good: t != f" }
+
+let: :a =: 5
+print: a
+{a} = 10
+print: a
+
+method: {while: cond do: body} does: {
+    if: cond eval then: {
+        body eval
+        while: cond do: body
+    }
+}
