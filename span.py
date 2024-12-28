@@ -13,6 +13,9 @@ class SourceLocation:
     line: int
     column: int
 
+    def __str__(self):
+        return f"{self.source_path} {self.line+1}:{self.column+1}"
+
 
 @dataclass
 class SourceSpan:
@@ -20,6 +23,9 @@ class SourceSpan:
     start: SourceLocation
     # exclusive
     end: SourceLocation
+
+    def __str__(self):
+        return f"<{self.start} to {self.end}>"
 
 
 def combine_spans(*spans: list[SourceSpan]) -> SourceSpan:

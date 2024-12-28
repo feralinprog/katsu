@@ -33,8 +33,8 @@ class Token:
     # value depends on the token type
     value: object
 
-    def __repr__(self):
-        return repr(self.value)
+    def __str__(self):
+        return f"{self._type}:{repr(self.value)}"
 
 
 def next_token(loc: SourceLocation, source: str) -> Token:

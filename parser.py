@@ -312,6 +312,7 @@ parser.prefix_parselets[TokenType.LCURLY] = LCurlyPrefixParselet()
 parser.prefix_parselets[TokenType.NAME] = NamePrefixParselet()
 parser.prefix_parselets[TokenType.STRING] = LiteralPrefixParselet()
 parser.prefix_parselets[TokenType.NUMBER] = LiteralPrefixParselet()
+parser.prefix_parselets[TokenType.SYMBOL] = LiteralPrefixParselet()
 
 parser.infix_parselets[TokenType.NAME] = NameInfixParselet()
 parser.infix_parselets[TokenType.MESSAGE] = MessageInfixParselet()
