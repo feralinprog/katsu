@@ -11,7 +11,7 @@ from parser import (
     UnaryMessageExpr,
     UnaryOpExpr,
 )
-from typing import Callable, Optional, Union
+from typing import Any, Callable, Optional, Tuple, Type, Union
 
 from error import RunError
 from lexer import Token, TokenType
@@ -253,17 +253,97 @@ def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, val
 builtin("local:is:", handle__local_is_)
 
 
-def handle__plus(ctxt: Context, left: Optional[Value], right: Value) -> Value:
-    assert left
-    if isinstance(left, NumberValue) and isinstance(right, NumberValue):
-        return NumberValue(left.value + right.value)
-    elif isinstance(left, StringValue) and isinstance(right, StringValue):
-        return StringValue(left.value + right.value)
-    else:
-        raise ValueError(f"Invalid input types for '+': {left}, {right}")
+def generic_binary_op_handler(
+    op: str,
+    handlers: list[Tuple[Type, Type, Callable[[Any, Any], Value]]],
+    default_handler: Optional[Callable[[Value, Value], Value]] = None,
+):
+    def handle__generic_binary_op(ctxt: Context, left: Optional[Value], right: Value) -> Value:
+        assert left
+        for left_type, right_type, handler in handlers:
+            if isinstance(left, left_type) and isinstance(right, right_type):
+                return handler(left, right)
+        if default_handler:
+            return default_handler(left, right)
+        else:
+            raise ValueError(f"Invalid input types for '{op}': {left}, {right}")
+
+    return handle__generic_binary_op
 
 
-builtin("+", handle__plus)
+def builtin_binary_op(op, handlers, default_handler=None):
+    builtin(op, generic_binary_op_handler(op, handlers, default_handler))
+
+
+builtin_binary_op(
+    "~",
+    [
+        (StringValue, StringValue, (lambda a, b: StringValue(a.value + b.value))),
+    ],
+)
+builtin_binary_op(
+    "+",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value + b.value))),
+        (StringValue, StringValue, (lambda a, b: StringValue(a.value + b.value))),
+    ],
+)
+builtin_binary_op(
+    "-",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value - b.value))),
+    ],
+)
+builtin_binary_op(
+    "*",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value * b.value))),
+    ],
+)
+builtin_binary_op(
+    "/",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value / b.value))),
+    ],
+)
+
+builtin_binary_op(
+    "==",
+    [
+        (Value, Value, (lambda a, b: BoolValue(a.value == b.value))),
+    ],
+)
+builtin_binary_op(
+    "!=",
+    [
+        (Value, Value, (lambda a, b: BoolValue(a.value == b.value))),
+    ],
+)
+
+builtin_binary_op(
+    "<",
+    [
+        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value < b.value))),
+    ],
+)
+builtin_binary_op(
+    "<=",
+    [
+        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value <= b.value))),
+    ],
+)
+builtin_binary_op(
+    ">",
+    [
+        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value > b.value))),
+    ],
+)
+builtin_binary_op(
+    ">=",
+    [
+        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value >= b.value))),
+    ],
+)
 
 
 def handle__print_(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
