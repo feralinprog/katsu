@@ -35,36 +35,56 @@ class Value:
 class NumberValue(Value):
     value: int
 
+    def __str__(self):
+        return str(self.value)
+
 
 @dataclass
 class StringValue(Value):
     value: str
+
+    def __str__(self):
+        return self.value
 
 
 @dataclass
 class BoolValue(Value):
     value: bool
 
+    def __str__(self):
+        return "t" if self.value else "f"
+
 
 @dataclass
 class NullValue(Value):
-    pass
+    def __str__(self):
+        return "null"
 
 
 @dataclass
 class SymbolValue(Value):
     symbol: str
 
+    def __str__(self):
+        return self.value
+
 
 @dataclass
 class ContextValue(Value):
     context: Context
+
+    def __str__(self):
+        return "<a context>"
 
 
 @dataclass
 class ExprValue(Value):
     expr: Expr
     context: Context
+
+    def __str__(self):
+        # TODO: pprint, make less verbose
+        return "{ " + str(self.expr) + " }"
 
 
 def eval(expr: Expr, ctxt: Context) -> Value:
