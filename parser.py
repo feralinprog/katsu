@@ -90,6 +90,14 @@ class SequenceExpr(Expr):
         return f"sequence({repr(self.sequence)})"
 
 
+@dataclass
+class TupleExpr(Expr):
+    components: list[Expr]
+
+    def __repr__(self):
+        return f"tuple({repr(self.sequence)})"
+
+
 class PrattParser:
     # prefix parselets:
     #   .parse(token_stream, pratt_parser, current_token)
@@ -168,6 +176,8 @@ class Precedence(Enum):
     ASSIGNMENT = 20
 
     N_ARY_MESSAGE = 50
+
+    COMMA = 70
 
     CONCATENATION = 100
     COMPARISON = 110
@@ -335,6 +345,33 @@ class OperatorInfixParselet:
         return self.infix_precedence[token.value].value
 
 
+class CommaInfixParselet:
+    def parse(self, stream: TokenStream, parser: PrattParser, left: Expr, token: Token) -> Expr:
+        components = [left]
+        separators = [token]
+
+        def parse_next_expr_or_trailing_comma():
+            # Hack: allow trailing comma. Check for a following token that cannot be a prefix.
+            token = stream.peek()
+            if token and token._type in [TokenType.RPAREN, TokenType.RCURLY, TokenType.EOF]:
+                return
+            components.append(parser.parse(stream, Precedence.COMMA.value + 1))
+
+        parse_next_expr_or_trailing_comma()
+        while stream.next_has_type(TokenType.COMMA):
+            separators.append(stream.consume())
+            parse_next_expr_or_trailing_comma()
+        return TupleExpr(
+            span=combine_spans(
+                left.span, *[expr.span for expr in components], *[sep.span for sep in separators]
+            ),
+            components=components,
+        )
+
+    def precedence(self, token: Token) -> int:
+        return Precedence.COMMA.value
+
+
 parser = PrattParser()
 
 parser.prefix_parselets[TokenType.OPERATOR] = OperatorPrefixParselet()
@@ -351,3 +388,4 @@ parser.infix_parselets[TokenType.MESSAGE] = MessageInfixParselet()
 parser.infix_parselets[TokenType.SEMICOLON] = SequencingInfixParselet()
 parser.infix_parselets[TokenType.NEWLINE] = SequencingInfixParselet()
 parser.infix_parselets[TokenType.OPERATOR] = OperatorInfixParselet()
+parser.infix_parselets[TokenType.COMMA] = CommaInfixParselet()

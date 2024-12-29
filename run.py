@@ -7,6 +7,7 @@ from parser import (
     NAryMessageExpr,
     ParenExpr,
     SequenceExpr,
+    TupleExpr,
     UnaryMessageExpr,
     UnaryOpExpr,
     parser,
@@ -99,6 +100,8 @@ def pf(expr: Expr) -> str:
     elif isinstance(expr, SequenceExpr):
         assert expr.sequence != []
         return "; ".join(pf(part) for part in expr.sequence)
+    elif isinstance(expr, TupleExpr):
+        return "tuple(" + ", ".join(pf(component) for component in expr.components) + ")"
     else:
         raise AssertionError(f"Forgot an expression type! {type(expr)}")
 

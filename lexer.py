@@ -21,6 +21,7 @@ class TokenType(Enum):
     RPAREN = auto()  # )
     LCURLY = auto()  # {
     RCURLY = auto()  # }
+    COMMA = auto()  # ,
     MESSAGE = auto()  # <name/operator>: or <name/operator>.
     SYMBOL = auto()  # :<name/operator>
     NUMBER = auto()
@@ -87,8 +88,7 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         (TokenType.RPAREN, r"\)", lambda match: match.group(0)),
         (TokenType.LCURLY, r"\{", lambda match: match.group(0)),
         (TokenType.RCURLY, r"\}", lambda match: match.group(0)),
-        # Handle specially to allow parsing as an operator even if not surrounded by spaces.
-        (TokenType.OPERATOR, r",", lambda match: match.group(0)),
+        (TokenType.COMMA, r",", lambda match: match.group(0)),
         (
             TokenType.STRING,
             r"\"([^\"]|\\\")*\"",

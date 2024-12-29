@@ -8,6 +8,7 @@ from parser import (
     NAryMessageExpr,
     ParenExpr,
     SequenceExpr,
+    TupleExpr,
     UnaryMessageExpr,
     UnaryOpExpr,
 )
@@ -71,6 +72,14 @@ class SymbolValue(Value):
 
 
 @dataclass
+class TupleValue(Value):
+    components: list[Value]
+
+    def __str__(self):
+        return "(" + ", ".join(str(component) for component in self.components) + ")"
+
+
+@dataclass
 class ContextValue(Value):
     context: Context
 
@@ -119,6 +128,8 @@ def eval(expr: Expr, ctxt: Context) -> Value:
         for part in expr.sequence:
             last_value = eval(part, ctxt)
         return last_value
+    elif isinstance(expr, TupleExpr):
+        return TupleValue([eval(component, ctxt) for component in expr.components])
     else:
         raise AssertionError(f"Forgot an expression type! {type(expr)}")
 
