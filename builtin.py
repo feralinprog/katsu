@@ -14,12 +14,12 @@ from interpreter import (
     eval,
 )
 
-global_context = Context(definitions={}, base=None)
+global_context = Context(slots={}, base=None)
 
 
 def builtin(name: str, handler):
-    assert name not in global_context.definitions, f"{name} already is defined as a builtin."
-    global_context.definitions[name] = handler
+    assert name not in global_context.slots, f"{name} already is defined as a builtin."
+    global_context.slots[name] = handler
 
 
 def handle__method_does_(
@@ -73,9 +73,9 @@ def handle__method_does_(
             body_expr=body.expr,
             body=None,
         )
-        if message in ctxt.definitions:
+        if message in ctxt.slots:
             raise ValueError(f"Message '{message}' is already defined.")
-        ctxt.definitions[message] = method
+        ctxt.slots[message] = method
         return NullValue()
     else:
         raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
@@ -97,9 +97,9 @@ def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, val
     else:
         raise ValueError("local:is: 'declaration' argument should be a quoted name")
 
-    if local_name in ctxt.definitions:
+    if local_name in ctxt.slots:
         raise ValueError(f"Message '{local_name}' is already defined.")
-    ctxt.definitions[local_name] = value
+    ctxt.slots[local_name] = value
     return value
 
 
@@ -118,9 +118,9 @@ def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value
     else:
         raise ValueError("let:=: 'declaration' argument should be a quoted name")
 
-    if local_name in ctxt.definitions:
+    if local_name in ctxt.slots:
         raise ValueError(f"Message '{local_name}' is already defined.")
-    ctxt.definitions[local_name] = value
+    ctxt.slots[local_name] = value
     return value
 
 
@@ -138,11 +138,11 @@ def handle__set(ctxt: Context, receiver: Optional[Value], slot: Value, value: Va
     else:
         raise ValueError("=:_: receiver should be a quoted name")
 
-    while ctxt and slot not in ctxt.definitions:
+    while ctxt and slot not in ctxt.slots:
         ctxt = ctxt.base
     if not ctxt:
         raise ValueError(f"'{slot}' is not yet defined.")
-    ctxt.definitions[slot] = value
+    ctxt.slots[slot] = value
     return value
 
 
@@ -373,7 +373,7 @@ def handle__eval_with_eq_(
         raise ValueError(f"eval-with:=: 'slot' should be or quoted name; got {slot}")
 
     if isinstance(receiver, QuoteValue):
-        return eval(receiver.expr, Context(definitions={slot: value}, base=receiver.context))
+        return eval(receiver.expr, Context(slots={slot: value}, base=receiver.context))
     else:
         return receiver
 

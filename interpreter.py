@@ -99,9 +99,9 @@ class QuoteValue(Value):
 
 @dataclass
 class Context:
-    # Each definition is either a Value, or a python callable of the form
+    # Each slot value is either a Value, or a python callable of the form
     #   (self, ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value
-    definitions: dict[str, Union[Value, Callable[["Context", Optional[Value], list[Value]], Value]]]
+    slots: dict[str, Union[Value, Callable[["Context", Optional[Value], list[Value]], Value]]]
     base: Optional["Context"]
 
 
@@ -300,12 +300,12 @@ def eval_one_op(state: RuntimeState) -> None:
         ctxt = cursor.context
         handler = None
         while ctxt is not None:
-            if message in ctxt.definitions:
-                handler = ctxt.definitions[message]
+            if message in ctxt.slots:
+                handler = ctxt.slots[message]
             ctxt = ctxt.base
         if not handler:
             raise RunError(
-                f"Could not invoke message; no handler defined for '{message}'.", bytecode.span
+                f"Could not invoke message; no slot defined for '{message}'.", bytecode.span
             )
 
         if isinstance(handler, Value):
@@ -324,13 +324,13 @@ def eval_one_op(state: RuntimeState) -> None:
                     # TODO: do this earlier, within method:does:.
                     method.body = compile(method.body_expr)
 
-                body_ctxt = Context(definitions={}, base=method.context)
-                body_ctxt.definitions[method.receiver_name] = receiver or NullValue()
+                body_ctxt = Context(slots={}, base=method.context)
+                body_ctxt.slots[method.receiver_name] = receiver or NullValue()
                 assert len(args) == len(
                     method.param_names
                 ), f"{len(args)} != len({method.param_names})"
                 for param_name, arg in zip(method.param_names, args):
-                    body_ctxt.definitions[param_name] = arg
+                    body_ctxt.slots[param_name] = arg
 
                 # Tail-call optimization!
                 if cursor.spot == len(cursor.sequence.code) - 1:
@@ -340,7 +340,6 @@ def eval_one_op(state: RuntimeState) -> None:
                 state.control_stack.append(
                     BytecodeCursor(sequence=method.body, spot=0, context=body_ctxt)
                 )
-
             else:
                 # handler is something which can be called with a context, receiver, and arguments.
                 # It should not call evaluation functions. (It can, but the stack is not reified and
