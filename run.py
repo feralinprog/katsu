@@ -16,8 +16,9 @@ from parser import (
 
 from termcolor import colored, cprint
 
+from builtin import global_context
 from error import ParseError, RunError
-from interpreter import NullValue, eval, global_context
+from interpreter import NullValue, eval
 from lexer import Token, TokenStream, TokenType, get_all_tokens
 from span import SourceFile, SourceSpan
 
