@@ -75,6 +75,9 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         if set(word) <= set(num_chars):
             return (TokenType.NUMBER, int(word))
 
+        # Some special cases. (TODO: expose to language?)
+        if word in ["and", "or", "not"]:
+            return (TokenType.OPERATOR, word)
         return (TokenType.NAME, word)
 
     regex_handlers = [
