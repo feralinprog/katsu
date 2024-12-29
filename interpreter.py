@@ -329,7 +329,9 @@ def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value
     else:
         raise ValueError("=: receiver should be a quoted name")
 
-    if slot not in ctxt.definitions:
+    while ctxt and slot not in ctxt.definitions:
+        ctxt = ctxt.base
+    if not ctxt:
         raise ValueError(f"'{slot}' is not yet defined.")
     ctxt.definitions[slot] = value
     return value

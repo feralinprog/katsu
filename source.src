@@ -83,3 +83,10 @@ method: [prefix extend: suffix] does: [
 print: other
 data extend: other
 print: data
+
+method: [length] does: [
+    let: 'count =: 0
+    self each: [ 'count = count + 1 ]
+    count
+]
+print: data length
