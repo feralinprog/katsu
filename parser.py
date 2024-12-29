@@ -18,7 +18,7 @@ class UnaryOpExpr(Expr):
     arg: Expr
 
     def __repr__(self):
-        return f"unary({repr(self.op)}, {repr(self.arg)})"
+        return f"unary({repr(self.op.value)}, {repr(self.arg)})"
 
 
 @dataclass
@@ -28,7 +28,7 @@ class BinaryOpExpr(Expr):
     right: Expr
 
     def __repr__(self):
-        return f"binary({repr(self.left)}, {repr(self.op)}, {repr(self.right)})"
+        return f"binary({repr(self.left)}, {repr(self.op.value)}, {repr(self.right)})"
 
 
 @dataclass
@@ -36,7 +36,7 @@ class NameExpr(Expr):
     name: Token
 
     def __repr__(self):
-        return f"name({repr(self.name)})"
+        return f"name({repr(self.name.value)})"
 
 
 @dataclass
@@ -44,7 +44,7 @@ class LiteralExpr(Expr):
     literal: Token
 
     def __repr__(self):
-        return f"literal({repr(self.literal)})"
+        return f"literal({repr(self.literal.value)})"
 
 
 @dataclass
@@ -53,7 +53,7 @@ class UnaryMessageExpr(Expr):
     message: Token
 
     def __repr__(self):
-        return f"unary-message({repr(self.target)}, {repr(self.message)})"
+        return f"unary-message({repr(self.target)}, {repr(self.message.value)})"
 
 
 @dataclass
@@ -63,7 +63,7 @@ class NAryMessageExpr(Expr):
     args: list[Expr]
 
     def __repr__(self):
-        return f"n-ary-message({repr(self.target)}, {repr(self.messages)}, {repr(self.args)})"
+        return f"n-ary-message({repr(self.target)}, {''.join(msg.value + ':' for msg in self.messages)}, {repr(self.args)})"
 
 
 @dataclass
