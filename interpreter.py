@@ -144,7 +144,7 @@ class BytecodeCursor:
 
 @dataclass
 class RuntimeState:
-    control_stack: list[BytecodeCursor]
+    call_stack: list[BytecodeCursor]
     data_stack: list[Union[Value, Expr, Context]]
 
 
@@ -242,13 +242,13 @@ def compile(expr: Expr) -> BytecodeSequence:
 
 def eval_one_op(state: RuntimeState) -> None:
     assert state
-    assert state.control_stack
-    cursor = state.control_stack[-1]
+    assert state.call_stack
+    cursor = state.call_stack[-1]
     assert 0 <= cursor.spot <= len(cursor.sequence.code)
 
     if cursor.spot == len(cursor.sequence.code):
         # Return from invocation.
-        state.control_stack.pop()
+        state.call_stack.pop()
         return
 
     bytecode = cursor.sequence.code[cursor.spot]
@@ -334,10 +334,10 @@ def eval_one_op(state: RuntimeState) -> None:
 
                 # Tail-call optimization!
                 if cursor.spot == len(cursor.sequence.code) - 1:
-                    state.control_stack.pop()
+                    state.call_stack.pop()
                 else:
                     cursor.spot += 1
-                state.control_stack.append(
+                state.call_stack.append(
                     BytecodeCursor(sequence=method.body, spot=0, context=body_ctxt)
                 )
             else:
@@ -369,10 +369,10 @@ def eval_one_op(state: RuntimeState) -> None:
 def eval(expr: Expr, context: Context) -> Value:
     bytecode = compile(expr)
     state = RuntimeState(
-        control_stack=[BytecodeCursor(bytecode, spot=0, context=context)],
+        call_stack=[BytecodeCursor(bytecode, spot=0, context=context)],
         data_stack=[],
     )
-    while state.control_stack:
+    while state.call_stack:
         eval_one_op(state)
     assert len(state.data_stack) == 1
     return state.data_stack.pop()
