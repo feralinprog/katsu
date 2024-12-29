@@ -68,3 +68,4 @@ let: 'data =: {
     { 7; }
 }
 print: data
+data each: [it each: [print: it]]

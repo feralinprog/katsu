@@ -577,3 +577,21 @@ def handle__eval_with_eq_(
 
 
 builtin("eval-with:=:", handle__eval_with_eq_)
+
+
+def handle__each_(ctxt: Context, receiver: Optional[Value], action: Value) -> Value:
+    if not receiver:
+        raise ValueError("each: requires a receiver")
+    if isinstance(receiver, VectorValue):
+        if isinstance(action, ExprValue):
+            last = NullValue()
+            for component in receiver.components:
+                last = eval(action.expr, Context({"it": component}, base=action.context))
+            return last
+        else:
+            raise ValueError(f"each: action must be a block; got {action}")
+    else:
+        raise ValueError(f"each: requires a vector; got {receiver}")
+
+
+builtin("each:", handle__each_)
