@@ -15,15 +15,18 @@ class TokenType(Enum):
     NEWLINE = auto()
     WHITESPACE = auto()
     COMMENT = auto()
-    NAME = auto()  # same as operator, except operators have different character set
-    OPERATOR = auto()  # same as names, but different character set
     LPAREN = auto()  # (
     RPAREN = auto()  # )
     LCURLY = auto()  # {
     RCURLY = auto()  # }
+    LSQUARE = auto()  # [
+    RSQUARE = auto()  # ]
     COMMA = auto()  # ,
+    NAME = auto()  # same as operator, except operators have different character set
     MESSAGE = auto()  # <name/operator>: or <name/operator>.
     SYMBOL = auto()  # :<name/operator>
+    QUOTE = auto()  # '<name>
+    OPERATOR = auto()  # same as names, but different character set
     NUMBER = auto()
     STRING = auto()
 
@@ -54,18 +57,16 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         word = match.group(0)
 
         if ":" in word:
-            if word == ":" or len([c for c in word if c == ":"]) > 1:
+            if word == ":":
                 return (TokenType.ERROR, word)
             if word.startswith(":"):
-                sym = word[1:]
-                if not sym:
-                    return (TokenType.ERROR, word)
-                return (TokenType.SYMBOL, sym)
+                return (TokenType.SYMBOL, word[1:])
             elif word.endswith(":"):
-                msg = word[:-1]
-                return (TokenType.MESSAGE, msg)
+                return (TokenType.MESSAGE, word[:-1])
             else:
                 return (TokenType.ERROR, word)
+        if word.startswith("'") and word != "'":
+            return (TokenType.QUOTE, word[1:])
 
         op_chars = "`~!@#$%^&*-+=\\|\"',<.>/?"
         if set(word) <= set(op_chars):
@@ -91,6 +92,8 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         (TokenType.RPAREN, r"\)", lambda match: match.group(0)),
         (TokenType.LCURLY, r"\{", lambda match: match.group(0)),
         (TokenType.RCURLY, r"\}", lambda match: match.group(0)),
+        (TokenType.LSQUARE, r"\[", lambda match: match.group(0)),
+        (TokenType.RSQUARE, r"\]", lambda match: match.group(0)),
         (TokenType.COMMA, r",", lambda match: match.group(0)),
         (
             TokenType.STRING,

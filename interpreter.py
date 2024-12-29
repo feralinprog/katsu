@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from parser import (
     BinaryOpExpr,
     BlockExpr,
+    DataExpr,
     Expr,
     LiteralExpr,
     NameExpr,
@@ -80,6 +81,14 @@ class TupleValue(Value):
 
 
 @dataclass
+class VectorValue(Value):
+    components: list[Value]
+
+    def __str__(self):
+        return "{ " + "; ".join(str(component) for component in self.components) + " }"
+
+
+@dataclass
 class ContextValue(Value):
     context: Context
 
@@ -123,6 +132,8 @@ def eval(expr: Expr, ctxt: Context) -> Value:
         return eval(expr.inner, ctxt)
     elif isinstance(expr, BlockExpr):
         return ExprValue(expr=expr.inner, context=ctxt)
+    elif isinstance(expr, DataExpr):
+        return VectorValue([eval(component, ctxt) for component in expr.components])
     elif isinstance(expr, SequenceExpr):
         assert expr.sequence != []
         for part in expr.sequence:

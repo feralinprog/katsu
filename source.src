@@ -1,61 +1,68 @@
-method: {sum: a and: b and: c} does: {
-    local: {x} is: a + b
-    local: :y is: x + c
+method: [sum: a and: b and: c] does: [
+    local: [x] is: a + b
+    local: 'y is: x + c
     y
-}
+]
 print: (sum: 1 and: 2 and: 3)
 
-method: {a plus: b} does: {
+method: [a plus: b] does: [
     a + b
-}
+]
 print: (1 plus: 2)
 
-method: {a str~: b} does: {
+method: [a str~: b] does: [
     a >string ~ b >string
-}
+]
 print: ("abc" str~: 2)
 
 # TODO: precompute <null> and use this, so it's not looked up at runtime.
 # (really, figure out how this can work. maybe something like:
-# >> method: {if: cond then: body} does: (bake: { if: cond then: body else: $null })
+# >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
 # where :bake: replaces any instances of a `$ expr` unary operator with `expr eval`)
-method: {if: cond then: body} does: { if: cond then: body else: null }
-if: 2 > 1 then: { print: "good: 2 > 1" }
-if: t == f then: { print: "bad! t == f" } else: { print: "good: t != f" }
+method: [if: cond then: body] does: [ if: cond then: body else: null ]
+if: 2 > 1 then: [ print: "good: 2 > 1" ]
+if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 
 let: :a =: 5
 print: a
-{a} = 10
+'a = 10
 print: a
 
-method: {while: cond do: body} does: {
-    if: cond eval then: {
+method: [while: cond do: body] does: [
+    if: cond eval then: [
         body eval
         while: cond do: body
-    }
-}
+    ]
+]
 
-method: {test-while} does: {
-    let: {i} =: 10
-    while: {i > 0} do: {
+method: [test-while] does: [
+    let: 'i =: 10
+    while: [i > 0] do: [
         print: i
-        {i} = i - 1
-    }
-}
+        'i = i - 1
+    ]
+]
 test-while
 
-method: {for: name from: low to<: high do: body} does: {
-    let: :i =: low
-    while: {i < high} do: {
+method: [for: name from: low to<: high do: body] does: [
+    let: 'i =: low
+    while: [i < high] do: [
         body eval-with: name =: i
-        {i} = i + 1
-    }
-}
-for: {i} from: 0 to<: 10 do: {
+        'i = i + 1
+    ]
+]
+for: [i] from: 0 to<: 10 do: [
     print: i
-}
+]
 
 print: ((1, 2, 3), 4,)
 print: t and f
 print: not t
 print: - 5
+print: (1 + 3 * 6 / 2 * 3) == 4
+
+let: 'data =: {
+    { 1; 2; 3 }
+    { 4; 5; 6 }
+}
+print: data

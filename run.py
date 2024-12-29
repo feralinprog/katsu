@@ -1,6 +1,7 @@
 from parser import (
     BinaryOpExpr,
     BlockExpr,
+    DataExpr,
     Expr,
     LiteralExpr,
     NameExpr,
@@ -96,7 +97,9 @@ def pf(expr: Expr) -> str:
     elif isinstance(expr, ParenExpr):
         return pf(expr.inner)
     elif isinstance(expr, BlockExpr):
-        return "{ " + pf(expr.inner) + " }"
+        return "[ " + pf(expr.inner) + " ]"
+    elif isinstance(expr, DataExpr):
+        return "{ " + "; ".join(pf(component) for component in expr.components) + " }"
     elif isinstance(expr, SequenceExpr):
         assert expr.sequence != []
         return "; ".join(pf(part) for part in expr.sequence)

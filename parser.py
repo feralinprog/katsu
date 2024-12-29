@@ -79,7 +79,15 @@ class BlockExpr(Expr):
     inner: Expr
 
     def __repr__(self):
-        return "{ " + repr(self.inner) + " }"
+        return "[ " + repr(self.inner) + " ]"
+
+
+@dataclass
+class DataExpr(Expr):
+    components: list[Expr]
+
+    def __repr__(self):
+        return f"data({repr(self.components)})"
 
 
 @dataclass
@@ -95,7 +103,7 @@ class TupleExpr(Expr):
     components: list[Expr]
 
     def __repr__(self):
-        return f"tuple({repr(self.sequence)})"
+        return f"tuple({repr(self.components)})"
 
 
 class PrattParser:
@@ -220,16 +228,38 @@ class LParenPrefixParselet:
         return ParenExpr(span=combine_spans(token.span, inner.span, rparen.span), inner=inner)
 
 
+class LSquarePrefixParselet:
+    def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
+        inner = parser.parse(stream, precedence=0)
+        rparen = stream.consume(TokenType.RSQUARE)
+        return BlockExpr(span=combine_spans(token.span, inner.span, rparen.span), inner=inner)
+
+
 class LCurlyPrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
         inner = parser.parse(stream, precedence=0)
         rparen = stream.consume(TokenType.RCURLY)
-        return BlockExpr(span=combine_spans(token.span, inner.span, rparen.span), inner=inner)
+        # Lift the inner's sequence portions if it is a SequenceExpr; otherwise assume this is a single-entry data structure.
+        # This is to support syntax like { 1; 2 } producing a vector (1,2) as opposed to a vector (2),
+        # while { 1 } still will correctly produce a vector (1); it also allows separating elements by
+        # newlines (like any other sequencing expression).
+        if isinstance(inner, SequenceExpr):
+            components = inner.sequence
+        else:
+            components = [inner]
+        return DataExpr(
+            span=combine_spans(token.span, inner.span, rparen.span), components=components
+        )
 
 
 class NamePrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
         return NameExpr(token.span, token)
+
+
+class QuotePrefixParselet:
+    def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
+        return BlockExpr(token.span, NameExpr(token.span, token))
 
 
 class LiteralPrefixParselet:
@@ -275,7 +305,12 @@ class SequencingInfixParselet:
         def parse_next_expr_or_trailing_semicolon():
             # Hack: allow trailing semicolon. Check for a following token that cannot be a prefix.
             token = stream.peek()
-            if token and token._type in [TokenType.RPAREN, TokenType.RCURLY, TokenType.EOF]:
+            if token and token._type in [
+                TokenType.RPAREN,
+                TokenType.RCURLY,
+                TokenType.RSQUARE,
+                TokenType.EOF,
+            ]:
                 return
             sequence.append(parser.parse(stream, Precedence.SEQUENCING.value + 1))
 
@@ -359,7 +394,12 @@ class CommaInfixParselet:
         def parse_next_expr_or_trailing_comma():
             # Hack: allow trailing comma. Check for a following token that cannot be a prefix.
             token = stream.peek()
-            if token and token._type in [TokenType.RPAREN, TokenType.RCURLY, TokenType.EOF]:
+            if token and token._type in [
+                TokenType.RPAREN,
+                TokenType.RCURLY,
+                TokenType.RSQUARE,
+                TokenType.EOF,
+            ]:
                 return
             components.append(parser.parse(stream, Precedence.COMMA.value + 1))
 
@@ -383,8 +423,10 @@ parser = PrattParser()
 parser.prefix_parselets[TokenType.OPERATOR] = OperatorPrefixParselet()
 parser.prefix_parselets[TokenType.MESSAGE] = MessagePrefixParselet()
 parser.prefix_parselets[TokenType.LPAREN] = LParenPrefixParselet()
+parser.prefix_parselets[TokenType.LSQUARE] = LSquarePrefixParselet()
 parser.prefix_parselets[TokenType.LCURLY] = LCurlyPrefixParselet()
 parser.prefix_parselets[TokenType.NAME] = NamePrefixParselet()
+parser.prefix_parselets[TokenType.QUOTE] = QuotePrefixParselet()
 parser.prefix_parselets[TokenType.STRING] = LiteralPrefixParselet()
 parser.prefix_parselets[TokenType.NUMBER] = LiteralPrefixParselet()
 parser.prefix_parselets[TokenType.SYMBOL] = LiteralPrefixParselet()
