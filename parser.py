@@ -180,10 +180,12 @@ class Precedence(Enum):
     COMMA = 70
 
     CONCATENATION = 100
-    COMPARISON = 110
-    SUM_DIFFERENCE = 120
-    DIVISION = 130
-    PRODUCT = 140
+    OR = 110
+    AND = 120
+    COMPARISON = 130
+    SUM_DIFFERENCE = 140
+    DIVISION = 150
+    PRODUCT = 160
 
     PREFIX = 500
 
@@ -301,6 +303,8 @@ class OperatorInfixParselet:
     infix_precedence = {
         "=": Precedence.ASSIGNMENT,
         "~": Precedence.CONCATENATION,
+        "and": Precedence.AND,
+        "or": Precedence.OR,
         "==": Precedence.COMPARISON,
         "!=": Precedence.COMPARISON,
         "<": Precedence.COMPARISON,
@@ -315,6 +319,8 @@ class OperatorInfixParselet:
     infix_associativity = {
         "=": Associativity.RIGHT,
         "~": Associativity.LEFT,
+        "and": Associativity.LEFT,
+        "or": Associativity.LEFT,
         "==": Associativity.LEFT,
         "!=": Associativity.LEFT,
         "<": Associativity.LEFT,

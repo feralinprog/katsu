@@ -100,7 +100,7 @@ class ExprValue(Value):
 def eval(expr: Expr, ctxt: Context) -> Value:
     assert expr is not None
     if isinstance(expr, UnaryOpExpr):
-        return message_invoke(expr.span, ctxt, expr.op.value, eval(expr.arg, ctxt), [])
+        return message_invoke(expr.span, ctxt, expr.op.value + ":", eval(expr.arg, ctxt), [])
     elif isinstance(expr, BinaryOpExpr):
         return message_invoke(
             expr.span, ctxt, expr.op.value, eval(expr.left, ctxt), [eval(expr.right, ctxt)]
@@ -337,6 +337,28 @@ def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value
 builtin("=", handle__set)
 
 
+def generic_unary_op_handler(
+    op: str,
+    handlers: list[Tuple[Type, Callable[[Any], Value]]],
+    default_handler: Optional[Callable[[Value], Value]] = None,
+):
+    def handle__generic_unary_op(ctxt: Context, receiver: Optional[Value]) -> Value:
+        assert receiver
+        for receiver_type, handler in handlers:
+            if isinstance(receiver, receiver_type):
+                return handler(receiver)
+        if default_handler:
+            return default_handler(receiver)
+        else:
+            raise ValueError(f"Invalid input types for '{op}': {receiver}")
+
+    return handle__generic_unary_op
+
+
+def builtin_unary_op(op, handlers, default_handler=None):
+    builtin(op, generic_unary_op_handler(op, handlers, default_handler))
+
+
 def generic_binary_op_handler(
     op: str,
     handlers: list[Tuple[Type, Type, Callable[[Any, Any], Value]]],
@@ -365,28 +387,17 @@ builtin_binary_op(
         (StringValue, StringValue, (lambda a, b: StringValue(a.value + b.value))),
     ],
 )
+
 builtin_binary_op(
-    "+",
+    "and",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value + b.value))),
+        (BoolValue, BoolValue, (lambda a, b: BoolValue(a.value and b.value))),
     ],
 )
 builtin_binary_op(
-    "-",
+    "or",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value - b.value))),
-    ],
-)
-builtin_binary_op(
-    "*",
-    [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value * b.value))),
-    ],
-)
-builtin_binary_op(
-    "/",
-    [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value / b.value))),
+        (BoolValue, BoolValue, (lambda a, b: BoolValue(a.value or b.value))),
     ],
 )
 
@@ -425,6 +436,50 @@ builtin_binary_op(
     ">=",
     [
         (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value >= b.value))),
+    ],
+)
+
+builtin_binary_op(
+    "+",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value + b.value))),
+    ],
+)
+builtin_binary_op(
+    "-",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value - b.value))),
+    ],
+)
+builtin_binary_op(
+    "*",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value * b.value))),
+    ],
+)
+builtin_binary_op(
+    "/",
+    [
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value / b.value))),
+    ],
+)
+
+builtin_unary_op(
+    "not:",
+    [
+        (BoolValue, (lambda v: BoolValue(not v.value))),
+    ],
+)
+builtin_unary_op(
+    "+:",
+    [
+        (NumberValue, (lambda v: NumberValue(+v.value))),
+    ],
+)
+builtin_unary_op(
+    "-:",
+    [
+        (NumberValue, (lambda v: NumberValue(-v.value))),
     ],
 )
 
