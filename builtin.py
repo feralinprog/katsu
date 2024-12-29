@@ -1,10 +1,10 @@
-from dataclasses import dataclass
-from parser import Expr, NameExpr, NAryMessageExpr, UnaryMessageExpr
+from parser import NameExpr, NAryMessageExpr, UnaryMessageExpr
 from typing import Any, Callable, Optional, Tuple, Type
 
 from interpreter import (
     BoolValue,
     Context,
+    Method,
     NullValue,
     NumberValue,
     QuoteValue,
@@ -20,30 +20,6 @@ global_context = Context(definitions={}, base=None)
 def builtin(name: str, handler):
     assert name not in global_context.definitions, f"{name} already is defined as a builtin."
     global_context.definitions[name] = handler
-
-
-@dataclass
-class Method:
-    context: Context
-    message: str
-    receiver_name: str
-    param_names: list[str]
-    body: Expr
-
-    def __call__(self, ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value:
-        body_ctxt = Context(definitions={}, base=ctxt)
-        body_ctxt.definitions[self.receiver_name] = receiver or NullValue()
-        if ":" in self.message:
-            parts = self.message.split(":")
-            assert parts[-1] == ""
-            parts = parts[:-1]
-            assert len(self.param_names) == len(parts)
-        else:
-            assert len(self.param_names) == 0
-        assert len(args) == len(self.param_names)
-        for param_name, arg in zip(self.param_names, args):
-            body_ctxt.definitions[param_name] = arg
-        return eval(self.body, body_ctxt)
 
 
 def handle__method_does_(
@@ -90,9 +66,13 @@ def handle__method_does_(
         if not isinstance(body, QuoteValue):
             raise ValueError("method:does: 'body' argument should be a block")
 
-        # print("MESSAGE:", message)
-
-        method = Method(body.context, message, receiver_name, param_names, body.expr)
+        method = Method(
+            context=body.context,
+            receiver_name=receiver_name,
+            param_names=param_names,
+            body_expr=body.expr,
+            body=None,
+        )
         if message in ctxt.definitions:
             raise ValueError(f"Message '{message}' is already defined.")
         ctxt.definitions[message] = method
