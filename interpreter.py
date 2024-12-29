@@ -429,7 +429,7 @@ def intrinsic__if_then_else(
         # TODO: compile ahead of time somehow...
         invoke_compiled(state, compile(body.expr), body.context)
     else:
-        state.data_stack.append(tbody)
+        state.data_stack.append(body)
         shift_cursor(state)
 
 
