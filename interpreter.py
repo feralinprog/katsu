@@ -19,15 +19,9 @@ from error import RunError
 from lexer import Token, TokenType
 from span import SourceSpan
 
-
-@dataclass
-class Context:
-    # Each definition is either a Value, or a python callable of the form
-    #   (self, ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value
-    definitions: dict[
-        str, Union["Value", Callable[["Context", Optional["Value"], list["Value"]], "Value"]]
-    ]
-    base: Optional["Context"]
+#################################################
+# Object Model
+#################################################
 
 
 class Value:
@@ -91,11 +85,29 @@ class VectorValue(Value):
 @dataclass
 class QuoteValue(Value):
     expr: Expr
-    context: Context
+    context: "Context"
 
     def __str__(self):
         # TODO: pprint, make less verbose
         return "{ " + str(self.expr) + " }"
+
+
+#################################################
+# Runtime State Model
+#################################################
+
+
+@dataclass
+class Context:
+    # Each definition is either a Value, or a python callable of the form
+    #   (self, ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value
+    definitions: dict[str, Union[Value, Callable[["Context", Optional[Value], list[Value]], Value]]]
+    base: Optional["Context"]
+
+
+#################################################
+# Runtime Interpreter / Evaluation
+#################################################
 
 
 def eval(expr: Expr, ctxt: Context) -> Value:
@@ -176,7 +188,9 @@ def lookup_handler(ctxt: Context, message: str):
     raise KeyError(f"No handler for {message} found.")
 
 
-##################################
+#################################################
+# Built-in Handlers
+#################################################
 
 global_context = Context(definitions={}, base=None)
 
