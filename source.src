@@ -23,7 +23,7 @@ method: [if: cond then: body] does: [ if: cond then: body else: null ]
 if: 2 > 1 then: [ print: "good: 2 > 1" ]
 if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 
-let: :a =: 5
+let: 'a =: 5
 print: a
 'a = 10
 print: a

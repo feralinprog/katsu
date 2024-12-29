@@ -284,12 +284,10 @@ def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, val
             local_name = decl.expr.name.value
         else:
             raise ValueError(
-                f"local:is: 'declaration' argument should be a symbol or quoted name; got {decl}"
+                f"local:is: 'declaration' argument should be a quoted name; got {decl}"
             )
-    elif isinstance(decl, SymbolValue):
-        local_name = decl.symbol
     else:
-        raise ValueError("local:is: 'declaration' argument should be a symbol or quoted name")
+        raise ValueError("local:is: 'declaration' argument should be a quoted name")
 
     if local_name in ctxt.definitions:
         raise ValueError(f"Message '{local_name}' is already defined.")
@@ -308,13 +306,9 @@ def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value
         if isinstance(decl.expr, NameExpr):
             local_name = decl.expr.name.value
         else:
-            raise ValueError(
-                f"let:=: 'declaration' argument should be a symbol or quoted name; got {decl}"
-            )
-    elif isinstance(decl, SymbolValue):
-        local_name = decl.symbol
+            raise ValueError(f"let:=: 'declaration' argument should be a quoted name; got {decl}")
     else:
-        raise ValueError("let:=: 'declaration' argument should be a symbol or quoted name")
+        raise ValueError("let:=: 'declaration' argument should be a quoted name")
 
     if local_name in ctxt.definitions:
         raise ValueError(f"Message '{local_name}' is already defined.")
@@ -331,13 +325,9 @@ def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value
         if isinstance(receiver.expr, NameExpr):
             slot = receiver.expr.name.value
         else:
-            raise ValueError(
-                f"=: 'slot' argument should be a symbol or quoted name; got {receiver}"
-            )
-    elif isinstance(receiver, SymbolValue):
-        slot = receiver.symbol
+            raise ValueError(f"=: 'slot' argument should be a quoted name; got {receiver}")
     else:
-        raise ValueError("=: receiver should be a symbol or quoted name")
+        raise ValueError("=: receiver should be a quoted name")
 
     if slot not in ctxt.definitions:
         raise ValueError(f"'{slot}' is not yet defined.")
@@ -564,11 +554,9 @@ def handle__eval_with_eq_(
         if isinstance(slot.expr, NameExpr):
             slot = slot.expr.name.value
         else:
-            raise ValueError(f"eval-with:=: 'slot' should be a symbol or quoted name; got {slot}")
-    elif isinstance(slot, SymbolValue):
-        slot = slot.symbol
+            raise ValueError(f"eval-with:=: 'slot' should be a quoted name; got {slot}")
     else:
-        raise ValueError(f"eval-with:=: 'slot' should be a symbol or quoted name; got {slot}")
+        raise ValueError(f"eval-with:=: 'slot' should be or quoted name; got {slot}")
 
     if isinstance(receiver, ExprValue):
         return eval(receiver.expr, Context(definitions={slot: value}, base=receiver.context))
