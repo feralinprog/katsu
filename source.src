@@ -69,3 +69,17 @@ let: 'data =: {
 }
 print: data
 data each: [it each: [print: it]]
+(data at: 0) at: 1 =: "a"
+data at: 2 =: "b"
+print: data
+
+data append: "last elem"
+print: data
+
+let: 'other =: { "more"; "data" }
+method: [prefix extend: suffix] does: [
+    suffix each: [prefix append: it]
+]
+print: other
+data extend: other
+print: data

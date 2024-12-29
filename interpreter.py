@@ -583,3 +583,47 @@ def handle__each_(ctxt: Context, receiver: Optional[Value], action: Value) -> Va
 
 
 builtin("each:", handle__each_)
+
+
+def handle__at_(ctxt: Context, receiver: Optional[Value], index: Value) -> Value:
+    if not receiver:
+        raise ValueError("at: requires a receiver")
+    if isinstance(receiver, VectorValue):
+        if isinstance(index, NumberValue):
+            return receiver.components[index.value]
+        else:
+            raise ValueError(f"at: index must be a number; got {index}")
+    else:
+        raise ValueError(f"at: requires a vector; got {receiver}")
+
+
+builtin("at:", handle__at_)
+
+
+def handle__at_eq_(ctxt: Context, receiver: Optional[Value], index: Value, value: Value) -> Value:
+    if not receiver:
+        raise ValueError("at:=: requires a receiver")
+    if isinstance(receiver, VectorValue):
+        if isinstance(index, NumberValue):
+            receiver.components[index.value] = value
+            return value
+        else:
+            raise ValueError(f"at: index must be a number; got {index}")
+    else:
+        raise ValueError(f"at: requires a vector; got {receiver}")
+
+
+builtin("at:=:", handle__at_eq_)
+
+
+def handle__append_(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
+    if not receiver:
+        raise ValueError("append: requires a receiver")
+    if isinstance(receiver, VectorValue):
+        receiver.components.append(value)
+        return NullValue()
+    else:
+        raise ValueError(f"append: requires a vector; got {receiver}")
+
+
+builtin("append:", handle__append_)
