@@ -166,8 +166,23 @@ except ParseError as e:
 except RunError as e:
     while e:
         if isinstance(e, RunError):
-            show_error("Evaluation error", e.span)
-            print(e)
+            first = True
+            for frame in reversed(e.runtime_state.call_stack):
+                if not first:
+                    print()
+                if frame.spot == len(frame.sequence.code):
+                    assert not first
+                    show_error(
+                        "Just before returning from invocation",
+                        frame.sequence.code[frame.spot - 1].span,
+                    )
+                else:
+                    bc = frame.sequence.code[frame.spot]
+                    if first:
+                        show_error("Evaluation error" if first else "Due to invocation", bc.span)
+                        print(e)
+
+                first = False
         else:
             raise e
         e = e.__cause__

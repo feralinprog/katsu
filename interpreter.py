@@ -325,9 +325,7 @@ def eval_one_op(state: RuntimeState) -> None:
                 break
             ctxt = ctxt.base
         if not handler:
-            raise RunError(
-                f"Could not invoke message; no slot defined for '{message}'.", bytecode.span
-            )
+            raise RunError(f"Could not invoke message; no slot defined for '{message}'.", state)
 
         if isinstance(handler, Value):
             state.data_stack = state.data_stack[: -(nargs + 1)]
