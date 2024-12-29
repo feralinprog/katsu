@@ -115,8 +115,9 @@ try:
         if not isinstance(result, NullValue):
             print(colored(str(result), "blue"))
 
-        # Ratchet past any newlines.
-        while stream.peek()._type == TokenType.NEWLINE:
+        # Ratchet past any semicolons and newlines, since the parser explicitly stops
+        # when it sees either of these at the top level.
+        while stream.peek()._type in [TokenType.SEMICOLON, TokenType.NEWLINE]:
             stream.consume()
 except ParseError as e:
     show_error("Parse error", e.span)
