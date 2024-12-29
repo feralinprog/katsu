@@ -89,7 +89,7 @@ class QuoteValue(Value):
 
     def __str__(self):
         # TODO: pprint, make less verbose
-        return "{ " + str(self.expr) + " }"
+        return "[ " + str(self.expr) + " ]"
 
 
 #################################################
