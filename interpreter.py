@@ -98,6 +98,26 @@ class QuoteValue(Value):
 
 
 @dataclass
+class IntrinsicHandler:
+    # Doesn't have to immediately produce a result; the handler is provided
+    # the current runtime state, a receiver, and arguments, and may update
+    # the runtime state arbitrarily. This handler must also update the state's
+    # top of stack cursor position as necessary; the interpreter gives up this
+    # responsibility. On entry, the data stack has the receiver and arguments
+    # already removed.
+    handler: Callable[["RuntimeState", Optional[Value], list[Value]], None]
+
+
+@dataclass
+class NativeHandler:
+    # A callable of the form
+    #   (ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value
+    # Should avoid using any `eval` functions; those should be implemented using
+    # an IntrinsicHandler instead, so as to reify the call stack.
+    handler: Callable[["Context", Optional[Value], list[Value]], Value]
+
+
+@dataclass
 class Context:
     # Each slot value is either a Value, or a python callable of the form
     #   (self, ctxt: Context, receiver: Optional[Value], *args: list[Value]) -> Value
@@ -333,14 +353,11 @@ def eval_one_op(state: RuntimeState) -> None:
                 for param_name, arg in zip(method.param_names, args):
                     body_ctxt.slots[param_name] = arg
 
-                # Tail-call optimization!
-                if cursor.spot == len(cursor.sequence.code) - 1:
-                    state.call_stack.pop()
-                else:
-                    cursor.spot += 1
-                state.call_stack.append(
-                    BytecodeCursor(sequence=method.body, spot=0, context=body_ctxt)
-                )
+                invoke_compiled(state, method.body, body_ctxt)
+            elif isinstance(handler, IntrinsicHandler):
+                # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
+                # responsibility for updating the cursor as necessary.
+                handler.handler(state, receiver, *args)
             else:
                 # handler is something which can be called with a context, receiver, and arguments.
                 # It should not call evaluation functions. (It can, but the stack is not reified and
@@ -367,7 +384,24 @@ def eval_one_op(state: RuntimeState) -> None:
         raise AssertionError(f"Forgot a bytecode op! {op}")
 
 
-def eval(expr: Expr, context: Context) -> Value:
+def invoke_compiled(state: RuntimeState, code: BytecodeSequence, ctxt: Context) -> None:
+    assert state.call_stack
+    cursor = state.call_stack[-1]
+    # Tail-call optimization!
+    if cursor.spot == len(cursor.sequence.code) - 1:
+        state.call_stack.pop()
+    else:
+        cursor.spot += 1
+    state.call_stack.append(BytecodeCursor(sequence=code, spot=0, context=ctxt))
+
+
+def shift_cursor(state: RuntimeState) -> None:
+    assert state.call_stack
+    cursor = state.call_stack[-1]
+    cursor.spot += 1
+
+
+def eval_toplevel(expr: Expr, context: Context) -> Value:
     bytecode = compile(expr)
     state = RuntimeState(
         call_stack=[BytecodeCursor(bytecode, spot=0, context=context)],
@@ -377,3 +411,63 @@ def eval(expr: Expr, context: Context) -> Value:
         eval_one_op(state)
     assert len(state.data_stack) == 1
     return state.data_stack.pop()
+
+
+#################################################
+# Intrinsic Handlers
+#################################################
+# These are generally message handlers which require control of the runtime state beyond being a
+# function from value inputs to value output.
+# The `builtin` module imports these and adds to the default global context.
+
+
+def intrinsic__if_then_else(
+    state: RuntimeState, receiver: Optional[Value], cond: Value, tbody: Value, fbody: Value
+) -> None:
+    if receiver:
+        raise ValueError("if:then:else: does not take a receiver")
+    body = tbody if isinstance(cond, BoolValue) and cond.value else fbody
+    if isinstance(body, QuoteValue):
+        # TODO: compile ahead of time somehow...
+        invoke_compiled(state, compile(body.expr), body.context)
+    else:
+        state.data_stack.append(tbody)
+        shift_cursor(state)
+
+
+def intrinsic__eval(state: RuntimeState, receiver: Optional[Value]) -> None:
+    assert receiver
+    if isinstance(receiver, QuoteValue):
+        # TODO: compile ahead of time somehow...
+        invoke_compiled(state, compile(receiver.expr), receiver.context)
+    else:
+        state.data_stack.append(receiver)
+        shift_cursor(state)
+
+
+def intrinsic__eval_with_eq_(
+    state: RuntimeState, receiver: Optional[Value], slot: Value, value: Value
+) -> None:
+    if isinstance(slot, QuoteValue):
+        if isinstance(slot.expr, NameExpr):
+            slot = slot.expr.name.value
+        else:
+            raise ValueError(f"eval-with:=: 'slot' should be a quoted name; got {slot}")
+    else:
+        raise ValueError(f"eval-with:=: 'slot' should be or quoted name; got {slot}")
+
+    if isinstance(receiver, QuoteValue):
+        # TODO: compile ahead of time somehow...
+        invoke_compiled(
+            state, compile(receiver.expr), Context(slots={slot: value}, base=receiver.context)
+        )
+    else:
+        state.data_stack.append(receiver)
+        shift_cursor(state)
+
+
+intrinsic_handlers = {
+    "if:then:else:": IntrinsicHandler(intrinsic__if_then_else),
+    "eval": IntrinsicHandler(intrinsic__eval),
+    "eval-with:=:": IntrinsicHandler(intrinsic__eval_with_eq_),
+}

@@ -11,10 +11,12 @@ from interpreter import (
     StringValue,
     Value,
     VectorValue,
-    eval,
+    intrinsic_handlers,
 )
 
 global_context = Context(slots={}, base=None)
+for slot, handler in intrinsic_handlers.items():
+    global_context.slots[slot] = handler
 
 
 def builtin(name: str, handler):
@@ -66,6 +68,7 @@ def handle__method_does_(
         if not isinstance(body, QuoteValue):
             raise ValueError("method:does: 'body' argument should be a block")
 
+        # TODO: compile here instead of on-demand in the 'invoke' bytecode evaluator.
         method = Method(
             context=body.context,
             receiver_name=receiver_name,
@@ -320,85 +323,6 @@ def handle__to_string(ctxt: Context, value: Value) -> Value:
 builtin(">string", handle__to_string)
 
 
-# def handle__if_then_(ctxt: Context, receiver: Optional[Value], cond: Value, tbody: Value) -> Value:
-#    if receiver:
-#        raise ValueError("if:then: does not take a receiver")
-#    if isinstance(cond, BoolValue) and cond.value:
-#        if isinstance(tbody, QuoteValue):
-#            return eval(tbody.expr, tbody.context)
-#        else:
-#            return tbody
-#    else:
-#        return NullValue()
-def handle__if_then_else_(
-    ctxt: Context, receiver: Optional[Value], cond: Value, tbody: Value, fbody: Value
-) -> Value:
-    if receiver:
-        raise ValueError("if:then:else: does not take a receiver")
-    if isinstance(cond, BoolValue) and cond.value:
-        if isinstance(tbody, QuoteValue):
-            return eval(tbody.expr, tbody.context)
-        else:
-            return tbody
-    else:
-        if isinstance(fbody, QuoteValue):
-            return eval(fbody.expr, fbody.context)
-        else:
-            return fbody
-
-
-builtin("if:then:else:", handle__if_then_else_)
-
-
-def handle__eval(ctxt: Context, receiver: Optional[Value]) -> Value:
-    assert receiver
-    if isinstance(receiver, QuoteValue):
-        return eval(receiver.expr, receiver.context)
-    else:
-        return receiver
-
-
-builtin("eval", handle__eval)
-
-
-def handle__eval_with_eq_(
-    ctxt: Context, receiver: Optional[Value], slot: Value, value: Value
-) -> Value:
-    if isinstance(slot, QuoteValue):
-        if isinstance(slot.expr, NameExpr):
-            slot = slot.expr.name.value
-        else:
-            raise ValueError(f"eval-with:=: 'slot' should be a quoted name; got {slot}")
-    else:
-        raise ValueError(f"eval-with:=: 'slot' should be or quoted name; got {slot}")
-
-    if isinstance(receiver, QuoteValue):
-        return eval(receiver.expr, Context(slots={slot: value}, base=receiver.context))
-    else:
-        return receiver
-
-
-builtin("eval-with:=:", handle__eval_with_eq_)
-
-
-def handle__each_(ctxt: Context, receiver: Optional[Value], action: Value) -> Value:
-    if not receiver:
-        raise ValueError("each: requires a receiver")
-    if isinstance(receiver, VectorValue):
-        if isinstance(action, QuoteValue):
-            last = NullValue()
-            for component in receiver.components:
-                last = eval(action.expr, Context({"it": component}, base=action.context))
-            return last
-        else:
-            raise ValueError(f"each: action must be a block; got {action}")
-    else:
-        raise ValueError(f"each: requires a vector; got {receiver}")
-
-
-builtin("each:", handle__each_)
-
-
 def handle__at_(ctxt: Context, receiver: Optional[Value], index: Value) -> Value:
     if not receiver:
         raise ValueError("at: requires a receiver")
@@ -441,3 +365,32 @@ def handle__append_(ctxt: Context, receiver: Optional[Value], value: Value) -> V
 
 
 builtin("append:", handle__append_)
+
+
+def handle__length(ctxt: Context, receiver: Optional[Value]) -> Value:
+    if not receiver:
+        raise ValueError("length requires a receiver")
+    if isinstance(receiver, VectorValue):
+        return NumberValue(len(receiver.components))
+    else:
+        raise ValueError(f"length requires a vector; got {receiver}")
+
+
+builtin("length", handle__length)
+
+
+def handle__show_current_context(ctxt: Context, receiver: Optional[Value]) -> Value:
+    if receiver:
+        raise ValueError("<show-current-context> does not take a receiver")
+    print("==== showing current context ====")
+    while ctxt.base:
+        print("context:")
+        for slot, value in ctxt.slots.items():
+            print(f":: {slot} = {value}")
+        ctxt = ctxt.base
+    print("<global context>")
+    print("============== done =============")
+    return NullValue()
+
+
+builtin("<show-current-context>", handle__show_current_context)

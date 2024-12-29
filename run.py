@@ -18,7 +18,7 @@ from termcolor import colored, cprint
 
 from builtin import global_context
 from error import ParseError, RunError
-from interpreter import NullValue, eval
+from interpreter import NullValue, eval_toplevel
 from lexer import Token, TokenStream, TokenType, get_all_tokens
 from span import SourceFile, SourceSpan
 
@@ -152,7 +152,7 @@ try:
     while stream.peek()._type != TokenType.EOF:
         top_level_expr = parser.parse(stream, is_toplevel=True)
         print(">> " + colored(pf(top_level_expr), "green"))
-        result = eval(top_level_expr, global_context)
+        result = eval_toplevel(top_level_expr, global_context)
         if not isinstance(result, NullValue):
             print(colored(str(result), "blue"))
 
