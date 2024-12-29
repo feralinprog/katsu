@@ -147,15 +147,16 @@ def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value
 builtin("let:=:", handle__local_is_)
 
 
-def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
-    assert receiver
-    if isinstance(receiver, QuoteValue):
-        if isinstance(receiver.expr, NameExpr):
-            slot = receiver.expr.name.value
+def handle__set(ctxt: Context, receiver: Optional[Value], slot: Value, value: Value) -> Value:
+    if receiver:
+        raise ValueError("=:_: takes no receiver")
+    if isinstance(slot, QuoteValue):
+        if isinstance(slot.expr, NameExpr):
+            slot = slot.expr.name.value
         else:
-            raise ValueError(f"=: 'slot' argument should be a quoted name; got {receiver}")
+            raise ValueError(f"=:_: 'slot' argument should be a quoted name; got {slot}")
     else:
-        raise ValueError("=: receiver should be a quoted name")
+        raise ValueError("=:_: receiver should be a quoted name")
 
     while ctxt and slot not in ctxt.definitions:
         ctxt = ctxt.base
@@ -165,7 +166,7 @@ def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value
     return value
 
 
-builtin("=", handle__set)
+builtin("=:_:", handle__set)
 
 
 def generic_unary_op_handler(
@@ -195,8 +196,11 @@ def generic_binary_op_handler(
     handlers: list[Tuple[Type, Type, Callable[[Any, Any], Value]]],
     default_handler: Optional[Callable[[Value, Value], Value]] = None,
 ):
-    def handle__generic_binary_op(ctxt: Context, left: Optional[Value], right: Value) -> Value:
-        assert left
+    def handle__generic_binary_op(
+        ctxt: Context, receiver: Optional[Value], left: Value, right: Value
+    ) -> Value:
+        if receiver:
+            raise ValueError(f"{op} takes no receiver")
         for left_type, right_type, handler in handlers:
             if isinstance(left, left_type) and isinstance(right, right_type):
                 return handler(left, right)
@@ -209,7 +213,7 @@ def generic_binary_op_handler(
 
 
 def builtin_binary_op(op, handlers, default_handler=None):
-    builtin(op, generic_binary_op_handler(op, handlers, default_handler))
+    builtin(op + ":_:", generic_binary_op_handler(op, handlers, default_handler))
 
 
 builtin_binary_op(
@@ -296,19 +300,19 @@ builtin_binary_op(
 )
 
 builtin_unary_op(
-    "not:",
+    "not",
     [
         (BoolValue, (lambda v: BoolValue(not v.value))),
     ],
 )
 builtin_unary_op(
-    "+:",
+    "+",
     [
         (NumberValue, (lambda v: NumberValue(+v.value))),
     ],
 )
 builtin_unary_op(
-    "-:",
+    "-",
     [
         (NumberValue, (lambda v: NumberValue(-v.value))),
     ],

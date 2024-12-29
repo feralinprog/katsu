@@ -113,10 +113,14 @@ class Context:
 def eval(expr: Expr, ctxt: Context) -> Value:
     assert expr is not None
     if isinstance(expr, UnaryOpExpr):
-        return message_invoke(expr.span, ctxt, expr.op.value + ":", eval(expr.arg, ctxt), [])
+        return message_invoke(expr.span, ctxt, expr.op.value, eval(expr.arg, ctxt), [])
     elif isinstance(expr, BinaryOpExpr):
         return message_invoke(
-            expr.span, ctxt, expr.op.value, eval(expr.left, ctxt), [eval(expr.right, ctxt)]
+            expr.span,
+            ctxt,
+            expr.op.value + ":_:",
+            None,
+            [eval(expr.left, ctxt), eval(expr.right, ctxt)],
         )
     elif isinstance(expr, NameExpr):
         return message_invoke(expr.span, ctxt, expr.name.value, None, [])
