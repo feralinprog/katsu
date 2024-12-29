@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 from parser import (
     BinaryOpExpr,
-    BlockExpr,
     DataExpr,
     Expr,
     LiteralExpr,
     NameExpr,
     NAryMessageExpr,
     ParenExpr,
+    QuoteExpr,
     SequenceExpr,
     TupleExpr,
     UnaryMessageExpr,
@@ -89,15 +89,7 @@ class VectorValue(Value):
 
 
 @dataclass
-class ContextValue(Value):
-    context: Context
-
-    def __str__(self):
-        return "<a context>"
-
-
-@dataclass
-class ExprValue(Value):
+class QuoteValue(Value):
     expr: Expr
     context: Context
 
@@ -130,8 +122,8 @@ def eval(expr: Expr, ctxt: Context) -> Value:
         )
     elif isinstance(expr, ParenExpr):
         return eval(expr.inner, ctxt)
-    elif isinstance(expr, BlockExpr):
-        return ExprValue(expr=expr.inner, context=ctxt)
+    elif isinstance(expr, QuoteExpr):
+        return QuoteValue(expr=expr.inner, context=ctxt)
     elif isinstance(expr, DataExpr):
         return VectorValue([eval(component, ctxt) for component in expr.components])
     elif isinstance(expr, SequenceExpr):
@@ -223,9 +215,9 @@ def handle__method_does_(
 ) -> Value:
     # print(ctxt, receiver, decl, body)
     if receiver:
-        # TODO: set ctxt to the receiver if the receiver is a ContextValue?
+        # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
         raise ValueError("method:does: does not take a receiver")
-    if isinstance(decl, ExprValue):
+    if isinstance(decl, QuoteValue):
         if isinstance(decl.expr, NameExpr):
             message = decl.expr.name.value
             receiver_name = "self"
@@ -259,7 +251,7 @@ def handle__method_does_(
             )
 
         # Fill in the body and context, then define the method.
-        if not isinstance(body, ExprValue):
+        if not isinstance(body, QuoteValue):
             raise ValueError("method:does: 'body' argument should be a block")
 
         # print("MESSAGE:", message)
@@ -279,7 +271,7 @@ builtin("method:does:", handle__method_does_)
 def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, value: Value) -> Value:
     if receiver:
         raise ValueError("local:is: does not take a receiver")
-    if isinstance(decl, ExprValue):
+    if isinstance(decl, QuoteValue):
         if isinstance(decl.expr, NameExpr):
             local_name = decl.expr.name.value
         else:
@@ -302,7 +294,7 @@ builtin("local:is:", handle__local_is_)
 def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value: Value) -> Value:
     if receiver:
         raise ValueError("let:=: does not take a receiver")
-    if isinstance(decl, ExprValue):
+    if isinstance(decl, QuoteValue):
         if isinstance(decl.expr, NameExpr):
             local_name = decl.expr.name.value
         else:
@@ -321,7 +313,7 @@ builtin("let:=:", handle__local_is_)
 
 def handle__set(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
     assert receiver
-    if isinstance(receiver, ExprValue):
+    if isinstance(receiver, QuoteValue):
         if isinstance(receiver.expr, NameExpr):
             slot = receiver.expr.name.value
         else:
@@ -512,7 +504,7 @@ builtin(">string", handle__to_string)
 #    if receiver:
 #        raise ValueError("if:then: does not take a receiver")
 #    if isinstance(cond, BoolValue) and cond.value:
-#        if isinstance(tbody, ExprValue):
+#        if isinstance(tbody, QuoteValue):
 #            return eval(tbody.expr, tbody.context)
 #        else:
 #            return tbody
@@ -524,12 +516,12 @@ def handle__if_then_else_(
     if receiver:
         raise ValueError("if:then:else: does not take a receiver")
     if isinstance(cond, BoolValue) and cond.value:
-        if isinstance(tbody, ExprValue):
+        if isinstance(tbody, QuoteValue):
             return eval(tbody.expr, tbody.context)
         else:
             return tbody
     else:
-        if isinstance(fbody, ExprValue):
+        if isinstance(fbody, QuoteValue):
             return eval(fbody.expr, fbody.context)
         else:
             return fbody
@@ -540,7 +532,7 @@ builtin("if:then:else:", handle__if_then_else_)
 
 def handle__eval(ctxt: Context, receiver: Optional[Value]) -> Value:
     assert receiver
-    if isinstance(receiver, ExprValue):
+    if isinstance(receiver, QuoteValue):
         return eval(receiver.expr, receiver.context)
     else:
         return receiver
@@ -552,7 +544,7 @@ builtin("eval", handle__eval)
 def handle__eval_with_eq_(
     ctxt: Context, receiver: Optional[Value], slot: Value, value: Value
 ) -> Value:
-    if isinstance(slot, ExprValue):
+    if isinstance(slot, QuoteValue):
         if isinstance(slot.expr, NameExpr):
             slot = slot.expr.name.value
         else:
@@ -560,7 +552,7 @@ def handle__eval_with_eq_(
     else:
         raise ValueError(f"eval-with:=: 'slot' should be or quoted name; got {slot}")
 
-    if isinstance(receiver, ExprValue):
+    if isinstance(receiver, QuoteValue):
         return eval(receiver.expr, Context(definitions={slot: value}, base=receiver.context))
     else:
         return receiver
@@ -573,7 +565,7 @@ def handle__each_(ctxt: Context, receiver: Optional[Value], action: Value) -> Va
     if not receiver:
         raise ValueError("each: requires a receiver")
     if isinstance(receiver, VectorValue):
-        if isinstance(action, ExprValue):
+        if isinstance(action, QuoteValue):
             last = NullValue()
             for component in receiver.components:
                 last = eval(action.expr, Context({"it": component}, base=action.context))

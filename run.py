@@ -1,12 +1,12 @@
 from parser import (
     BinaryOpExpr,
-    BlockExpr,
     DataExpr,
     Expr,
     LiteralExpr,
     NameExpr,
     NAryMessageExpr,
     ParenExpr,
+    QuoteExpr,
     SequenceExpr,
     TupleExpr,
     UnaryMessageExpr,
@@ -126,7 +126,7 @@ def pf(expr: Expr) -> str:
         )
     elif isinstance(expr, ParenExpr):
         return pf(expr.inner)
-    elif isinstance(expr, BlockExpr):
+    elif isinstance(expr, QuoteExpr):
         return "[ " + pf(expr.inner) + " ]"
     elif isinstance(expr, DataExpr):
         return "{ " + "; ".join(pf(component) for component in expr.components) + " }"

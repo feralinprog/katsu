@@ -75,7 +75,7 @@ class ParenExpr(Expr):
 
 
 @dataclass
-class BlockExpr(Expr):
+class QuoteExpr(Expr):
     inner: Expr
 
     def __repr__(self):
@@ -232,7 +232,7 @@ class LSquarePrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
         inner = parser.parse(stream, precedence=0)
         rparen = stream.consume(TokenType.RSQUARE)
-        return BlockExpr(span=combine_spans(token.span, inner.span, rparen.span), inner=inner)
+        return QuoteExpr(span=combine_spans(token.span, inner.span, rparen.span), inner=inner)
 
 
 class LCurlyPrefixParselet:
@@ -259,7 +259,7 @@ class NamePrefixParselet:
 
 class QuotePrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
-        return BlockExpr(token.span, NameExpr(token.span, token))
+        return QuoteExpr(token.span, NameExpr(token.span, token))
 
 
 class LiteralPrefixParselet:
