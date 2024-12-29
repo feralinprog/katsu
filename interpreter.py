@@ -302,6 +302,7 @@ def eval_one_op(state: RuntimeState) -> None:
         while ctxt is not None:
             if message in ctxt.slots:
                 handler = ctxt.slots[message]
+                break
             ctxt = ctxt.base
         if not handler:
             raise RunError(
