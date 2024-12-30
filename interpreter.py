@@ -478,7 +478,7 @@ def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Val
             default_receiver = args[0]
         elif len(receiver.parameters) != len(args):
             raise ValueError(
-                f"{message} receiver (a quote) requires {len(receiver.parameters)} parameter(s), but is being provided {len(args)}"
+                f"{message} receiver (a quote) has {len(receiver.parameters)} parameter(s), but is being provided {len(args)} argument(s)"
             )
         else:
             param_names = receiver.parameters
