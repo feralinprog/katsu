@@ -124,10 +124,12 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
         ctxt.slots[ctor_message] = handle_generic_dataclass_constructor(ctor_message)
 
     for slot in slots:
-        if slot not in ctxt.slots:
-            ctxt.slots[slot] = handle_generic_dataclass_get(slot)
-        if slot + ":" not in ctxt.slots:
-            ctxt.slots[slot + ":"] = handle_generic_dataclass_set(slot)
+        get_msg = "." + slot
+        if get_msg not in ctxt.slots:
+            ctxt.slots[get_msg] = handle_generic_dataclass_get(get_msg, slot)
+        set_msg = "set-" + slot + ":"
+        if set_msg not in ctxt.slots:
+            ctxt.slots[set_msg] = handle_generic_dataclass_set(set_msg, slot)
 
     return NullValue()
 
@@ -143,10 +145,10 @@ def handle_generic_dataclass_constructor(message: str):
     return handler
 
 
-def handle_generic_dataclass_get(slot: str):
+def handle_generic_dataclass_get(message: str, slot: str):
     def handler(ctxt: Context, receiver: Value) -> Value:
         if not isinstance(receiver, DataclassValue):
-            raise ValueError(f"{slot} expects a dataclass value as receiver")
+            raise ValueError(f"{message} expects a dataclass value as receiver")
         if slot in receiver.type.slots:
             return receiver.values[receiver.type.slots.index(slot)]
         else:
@@ -155,10 +157,10 @@ def handle_generic_dataclass_get(slot: str):
     return handler
 
 
-def handle_generic_dataclass_set(slot: str):
+def handle_generic_dataclass_set(message: str, slot: str):
     def handler(ctxt: Context, receiver: Value, value: Value) -> Value:
         if not isinstance(receiver, DataclassValue):
-            raise ValueError(f"{slot}: expects a dataclass value as receiver")
+            raise ValueError(f"{message} expects a dataclass value as receiver")
         if slot in receiver.type.slots:
             receiver.values[receiver.type.slots.index(slot)] = value
             return value
