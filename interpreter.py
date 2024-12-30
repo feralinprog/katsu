@@ -108,6 +108,15 @@ class Block:
     span: Optional[SourceSpan]
 
 
+@dataclass
+class ContinuationValue(Value):
+    # Must be a deep copy (up to Values / Contexts) of a runtime state.
+    state: "RuntimeState"
+
+    def __str__(self):
+        return "<continuation>"
+
+
 #################################################
 # Runtime State Model
 #################################################
@@ -179,6 +188,14 @@ class BytecodeCursor:
     context: Context
     # Receiver to use if none is explicitly provided in an invocation.
     default_receiver: Value
+
+    def copy(self) -> "BytecodeCursor":
+        return BytecodeCursor(
+            sequence=self.sequence,
+            spot=self.spot,
+            context=self.context,
+            default_receiver=self.default_receiver,
+        )
 
 
 @dataclass
@@ -492,6 +509,15 @@ def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Val
             Context(slots=new_slots, base=receiver.context),
             default_receiver=default_receiver,
         )
+    elif isinstance(receiver, ContinuationValue):
+        if len(args) != 1:
+            raise ValueError(
+                f"{message} receiver (a continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
+            )
+        continuation = receiver.state
+        state.call_stack = [frame.copy() for frame in continuation.call_stack]
+        state.data_stack = list(continuation.data_stack)
+        state.data_stack.append(args[0])
     else:
         state.data_stack.append(receiver)
         shift_cursor(state)
@@ -511,9 +537,20 @@ def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) ->
     call_impl("call*:", state, receiver, args=value.components)
 
 
+def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
+    current_continuation = ContinuationValue(
+        state=RuntimeState(
+            call_stack=[frame.copy() for frame in state.call_stack],
+            data_stack=list(state.data_stack),
+        )
+    )
+    call_impl("call/cc", state, receiver, args=[current_continuation])
+
+
 intrinsic_handlers = {
     "if:then:else:": IntrinsicHandler(intrinsic__if_then_else),
     "call": IntrinsicHandler(intrinsic__call),
     "call:": IntrinsicHandler(intrinsic__call_),
     "call*:": IntrinsicHandler(intrinsic__call_star_),
+    "call/cc": IntrinsicHandler(intrinsic__call_cc),
 }
