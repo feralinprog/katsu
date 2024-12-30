@@ -372,8 +372,10 @@ def handle__length(ctxt: Context, receiver: Optional[Value]) -> Value:
         raise ValueError("length requires a receiver")
     if isinstance(receiver, VectorValue):
         return NumberValue(len(receiver.components))
+    elif isinstance(receiver, StringValue):
+        return NumberValue(len(receiver.value))
     else:
-        raise ValueError(f"length requires a vector; got {receiver}")
+        raise ValueError(f"length requires a vector or string; got {receiver}")
 
 
 builtin("length", handle__length)
