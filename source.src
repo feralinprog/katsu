@@ -67,7 +67,6 @@ method: [vec each: action] does: [
         action eval-with: 'it =: (vec at: i)
         'i = i + 1
     ]
-    null
 ]
 
 let: 'data =: {
