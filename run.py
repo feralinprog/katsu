@@ -171,17 +171,22 @@ except ParseError as e:
 except RunError as e:
     for i, frame in enumerate(e.runtime_state.call_stack):
         first = i == 0
-        last = i == len(e.runtime_state.call_stack) - 1
         if first:
             msg = "Evaluation error"
         else:
             msg = "While invoking"
-        if frame.spot == len(frame.sequence.code):
-            assert not last
-            show_error(msg, frame.sequence.code[frame.spot - 1].span)
+
+        top = i == len(e.runtime_state.call_stack) - 1
+        if top:
+            # Cursor spot has not been ratcheted past the bytecode op producing an error.
+            # Log the current spot.
+            assert 0 <= frame.spot < len(frame.sequence.code)
+            show_error(msg, frame.sequence.code[frame.spot].span)
         else:
-            bc = frame.sequence.code[frame.spot]
-            show_error(msg, bc.span)
+            # Cursor indicates the bytecode op to _return_ to; the previous op was the
+            # invocation leading to the next call frame.
+            assert 0 < frame.spot <= len(frame.sequence.code)
+            show_error(msg, frame.sequence.code[frame.spot - 1].span)
         print()
 
     raise e
