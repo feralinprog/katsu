@@ -55,7 +55,7 @@ from: 0 to<: 10 do: \i [
     print: i
 ]
 
-#print: ((1, 2, 3), 4,)
+print: ((1, 2, 3), 4,)
 print: t and f
 print: not t
 print: - 5
@@ -129,3 +129,11 @@ method: [vec strsum] does: [
     vec from: "" accumulate: \a b [a ~ b >string]
 ]
 ({{"a";"b"};{"c";"d"}} map2: [strsum]) each: [print]
+
+method: [vec select: filter] does: [
+    vec from: {} accumulate: \new-vec x [
+        if: (filter call: x) then: [ new-vec append: x ] else: new-vec
+    ]
+]
+print: (data select: [it length < 2])
+print: (data select: [it length >= 2])
