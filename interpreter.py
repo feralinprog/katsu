@@ -127,7 +127,7 @@ class IntrinsicHandler:
     # Doesn't have to immediately produce a result; the handler is provided
     # the current runtime state, a receiver, and arguments, and may update
     # the runtime state arbitrarily. This handler must also update the state's
-    # top of stack cursor position as necessary; the interpreter gives up this
+    # top of stack frame position as necessary; the interpreter gives up this
     # responsibility. On entry, the data stack has the receiver and arguments
     # already removed.
     handler: Callable[["RuntimeState", Value, list[Value]], None]
@@ -180,7 +180,7 @@ class BytecodeSequence:
 
 
 @dataclass
-class BytecodeCursor:
+class CallFrame:
     sequence: BytecodeSequence
     # Next index to execute (or == len(sequence.code) if the next operation
     # is to return.
@@ -189,8 +189,8 @@ class BytecodeCursor:
     # Receiver to use if none is explicitly provided in an invocation.
     default_receiver: Value
 
-    def copy(self) -> "BytecodeCursor":
-        return BytecodeCursor(
+    def copy(self) -> "CallFrame":
+        return CallFrame(
             sequence=self.sequence,
             spot=self.spot,
             context=self.context,
@@ -200,7 +200,7 @@ class BytecodeCursor:
 
 @dataclass
 class RuntimeState:
-    call_stack: list[BytecodeCursor]
+    call_stack: list[CallFrame]
     data_stack: list[Union[Value, Expr, Context]]
 
 
@@ -300,45 +300,45 @@ def eval_one_op(state: RuntimeState) -> None:
     try:
         assert state
         assert state.call_stack
-        cursor = state.call_stack[-1]
-        assert 0 <= cursor.spot <= len(cursor.sequence.code)
+        frame = state.call_stack[-1]
+        assert 0 <= frame.spot <= len(frame.sequence.code)
 
-        if cursor.spot == len(cursor.sequence.code):
+        if frame.spot == len(frame.sequence.code):
             # Return from invocation.
             state.call_stack.pop()
             return
 
-        bytecode = cursor.sequence.code[cursor.spot]
+        bytecode = frame.sequence.code[frame.spot]
         op = bytecode.op
 
         if op == "push-default-receiver":
             assert not bytecode.args
-            state.data_stack.append(cursor.default_receiver)
-            cursor.spot += 1
+            state.data_stack.append(frame.default_receiver)
+            frame.spot += 1
         elif op == "push-number":
             (v,) = bytecode.args
             assert isinstance(v, int)
             state.data_stack.append(NumberValue(v))
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "push-string":
             (v,) = bytecode.args
             assert isinstance(v, str)
             state.data_stack.append(StringValue(v))
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "push-symbol":
             (v,) = bytecode.args
             assert isinstance(v, str)
             state.data_stack.append(SymbolValue(v))
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "push-block":
             (v,) = bytecode.args
             assert isinstance(v, Block)
             state.data_stack.append(v)
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "push-current-context":
             assert not bytecode.args
-            state.data_stack.append(cursor.context)
-            cursor.spot += 1
+            state.data_stack.append(frame.context)
+            frame.spot += 1
         elif op == "context+block>quote":
             assert not bytecode.args
             block = state.data_stack.pop()
@@ -346,7 +346,7 @@ def eval_one_op(state: RuntimeState) -> None:
             ctxt = state.data_stack.pop()
             assert isinstance(ctxt, Context)
             state.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "invoke":
             message, nargs = bytecode.args
             assert isinstance(message, str)
@@ -354,7 +354,7 @@ def eval_one_op(state: RuntimeState) -> None:
             assert len(state.data_stack) >= nargs + 1
 
             # Find the handler:
-            ctxt = cursor.context
+            ctxt = frame.context
             handler = None
             while ctxt is not None:
                 if message in ctxt.slots:
@@ -367,7 +367,7 @@ def eval_one_op(state: RuntimeState) -> None:
             if isinstance(handler, Value):
                 state.data_stack = state.data_stack[: -(nargs + 1)]
                 state.data_stack.append(handler)
-                cursor.spot += 1
+                frame.spot += 1
             else:
                 stack_len = len(state.data_stack)
                 receiver = state.data_stack[stack_len - 1 - nargs]
@@ -392,18 +392,18 @@ def eval_one_op(state: RuntimeState) -> None:
                     invoke_compiled(state, method.body, body_ctxt, default_receiver=NullValue())
                 elif isinstance(handler, IntrinsicHandler):
                     # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
-                    # responsibility for updating the cursor as necessary.
+                    # responsibility for updating the frame as necessary.
                     handler.handler(state, receiver, *args)
                 else:
                     # handler is something which can be called with a context, receiver, and arguments.
                     # It should not call evaluation functions. (It can, but the stack is not reified and
                     # uses host language stack instead).
-                    result = handler(cursor.context, receiver, *args)
+                    result = handler(frame.context, receiver, *args)
                     assert isinstance(
                         result, Value
                     ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
                     state.data_stack.append(result)
-                    cursor.spot += 1
+                    frame.spot += 1
         elif op == "components>vector":
             (length,) = bytecode.args
             assert isinstance(length, int)
@@ -411,7 +411,7 @@ def eval_one_op(state: RuntimeState) -> None:
             components = state.data_stack[len(state.data_stack) - length :]
             state.data_stack = state.data_stack[: len(state.data_stack) - length]
             state.data_stack.append(VectorValue(components))
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "components>tuple":
             (length,) = bytecode.args
             assert isinstance(length, int)
@@ -419,11 +419,11 @@ def eval_one_op(state: RuntimeState) -> None:
             components = state.data_stack[len(state.data_stack) - length :]
             state.data_stack = state.data_stack[: len(state.data_stack) - length]
             state.data_stack.append(TupleValue(components))
-            cursor.spot += 1
+            frame.spot += 1
         elif op == "drop":
             assert not bytecode.args
             state.data_stack.pop()
-            cursor.spot += 1
+            frame.spot += 1
         else:
             raise AssertionError(f"Forgot a bytecode op! {op}")
     except Exception as e:
@@ -434,30 +434,28 @@ def invoke_compiled(
     state: RuntimeState, code: BytecodeSequence, ctxt: Context, default_receiver: Value
 ) -> None:
     assert state.call_stack
-    cursor = state.call_stack[-1]
+    frame = state.call_stack[-1]
     # Tail-call optimization!
-    if cursor.spot == len(cursor.sequence.code) - 1:
+    if frame.spot == len(frame.sequence.code) - 1:
         state.call_stack.pop()
     else:
-        cursor.spot += 1
+        frame.spot += 1
     state.call_stack.append(
-        BytecodeCursor(sequence=code, spot=0, context=ctxt, default_receiver=default_receiver)
+        CallFrame(sequence=code, spot=0, context=ctxt, default_receiver=default_receiver)
     )
 
 
-def shift_cursor(state: RuntimeState) -> None:
+def shift_frame(state: RuntimeState) -> None:
     assert state.call_stack
-    cursor = state.call_stack[-1]
-    cursor.spot += 1
+    frame = state.call_stack[-1]
+    frame.spot += 1
 
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
     bytecode = compile(expr)
     state = RuntimeState(
         # TODO: maybe default_receiver should be a reified global context instead?
-        call_stack=[
-            BytecodeCursor(bytecode, spot=0, context=context, default_receiver=NullValue())
-        ],
+        call_stack=[CallFrame(bytecode, spot=0, context=context, default_receiver=NullValue())],
         data_stack=[],
     )
     while state.call_stack:
@@ -484,7 +482,7 @@ def intrinsic__if_then_else(
         invoke_compiled(state, compile(body.body), body.context, default_receiver=NullValue())
     else:
         state.data_stack.append(body)
-        shift_cursor(state)
+        shift_frame(state)
 
 
 def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Value]):
@@ -520,7 +518,7 @@ def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Val
         state.data_stack.append(args[0])
     else:
         state.data_stack.append(receiver)
-        shift_cursor(state)
+        shift_frame(state)
 
 
 def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
