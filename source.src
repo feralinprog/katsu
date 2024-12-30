@@ -99,3 +99,29 @@ print: data
 #    count
 #]
 print: data length
+
+method: [vec map: f] does: [
+    let: 'new-vec =: {}
+    vec each: [new-vec append: (f eval-with: 'it =: it)]
+    new-vec
+]
+print: data
+print: (data map: [it length])
+
+method: [vec from: initial-value accumulate: f] does: [
+    let: 'cur =: initial-value
+    vec each: ['cur = (f eval-with: 'it =: {cur; it})]
+    cur
+]
+print: ((data map: [it length]) from: 0 accumulate: [
+    let: 'sum-so-far =: (it at: 0)
+    'it = (it at: 1)
+    sum-so-far + it
+])
+
+method: [vec map2: f] does: [
+    vec from: {} accumulate: [
+        (it at: 0) append: (f eval-with: 'it =: (it at: 1))
+    ]
+]
+print: (data map2: [it length])
