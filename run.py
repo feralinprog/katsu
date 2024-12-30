@@ -128,7 +128,12 @@ def pf(expr: Expr) -> str:
     elif isinstance(expr, ParenExpr):
         return pf(expr.inner)
     elif isinstance(expr, QuoteExpr):
-        return "[ " + pf(expr.inner) + " ]"
+        return (
+            ("\\" + " ".join(expr.parameters) if expr.parameters else "")
+            + "[ "
+            + pf(expr.body)
+            + " ]"
+        )
     elif isinstance(expr, DataExpr):
         return "{ " + "; ".join(pf(component) for component in expr.components) + " }"
     elif isinstance(expr, SequenceExpr):

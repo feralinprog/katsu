@@ -76,10 +76,16 @@ class ParenExpr(Expr):
 
 @dataclass
 class QuoteExpr(Expr):
-    inner: Expr
+    parameters: list[str]
+    body: Expr
 
     def __repr__(self):
-        return "[ " + repr(self.inner) + " ]"
+        return (
+            ("\\" + " ".join(self.parameters) if self.parameters else "")
+            + "[ "
+            + repr(self.body)
+            + " ]"
+        )
 
 
 @dataclass
@@ -230,9 +236,33 @@ class LParenPrefixParselet:
 
 class LSquarePrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
-        inner = parser.parse(stream, precedence=0)
+        body = parser.parse(stream, precedence=0)
         rparen = stream.consume(TokenType.RSQUARE)
-        return QuoteExpr(span=combine_spans(token.span, inner.span, rparen.span), inner=inner)
+        return QuoteExpr(
+            span=combine_spans(token.span, body.span, rparen.span), parameters=[], body=body
+        )
+
+
+class BackslashPrefixParselet:
+    def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
+        # Collect names until an LSQUARE, then parse the block.
+        param_tokens = []
+        while stream.peek()._type == TokenType.NAME:
+            param_tokens.append(stream.consume())
+        lsquare = stream.consume(TokenType.LSQUARE)
+        body = parser.parse(stream, precedence=0)
+        rsquare = stream.consume(TokenType.RSQUARE)
+        return QuoteExpr(
+            span=combine_spans(
+                token.span,
+                *[token.span for token in param_tokens],
+                lsquare.span,
+                body.span,
+                rsquare.span,
+            ),
+            parameters=[token.value for token in param_tokens],
+            body=body,
+        )
 
 
 class LCurlyPrefixParselet:
@@ -241,7 +271,7 @@ class LCurlyPrefixParselet:
             close = stream.consume()
             return DataExpr(span=combine_spans(token.span, close.span), components=[])
         inner = parser.parse(stream, precedence=0)
-        rparen = stream.consume(TokenType.RCURLY)
+        rcurly = stream.consume(TokenType.RCURLY)
         # Lift the inner's sequence portions if it is a SequenceExpr; otherwise assume this is a single-entry data structure.
         # This is to support syntax like { 1; 2 } producing a vector (1,2) as opposed to a vector (2),
         # while { 1 } still will correctly produce a vector (1); it also allows separating elements by
@@ -251,7 +281,7 @@ class LCurlyPrefixParselet:
         else:
             components = [inner]
         return DataExpr(
-            span=combine_spans(token.span, inner.span, rparen.span), components=components
+            span=combine_spans(token.span, inner.span, rcurly.span), components=components
         )
 
 
@@ -262,7 +292,7 @@ class NamePrefixParselet:
 
 class QuotePrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
-        return QuoteExpr(token.span, NameExpr(token.span, token))
+        return QuoteExpr(token.span, parameters=[], body=NameExpr(token.span, token))
 
 
 class LiteralPrefixParselet:
@@ -430,6 +460,7 @@ parser.prefix_parselets[TokenType.LSQUARE] = LSquarePrefixParselet()
 parser.prefix_parselets[TokenType.LCURLY] = LCurlyPrefixParselet()
 parser.prefix_parselets[TokenType.NAME] = NamePrefixParselet()
 parser.prefix_parselets[TokenType.QUOTE] = QuotePrefixParselet()
+parser.prefix_parselets[TokenType.BACKSLASH] = BackslashPrefixParselet()
 parser.prefix_parselets[TokenType.STRING] = LiteralPrefixParselet()
 parser.prefix_parselets[TokenType.NUMBER] = LiteralPrefixParselet()
 parser.prefix_parselets[TokenType.SYMBOL] = LiteralPrefixParselet()

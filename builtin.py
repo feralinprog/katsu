@@ -24,56 +24,58 @@ def builtin(name: str, handler):
     global_context.slots[name] = handler
 
 
-def handle__method_does_(
-    ctxt: Context, receiver: Optional[Value], decl: Value, body: Value
-) -> Value:
-    # print(ctxt, receiver, decl, body)
-    if receiver:
-        # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
-        raise ValueError("method:does: does not take a receiver")
+def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Value) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(decl, QuoteValue):
-        if isinstance(decl.expr, NameExpr):
-            message = decl.expr.name.value
+        if isinstance(decl.body, NameExpr):
+            message = decl.body.name.value
             receiver_name = "self"
             param_names = []
-        elif isinstance(decl.expr, UnaryMessageExpr):
-            if isinstance(decl.expr.target, NameExpr):
-                message = decl.expr.message.value
-                receiver_name = decl.expr.target.name.value
+        elif isinstance(decl.body, UnaryMessageExpr):
+            if isinstance(decl.body.target, NameExpr):
+                message = decl.body.message.value
+                receiver_name = decl.body.target.name.value
                 param_names = []
             else:
                 raise ValueError(
                     "When the method:does: 'declaration' argument is a unary message, it must be a simple unary message of the form {target-name message-name}"
                 )
-        elif isinstance(decl.expr, NAryMessageExpr):
-            if decl.expr.target:
-                if not isinstance(decl.expr.target, NameExpr):
+        elif isinstance(decl.body, NAryMessageExpr):
+            if decl.body.target:
+                if not isinstance(decl.body.target, NameExpr):
                     raise ValueError(
                         "When the method:does: 'declaration' argument is an n-ary message, it must be a simple n-ary message of the form {[target-name] message: param-name ...}"
                     )
-            for arg in decl.expr.args:
+            for arg in decl.body.args:
                 if not isinstance(arg, NameExpr):
                     raise ValueError(
                         "When the method:does: 'declaration' argument is an n-ary message, it must be a simple n-ary message of the form {[target-name] message: param-name ...}"
                     )
-            message = "".join(message.value + ":" for message in decl.expr.messages)
-            receiver_name = decl.expr.target.name.value if decl.expr.target else "self"
-            param_names = [arg.name.value for arg in decl.expr.args]
+            message = "".join(message.value + ":" for message in decl.body.messages)
+            receiver_name = decl.body.target.name.value if decl.body.target else "self"
+            param_names = [arg.name.value for arg in decl.body.args]
         else:
             raise ValueError(
-                f"method:does: 'declaration' argument should be a quoted name or message; got {decl.expr}"
+                f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
+            )
+
+        if decl.parameters:
+            raise ValueError(
+                "method:does: 'declaration' argument should not specify any parameters"
             )
 
         # Fill in the body and context, then define the method.
         if not isinstance(body, QuoteValue):
-            raise ValueError("method:does: 'body' argument should be a block")
+            raise ValueError("method:does: 'body' argument should be a quote")
+        if body.parameters:
+            raise ValueError("method:does: 'body' argument should not specify any parameters")
 
         # TODO: compile here instead of on-demand in the 'invoke' bytecode evaluator.
         method = Method(
             context=body.context,
             receiver_name=receiver_name,
             param_names=param_names,
-            body_expr=body.expr,
+            body_expr=body.body,
             body=None,
         )
         if message in ctxt.slots:
@@ -87,12 +89,11 @@ def handle__method_does_(
 builtin("method:does:", handle__method_does_)
 
 
-def handle__local_is_(ctxt: Context, receiver: Optional[Value], decl: Value, value: Value) -> Value:
-    if receiver:
-        raise ValueError("local:is: does not take a receiver")
+def handle__local_is_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(decl, QuoteValue):
-        if isinstance(decl.expr, NameExpr):
-            local_name = decl.expr.name.value
+        if isinstance(decl.body, NameExpr):
+            local_name = decl.body.name.value
         else:
             raise ValueError(
                 f"local:is: 'declaration' argument should be a quoted name; got {decl}"
@@ -110,12 +111,11 @@ builtin("local:is:", handle__local_is_)
 
 
 # TODO: alias? or just fully rename...
-def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value: Value) -> Value:
-    if receiver:
-        raise ValueError("let:=: does not take a receiver")
+def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(decl, QuoteValue):
-        if isinstance(decl.expr, NameExpr):
-            local_name = decl.expr.name.value
+        if isinstance(decl.body, NameExpr):
+            local_name = decl.body.name.value
         else:
             raise ValueError(f"let:=: 'declaration' argument should be a quoted name; got {decl}")
     else:
@@ -130,12 +130,11 @@ def handle__let_eq_(ctxt: Context, receiver: Optional[Value], decl: Value, value
 builtin("let:=:", handle__local_is_)
 
 
-def handle__set(ctxt: Context, receiver: Optional[Value], slot: Value, value: Value) -> Value:
-    if receiver:
-        raise ValueError("=:_: takes no receiver")
+def handle__set(ctxt: Context, receiver: Value, slot: Value, value: Value) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(slot, QuoteValue):
-        if isinstance(slot.expr, NameExpr):
-            slot = slot.expr.name.value
+        if isinstance(slot.body, NameExpr):
+            slot = slot.body.name.value
         else:
             raise ValueError(f"=:_: 'slot' argument should be a quoted name; got {slot}")
     else:
@@ -157,7 +156,7 @@ def generic_unary_op_handler(
     handlers: list[Tuple[Type, Callable[[Any], Value]]],
     default_handler: Optional[Callable[[Value], Value]] = None,
 ):
-    def handle__generic_unary_op(ctxt: Context, receiver: Optional[Value]) -> Value:
+    def handle__generic_unary_op(ctxt: Context, receiver: Value) -> Value:
         assert receiver
         for receiver_type, handler in handlers:
             if isinstance(receiver, receiver_type):
@@ -180,10 +179,8 @@ def generic_binary_op_handler(
     default_handler: Optional[Callable[[Value, Value], Value]] = None,
 ):
     def handle__generic_binary_op(
-        ctxt: Context, receiver: Optional[Value], left: Value, right: Value
+        ctxt: Context, receiver: Value, left: Value, right: Value
     ) -> Value:
-        if receiver:
-            raise ValueError(f"{op} takes no receiver")
         for left_type, right_type, handler in handlers:
             if isinstance(left, left_type) and isinstance(right, right_type):
                 return handler(left, right)
@@ -302,9 +299,15 @@ builtin_unary_op(
 )
 
 
-def handle__print_(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
-    if receiver:
-        raise ValueError("print: does not take a receiver")
+def handle__print(ctxt: Context, receiver: Value) -> Value:
+    print(receiver)
+    return NullValue()
+
+
+builtin("print", handle__print)
+
+
+def handle__print_(ctxt: Context, receiver: Value, value: Value) -> Value:
     print(value)
     return NullValue()
 
@@ -316,16 +319,14 @@ builtin("f", BoolValue(False))
 builtin("null", NullValue())
 
 
-def handle__to_string(ctxt: Context, value: Value) -> Value:
-    return StringValue(str(value))
+def handle__to_string(ctxt: Context, receiver: Value) -> Value:
+    return StringValue(str(receiver))
 
 
 builtin(">string", handle__to_string)
 
 
-def handle__at_(ctxt: Context, receiver: Optional[Value], index: Value) -> Value:
-    if not receiver:
-        raise ValueError("at: requires a receiver")
+def handle__at_(ctxt: Context, receiver: Value, index: Value) -> Value:
     if isinstance(receiver, VectorValue):
         if isinstance(index, NumberValue):
             return receiver.components[index.value]
@@ -338,9 +339,7 @@ def handle__at_(ctxt: Context, receiver: Optional[Value], index: Value) -> Value
 builtin("at:", handle__at_)
 
 
-def handle__at_eq_(ctxt: Context, receiver: Optional[Value], index: Value, value: Value) -> Value:
-    if not receiver:
-        raise ValueError("at:=: requires a receiver")
+def handle__at_eq_(ctxt: Context, receiver: Value, index: Value, value: Value) -> Value:
     if isinstance(receiver, VectorValue):
         if isinstance(index, NumberValue):
             receiver.components[index.value] = value
@@ -354,9 +353,7 @@ def handle__at_eq_(ctxt: Context, receiver: Optional[Value], index: Value, value
 builtin("at:=:", handle__at_eq_)
 
 
-def handle__append_(ctxt: Context, receiver: Optional[Value], value: Value) -> Value:
-    if not receiver:
-        raise ValueError("append: requires a receiver")
+def handle__append_(ctxt: Context, receiver: Value, value: Value) -> Value:
     if isinstance(receiver, VectorValue):
         receiver.components.append(value)
         return receiver
@@ -367,9 +364,7 @@ def handle__append_(ctxt: Context, receiver: Optional[Value], value: Value) -> V
 builtin("append:", handle__append_)
 
 
-def handle__length(ctxt: Context, receiver: Optional[Value]) -> Value:
-    if not receiver:
-        raise ValueError("length requires a receiver")
+def handle__length(ctxt: Context, receiver: Value) -> Value:
     if isinstance(receiver, VectorValue):
         return NumberValue(len(receiver.components))
     elif isinstance(receiver, StringValue):
@@ -381,9 +376,7 @@ def handle__length(ctxt: Context, receiver: Optional[Value]) -> Value:
 builtin("length", handle__length)
 
 
-def handle__show_current_context(ctxt: Context, receiver: Optional[Value]) -> Value:
-    if receiver:
-        raise ValueError("<show-current-context> does not take a receiver")
+def handle__show_current_context(ctxt: Context, receiver: Value) -> Value:
     print("==== showing current context ====")
     while ctxt.base:
         print("context:")

@@ -26,7 +26,8 @@ class TokenType(Enum):
     MESSAGE = auto()  # <name/operator>: or <name/operator>.
     SYMBOL = auto()  # :<name/operator>
     QUOTE = auto()  # '<name>
-    OPERATOR = auto()  # same as names, but different character set
+    BACKSLASH = auto()  # \
+    OPERATOR = auto()  # same as names, but limited character set
     NUMBER = auto()
     STRING = auto()
 
@@ -95,6 +96,7 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         (TokenType.LSQUARE, r"\[", lambda match: match.group(0)),
         (TokenType.RSQUARE, r"\]", lambda match: match.group(0)),
         (TokenType.COMMA, r",", lambda match: match.group(0)),
+        (TokenType.BACKSLASH, r"\\", lambda match: match.group(0)),
         (
             TokenType.STRING,
             r"\"([^\"]|\\\")*\"",

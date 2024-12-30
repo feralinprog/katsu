@@ -18,7 +18,7 @@ print: ("abc" str~: 2)
 # TODO: precompute <null> and use this, so it's not looked up at runtime.
 # (really, figure out how this can work. maybe something like:
 # >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
-# where :bake: replaces any instances of a `$ expr` unary operator with `expr eval`)
+# where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
 method: [if: cond then: body] does: [ if: cond then: body else: null ]
 if: 2 > 1 then: [ print: "good: 2 > 1" ]
 if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
@@ -29,8 +29,8 @@ print: a
 print: a
 
 method: [while: cond do: body] does: [
-    if: cond eval then: [
-        body eval
+    if: cond call then: [
+        body call
         while: cond do: body
     ]
 ]
@@ -44,14 +44,14 @@ method: [test-while] does: [
 ]
 test-while
 
-method: [for: name from: low to<: high do: body] does: [
+method: [from: low to<: high do: body] does: [
     let: 'i =: low
     while: [i < high] do: [
-        body eval-with: name =: i
+        body call: i
         'i = i + 1
     ]
 ]
-for: 'i from: 0 to<: 10 do: [
+from: 0 to<: 10 do: \i [
     print: i
 ]
 
@@ -64,7 +64,7 @@ print: (1 + 3 * 6 / 2 * 3) == 4
 method: [vec each: action] does: [
     let: 'i =: 0
     while: [i < vec length] do: [
-        action eval-with: 'it =: (vec at: i)
+        action call: (vec at: i)
         'i = i + 1
     ]
 ]
@@ -76,8 +76,8 @@ let: 'data =: {
     { 7; }
 }
 print: data
-data each: [print: it]
-data each: [it each: [print: it]]
+data each: \v [print: v]
+data each: \v [v each: \w [print: w]]
 (data at: 0) at: 1 =: "a"
 data at: 2 =: "b"
 print: data
@@ -87,7 +87,7 @@ print: data
 
 let: 'other =: { "more"; "data" }
 method: [prefix extend: suffix] does: [
-    suffix each: [prefix append: it]
+    suffix each: \v [prefix append: v]
 ]
 print: other
 data extend: other
@@ -102,26 +102,25 @@ print: data length
 
 method: [vec map: f] does: [
     let: 'new-vec =: {}
-    vec each: [new-vec append: (f eval-with: 'it =: it)]
+    vec each: \v [new-vec append: (f call: v)]
     new-vec
 ]
 print: data
-print: (data map: [it length])
+data each: [print]
+print: (data map: [length])
 
 method: [vec from: initial-value accumulate: f] does: [
     let: 'cur =: initial-value
-    vec each: ['cur = (f eval-with: 'it =: {cur; it})]
+    vec each: \v ['cur = f call*: (cur, v)]
     cur
 ]
-print: ((data map: [it length]) from: 0 accumulate: [
-    let: 'sum-so-far =: (it at: 0)
-    'it = (it at: 1)
-    sum-so-far + it
+print: ((data map: [length]) from: 0 accumulate: \sum-so-far current-value [
+    sum-so-far + current-value
 ])
 
 method: [vec map2: f] does: [
-    vec from: {} accumulate: [
-        (it at: 0) append: (f eval-with: 'it =: (it at: 1))
+    vec from: {} accumulate: \new-vec x [
+        new-vec append: (f call: x)
     ]
 ]
-print: (data map2: [it length])
+print: (data map2: [length])
