@@ -1,150 +1,150 @@
-#method: [sum: a and: b and: c] does: [
-#    let: [x] =: a + b
-#    let: 'y =: x + c
-#    y
+method: [sum: a and: b and: c] does: [
+    let: [x] =: a + b
+    let: 'y =: x + c
+    y
+]
+print: (sum: 1 and: 2 and: 3)
+
+method: [a plus: b] does: [
+    a + b
+]
+print: (1 plus: 2)
+
+method: [a str~: b] does: [
+    a >string ~ b >string
+]
+print: ("abc" str~: 2)
+
+# TODO: precompute <null> and use this, so it's not looked up at runtime.
+# (really, figure out how this can work. maybe something like:
+# >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
+# where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
+method: [if: cond then: body] does: [ if: cond then: body else: null ]
+if: 2 > 1 then: [ print: "good: 2 > 1" ]
+if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
+
+let: 'a =: 5
+print: a
+'a = 10
+print: a
+
+method: [while: cond do: body] does: [
+    if: cond call then: [
+        body call
+        while: cond do: body
+    ]
+]
+
+method: [test-while] does: [
+    let: 'i =: 10
+    while: [i > 0] do: [
+        print: i
+        'i = i - 1
+    ]
+]
+test-while
+
+method: [from: low to<: high do: body] does: [
+    let: 'i =: low
+    while: [i < high] do: [
+        body call: i
+        'i = i + 1
+    ]
+]
+from: 0 to<: 10 do: \i [
+    print: i
+]
+
+print: ((1, 2, 3), 4,)
+print: t and f
+print: not t
+print: - 5
+print: (1 + 3 * 6 / 2 * 3) == 4
+
+method: [vec each: action] does: [
+    let: 'i =: 0
+    while: [i < vec length] do: [
+        action call: (vec at: i)
+        'i = i + 1
+    ]
+]
+
+let: 'data =: {
+    { 1; 2; 3 }
+    { 4; 5; }
+    { 6; }
+    { 7; }
+}
+print: data
+data each: \v [print: v]
+data each: \v [v each: \w [print: w]]
+(data at: 0) at: 1 =: "a"
+data at: 2 =: "b"
+print: data
+
+data append: "last elem"
+print: data
+
+let: 'other =: { "more"; "data" }
+method: [prefix extend: suffix] does: [
+    suffix each: \v [prefix append: v]
+]
+print: other
+data extend: other
+print: data
+
+#method: [length] does: [
+#    let: 'count =: 0
+#    self each: [ 'count = count + 1 ]
+#    count
 #]
-#print: (sum: 1 and: 2 and: 3)
-#
-#method: [a plus: b] does: [
-#    a + b
-#]
-#print: (1 plus: 2)
-#
-#method: [a str~: b] does: [
-#    a >string ~ b >string
-#]
-#print: ("abc" str~: 2)
-#
-## TODO: precompute <null> and use this, so it's not looked up at runtime.
-## (really, figure out how this can work. maybe something like:
-## >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
-## where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
-#method: [if: cond then: body] does: [ if: cond then: body else: null ]
-#if: 2 > 1 then: [ print: "good: 2 > 1" ]
-#if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
-#
-#let: 'a =: 5
-#print: a
-#'a = 10
-#print: a
-#
-#method: [while: cond do: body] does: [
-#    if: cond call then: [
-#        body call
-#        while: cond do: body
-#    ]
-#]
-#
-#method: [test-while] does: [
-#    let: 'i =: 10
-#    while: [i > 0] do: [
-#        print: i
-#        'i = i - 1
-#    ]
-#]
-#test-while
-#
-#method: [from: low to<: high do: body] does: [
-#    let: 'i =: low
-#    while: [i < high] do: [
-#        body call: i
-#        'i = i + 1
-#    ]
-#]
-#from: 0 to<: 10 do: \i [
-#    print: i
-#]
-#
-#print: ((1, 2, 3), 4,)
-#print: t and f
-#print: not t
-#print: - 5
-#print: (1 + 3 * 6 / 2 * 3) == 4
-#
-#method: [vec each: action] does: [
-#    let: 'i =: 0
-#    while: [i < vec length] do: [
-#        action call: (vec at: i)
-#        'i = i + 1
-#    ]
-#]
-#
-#let: 'data =: {
-#    { 1; 2; 3 }
-#    { 4; 5; }
-#    { 6; }
-#    { 7; }
-#}
-#print: data
-#data each: \v [print: v]
-#data each: \v [v each: \w [print: w]]
-#(data at: 0) at: 1 =: "a"
-#data at: 2 =: "b"
-#print: data
-#
-#data append: "last elem"
-#print: data
-#
-#let: 'other =: { "more"; "data" }
-#method: [prefix extend: suffix] does: [
-#    suffix each: \v [prefix append: v]
-#]
-#print: other
-#data extend: other
-#print: data
-#
-##method: [length] does: [
-##    let: 'count =: 0
-##    self each: [ 'count = count + 1 ]
-##    count
-##]
-#print: data length
-#
-#method: [vec map: f] does: [
-#    let: 'new-vec =: {}
-#    vec each: \v [new-vec append: (f call: v)]
-#    new-vec
-#]
-#print: data
-#data each: [print]
-#print: (data map: [length])
-#
-#method: [vec from: initial-value accumulate: f] does: [
-#    let: 'cur =: initial-value
-#    vec each: \v ['cur = f call*: (cur, v)]
-#    cur
-#]
-#print: ((data map: [length]) from: 0 accumulate: \sum-so-far current-value [
-#    sum-so-far + current-value
-#])
-#
-#method: [vec map2: f] does: [
-#    vec from: {} accumulate: \new-vec x [
-#        new-vec append: (f call: x)
-#    ]
-#]
-#print: (data map2: [length])
-#
-#method: [vec strsum] does: [
-#    vec from: "" accumulate: \a b [a ~ b >string]
-#]
-#({{"a";"b"};{"c";"d"}} map2: [strsum]) each: [print]
-#
-#method: [vec select: filter] does: [
-#    vec from: {} accumulate: \new-vec x [
-#        if: (filter call: x) then: [ new-vec append: x ] else: new-vec
-#    ]
-#]
-#print: (data select: [it length < 2])
-#print: (data select: [it length >= 2])
-#
-#method: [v print-with-wrapper: s] does: [
-#    print: s ~ v >string ~ s
-#]
-#data each: [print-with-wrapper: "!"]
-#
-## example of runtime error
-##data each: [strsum]
+print: data length
+
+method: [vec map: f] does: [
+    let: 'new-vec =: {}
+    vec each: \v [new-vec append: (f call: v)]
+    new-vec
+]
+print: data
+data each: [print]
+print: (data map: [length])
+
+method: [vec from: initial-value accumulate: f] does: [
+    let: 'cur =: initial-value
+    vec each: \v ['cur = f call*: (cur, v)]
+    cur
+]
+print: ((data map: [length]) from: 0 accumulate: \sum-so-far current-value [
+    sum-so-far + current-value
+])
+
+method: [vec map2: f] does: [
+    vec from: {} accumulate: \new-vec x [
+        new-vec append: (f call: x)
+    ]
+]
+print: (data map2: [length])
+
+method: [vec strsum] does: [
+    vec from: "" accumulate: \a b [a ~ b >string]
+]
+({{"a";"b"};{"c";"d"}} map2: [strsum]) each: [print]
+
+method: [vec select: filter] does: [
+    vec from: {} accumulate: \new-vec x [
+        if: (filter call: x) then: [ new-vec append: x ] else: new-vec
+    ]
+]
+print: (data select: [it length < 2])
+print: (data select: [it length >= 2])
+
+method: [v print-with-wrapper: s] does: [
+    print: s ~ v >string ~ s
+]
+data each: [print-with-wrapper: "!"]
+
+# example of runtime error
+#data each: [strsum]
 
 method: [nonlocal-return-test: f] does: [
     print: "should get here"
