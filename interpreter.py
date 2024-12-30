@@ -470,34 +470,21 @@ def intrinsic__if_then_else(
         shift_cursor(state)
 
 
-def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
-    assert receiver
+def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Value]):
     if isinstance(receiver, QuoteValue):
-        if len(receiver.parameters) != 0:
-            raise ValueError("call receiver requires parameter(s)")
-        # TODO: use reified context as default receiver?
-        # TODO: compile ahead of time somehow...
-        invoke_compiled(
-            state,
-            compile(receiver.body),
-            Context(slots={}, base=receiver.context),
-            default_receiver=NullValue(),
-        )
-    else:
-        state.data_stack.append(receiver)
-        shift_cursor(state)
-
-
-def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None:
-    if isinstance(receiver, QuoteValue):
-        if len(receiver.parameters) == 0:
-            new_slots = {"it": value}
-            default_receiver = value
-        elif len(receiver.parameters) == 1:
-            new_slots = {receiver.parameters[0]: value}
-            default_receiver = NullValue()
+        # Special-case no parameters with one argument.
+        if not receiver.parameters and len(args) == 1:
+            param_names = ["it"]
+            default_receiver = args[0]
+        elif len(receiver.parameters) != len(args):
+            raise ValueError(
+                f"{message} receiver (a quote) requires {len(receiver.parameters)} parameter(s), but is being provided {len(args)}"
+            )
         else:
-            raise ValueError("call: receiver requires multiple parameters")
+            param_names = receiver.parameters
+            # TODO: use reified context as default receiver?
+            default_receiver = NullValue()
+        new_slots = {name: value for name, value in zip(param_names, args)}
         # TODO: compile ahead of time somehow...
         invoke_compiled(
             state,
@@ -510,29 +497,18 @@ def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None
         shift_cursor(state)
 
 
+def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
+    call_impl("call", state, receiver, args=[])
+
+
+def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None:
+    call_impl("call:", state, receiver, args=[value])
+
+
 def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) -> None:
     if not isinstance(value, TupleValue):
         raise ValueError("call*: value must be a tuple")
-    if isinstance(receiver, QuoteValue):
-        if len(value.components) != len(receiver.parameters):
-            raise ValueError(
-                f"call*: receiver takes parameters '{' '.join(receiver.parameters)}', but provided tuple has {len(value.components)} component(s)"
-            )
-        new_slots = {
-            parameter: component
-            for parameter, component in zip(receiver.parameters, value.components)
-        }
-        # TODO: use reified context as default receiver?
-        # TODO: compile ahead of time somehow...
-        invoke_compiled(
-            state,
-            compile(receiver.body),
-            Context(slots=new_slots, base=receiver.context),
-            default_receiver=NullValue(),
-        )
-    else:
-        state.data_stack.append(receiver)
-        shift_cursor(state)
+    call_impl("call*:", state, receiver, args=value.components)
 
 
 intrinsic_handlers = {
