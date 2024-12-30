@@ -4,11 +4,14 @@ from typing import Any, Callable, Optional, Tuple, Type
 from interpreter import (
     BoolValue,
     Context,
+    DataclassTypeValue,
+    DataclassValue,
     Method,
     NullValue,
     NumberValue,
     QuoteValue,
     StringValue,
+    SymbolValue,
     Value,
     VectorValue,
     intrinsic_handlers,
@@ -87,6 +90,85 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
 
 
 builtin("method:does:", handle__method_does_)
+
+
+def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
+    if isinstance(decl, QuoteValue):
+        if isinstance(decl.body, NameExpr):
+            class_name = decl.body.name.value
+        else:
+            raise ValueError(
+                f"data:has: 'declaration' argument should be a quoted name; got {decl}"
+            )
+    else:
+        raise ValueError("data:has: 'declaration' argument should be a quoted name")
+
+    # TODO: change format? maybe also should parse an AST node...
+    # also consider adding "parsing methods", which have a property indicating that evaluation
+    # of this form should always just pass in AST nodes (+ surrounding lexical context)
+    if not isinstance(slots, VectorValue):
+        raise ValueError("data:has: 'slots' argument should be a vector of symbols")
+    for slot in slots.components:
+        if not isinstance(slot, SymbolValue):
+            raise ValueError("data:has: 'slots' argument should be a vector of symbols")
+    slots = [slot.symbol for slot in slots.components]
+
+    if class_name in ctxt.slots:
+        raise ValueError(f"'{class_name}' is already defined")
+    ctxt.slots[class_name] = DataclassTypeValue(class_name, slots)
+
+    # TODO: This is all very hacky. Should just use multimethod dispatch instead of hardcoding.
+    ctor_message = "".join(slot + ":" for slot in slots) if slots else "new"
+    if ctor_message not in ctxt.slots:
+        ctxt.slots[ctor_message] = handle_generic_dataclass_constructor(ctor_message)
+
+    for slot in slots:
+        if slot not in ctxt.slots:
+            ctxt.slots[slot] = handle_generic_dataclass_get(slot)
+        if slot + ":" not in ctxt.slots:
+            ctxt.slots[slot + ":"] = handle_generic_dataclass_set(slot)
+
+    return NullValue()
+
+
+def handle_generic_dataclass_constructor(message: str):
+    def handler(ctxt: Context, receiver: Value, *values: list[Value]) -> Value:
+        values = list(values)  # was a tuple
+        if not isinstance(receiver, DataclassTypeValue):
+            raise ValueError(f"{message} expects a dataclass type as receiver")
+        assert len(values) == len(receiver.slots)
+        return DataclassValue(type=receiver, values=values)
+
+    return handler
+
+
+def handle_generic_dataclass_get(slot: str):
+    def handler(ctxt: Context, receiver: Value) -> Value:
+        if not isinstance(receiver, DataclassValue):
+            raise ValueError(f"{slot} expects a dataclass value as receiver")
+        if slot in receiver.type.slots:
+            return receiver.values[receiver.type.slots.index(slot)]
+        else:
+            raise ValueError(f"dataclass '{receiver.type.name}' has no slot '{slot}'")
+
+    return handler
+
+
+def handle_generic_dataclass_set(slot: str):
+    def handler(ctxt: Context, receiver: Value, value: Value) -> Value:
+        if not isinstance(receiver, DataclassValue):
+            raise ValueError(f"{slot}: expects a dataclass value as receiver")
+        if slot in receiver.type.slots:
+            receiver.values[receiver.type.slots.index(slot)] = value
+            return value
+        else:
+            raise ValueError(f"dataclass '{receiver.type.name}' has no slot '{slot}'")
+
+    return handler
+
+
+builtin("data:has:", handle__data_has_)
 
 
 def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:

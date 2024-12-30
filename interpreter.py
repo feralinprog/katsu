@@ -117,6 +117,36 @@ class ContinuationValue(Value):
         return "<continuation>"
 
 
+@dataclass
+class TypeValue(Value):
+    name: str
+
+    def __str__(self):
+        return f"<class {self.name}>"
+
+
+@dataclass
+class DataclassTypeValue(TypeValue):
+    slots: list[str]
+
+    def __str__(self):
+        return f"<dataclass {self.name}: {', '.join(self.slots)}>"
+
+
+@dataclass
+class DataclassValue(Value):
+    type: DataclassTypeValue
+    values: list[Value]
+
+    def __str__(self):
+        if not self.values:
+            return self.type.name + " new"
+        else:
+            return self.type.name + "".join(
+                " " + slot + ": " + str(value) for slot, value in zip(self.type.slots, self.values)
+            )
+
+
 #################################################
 # Runtime State Model
 #################################################
