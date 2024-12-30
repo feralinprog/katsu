@@ -258,8 +258,7 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
             compile_into(part, sequence)
             is_last = i == len(expr.sequence) - 1
             if not is_last:
-                # TODO: more narrow span?
-                add("drop", span=expr.span)
+                add("drop", span=part.span)
     elif isinstance(expr, TupleExpr):
         for component in expr.components:
             compile_into(component, sequence)

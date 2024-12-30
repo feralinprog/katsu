@@ -142,3 +142,6 @@ method: [v print-with-wrapper: s] does: [
     print: s ~ v >string ~ s
 ]
 data each: [print-with-wrapper: "!"]
+
+# example of runtime error
+#data each: [strsum]
