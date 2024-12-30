@@ -372,6 +372,7 @@ def eval_one_op(state: RuntimeState) -> None:
                     for param_name, arg in zip(method.param_names, args):
                         body_ctxt.slots[param_name] = arg
 
+                    # TODO: use reified context as default receiver?
                     invoke_compiled(state, method.body, body_ctxt, default_receiver=NullValue())
                 elif isinstance(handler, IntrinsicHandler):
                     # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
@@ -462,6 +463,7 @@ def intrinsic__if_then_else(
 ) -> None:
     body = tbody if isinstance(cond, BoolValue) and cond.value else fbody
     if isinstance(body, QuoteValue):
+        # TODO: use reified context as default receiver?
         # TODO: compile ahead of time somehow...
         invoke_compiled(state, compile(body.body), body.context, default_receiver=NullValue())
     else:
@@ -474,6 +476,7 @@ def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
     if isinstance(receiver, QuoteValue):
         if len(receiver.parameters) != 0:
             raise ValueError("call receiver requires parameter(s)")
+        # TODO: use reified context as default receiver?
         # TODO: compile ahead of time somehow...
         invoke_compiled(
             state,
@@ -520,6 +523,7 @@ def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) ->
             parameter: component
             for parameter, component in zip(receiver.parameters, value.components)
         }
+        # TODO: use reified context as default receiver?
         # TODO: compile ahead of time somehow...
         invoke_compiled(
             state,
