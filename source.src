@@ -124,3 +124,8 @@ method: [vec map2: f] does: [
     ]
 ]
 print: (data map2: [length])
+
+method: [vec strsum] does: [
+    vec from: "" accumulate: \a b [a ~ b >string]
+]
+({{"a";"b"};{"c";"d"}} map2: [strsum]) each: [print]
