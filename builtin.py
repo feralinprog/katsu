@@ -89,28 +89,6 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
 builtin("method:does:", handle__method_does_)
 
 
-def handle__local_is_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
-    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
-    if isinstance(decl, QuoteValue):
-        if isinstance(decl.body, NameExpr):
-            local_name = decl.body.name.value
-        else:
-            raise ValueError(
-                f"local:is: 'declaration' argument should be a quoted name; got {decl}"
-            )
-    else:
-        raise ValueError("local:is: 'declaration' argument should be a quoted name")
-
-    if local_name in ctxt.slots:
-        raise ValueError(f"Message '{local_name}' is already defined.")
-    ctxt.slots[local_name] = value
-    return value
-
-
-builtin("local:is:", handle__local_is_)
-
-
-# TODO: alias? or just fully rename...
 def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(decl, QuoteValue):
@@ -127,7 +105,7 @@ def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -
     return value
 
 
-builtin("let:=:", handle__local_is_)
+builtin("let:=:", handle__let_eq_)
 
 
 def handle__set(ctxt: Context, receiver: Value, slot: Value, value: Value) -> Value:
