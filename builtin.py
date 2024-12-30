@@ -359,7 +359,7 @@ def handle__append_(ctxt: Context, receiver: Optional[Value], value: Value) -> V
         raise ValueError("append: requires a receiver")
     if isinstance(receiver, VectorValue):
         receiver.components.append(value)
-        return NullValue()
+        return receiver
     else:
         raise ValueError(f"append: requires a vector; got {receiver}")
 
