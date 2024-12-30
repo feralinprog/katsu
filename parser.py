@@ -237,6 +237,9 @@ class LSquarePrefixParselet:
 
 class LCurlyPrefixParselet:
     def parse(self, stream: TokenStream, parser: PrattParser, token: Token) -> Expr:
+        if stream.peek()._type == TokenType.RCURLY:
+            close = stream.consume()
+            return DataExpr(span=combine_spans(token.span, close.span), components=[])
         inner = parser.parse(stream, precedence=0)
         rparen = stream.consume(TokenType.RCURLY)
         # Lift the inner's sequence portions if it is a SequenceExpr; otherwise assume this is a single-entry data structure.
