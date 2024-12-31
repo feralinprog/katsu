@@ -120,6 +120,7 @@ class ContinuationValue(Value):
 @dataclass
 class TypeValue(Value):
     name: str
+    bases: list["TypeValue"]
 
     def __str__(self):
         return f"<class {self.name}>"

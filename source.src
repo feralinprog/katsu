@@ -169,3 +169,10 @@ print: p .x
 print: p .y
 p set-x: 6
 print: p
+
+p type
+p type == Point
+p Point?
+p Number?
+p Object?
+p Object? Bool?

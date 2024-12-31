@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional, Tuple, Type
 from interpreter import (
     BoolValue,
     Context,
+    ContinuationValue,
     DataclassTypeValue,
     DataclassValue,
     Method,
@@ -12,6 +13,8 @@ from interpreter import (
     QuoteValue,
     StringValue,
     SymbolValue,
+    TupleValue,
+    TypeValue,
     Value,
     VectorValue,
     intrinsic_handlers,
@@ -25,6 +28,33 @@ for slot, handler in intrinsic_handlers.items():
 def builtin(name: str, handler):
     assert name not in global_context.slots, f"{name} already is defined as a builtin."
     global_context.slots[name] = handler
+
+
+ObjectType = TypeValue("Object", bases=[])
+NumberType = TypeValue("Number", bases=[ObjectType])
+StringType = TypeValue("String", bases=[ObjectType])
+BoolType = TypeValue("Bool", bases=[ObjectType])
+NullType = TypeValue("Null", bases=[ObjectType])
+SymbolType = TypeValue("Symbol", bases=[ObjectType])
+VectorType = TypeValue("Vector", bases=[ObjectType])
+TupleType = TypeValue("Tuple", bases=[ObjectType])
+QuoteType = TypeValue("Quote", bases=[ObjectType])
+ContinuationType = TypeValue("Continuation", bases=[ObjectType])
+TypeType = TypeValue("Type", bases=[ObjectType])
+DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
+
+builtin("ObjectType", ObjectType)
+builtin("NumberType", NumberType)
+builtin("StringType", StringType)
+builtin("BoolType", BoolType)
+builtin("NullType", NullType)
+builtin("SymbolType", SymbolType)
+builtin("VectorType", VectorType)
+builtin("TupleType", TupleType)
+builtin("QuoteType", QuoteType)
+builtin("ContinuationType", ContinuationType)
+builtin("TypeType", TypeType)
+builtin("DataclassTypeType", DataclassTypeType)
 
 
 def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Value) -> Value:
@@ -92,6 +122,76 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
 builtin("method:does:", handle__method_does_)
 
 
+def type_of(value: Value) -> TypeValue:
+    if isinstance(value, NumberValue):
+        return NumberType
+    elif isinstance(value, StringValue):
+        return StringType
+    elif isinstance(value, BoolValue):
+        return BoolType
+    elif isinstance(value, NullValue):
+        return NullType
+    elif isinstance(value, SymbolValue):
+        return SymbolType
+    elif isinstance(value, TupleValue):
+        return TupleType
+    elif isinstance(value, VectorValue):
+        return VectorType
+    elif isinstance(value, QuoteValue):
+        return QuoteType
+    elif isinstance(value, ContinuationValue):
+        return ContinuationType
+    elif isinstance(value, TypeValue):
+        return TypeType
+    elif isinstance(value, DataclassTypeValue):
+        return DataclassTypeType
+    elif isinstance(value, DataclassValue):
+        return value.type
+
+
+def handle__type(ctxt: Context, receiver: Value) -> Value:
+    return type_of(receiver)
+
+
+builtin("type", handle__type)
+
+
+def is_subtype(a: TypeValue, b: TypeValue) -> bool:
+    # TODO: check for no recursion... either here or whenever creating new types
+    if a == b:
+        return True
+    for base in a.bases:
+        if is_subtype(base, b):
+            return True
+    return False
+
+
+def handle_is_type(message: str, _type: TypeValue):
+    def handler(ctxt: Context, receiver: Value) -> Value:
+        return BoolValue(is_subtype(type_of(receiver), _type))
+
+    return handler
+
+
+def builtin_is_type(_type: TypeValue):
+    message = _type.name + "?"
+    builtin(message, handle_is_type(message, _type))
+
+
+builtin_is_type(ObjectType)
+builtin_is_type(NumberType)
+builtin_is_type(StringType)
+builtin_is_type(BoolType)
+builtin_is_type(NullType)
+builtin_is_type(SymbolType)
+builtin_is_type(TupleType)
+builtin_is_type(VectorType)
+builtin_is_type(QuoteType)
+builtin_is_type(ContinuationType)
+builtin_is_type(TypeType)
+builtin_is_type(DataclassTypeType)
+
+
 def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(decl, QuoteValue):
@@ -116,7 +216,13 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
 
     if class_name in ctxt.slots:
         raise ValueError(f"'{class_name}' is already defined")
-    ctxt.slots[class_name] = DataclassTypeValue(class_name, slots)
+    # TODO: allow inheritance
+    _class = DataclassTypeValue(name=class_name, bases=[ObjectType], slots=slots)
+    ctxt.slots[class_name] = _class
+
+    if class_name + "?" in ctxt.slots:
+        raise ValueError(f"'{class_name}?' is already defined")
+    ctxt.slots[class_name + "?"] = handle_is_type(class_name + "?", _class)
 
     # TODO: This is all very hacky. Should just use multimethod dispatch instead of hardcoding.
     ctor_message = "".join(slot + ":" for slot in slots) if slots else "new"
