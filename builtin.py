@@ -166,30 +166,25 @@ def is_subtype(a: TypeValue, b: TypeValue) -> bool:
     return False
 
 
-def handle_is_type(message: str, _type: TypeValue):
+def handle_is_type(_type: TypeValue):
     def handler(ctxt: Context, receiver: Value) -> Value:
         return BoolValue(is_subtype(type_of(receiver), _type))
 
     return handler
 
 
-def builtin_is_type(_type: TypeValue):
-    message = _type.name + "?"
-    builtin(message, handle_is_type(message, _type))
-
-
-builtin_is_type(ObjectType)
-builtin_is_type(NumberType)
-builtin_is_type(StringType)
-builtin_is_type(BoolType)
-builtin_is_type(NullType)
-builtin_is_type(SymbolType)
-builtin_is_type(TupleType)
-builtin_is_type(VectorType)
-builtin_is_type(QuoteType)
-builtin_is_type(ContinuationType)
-builtin_is_type(TypeType)
-builtin_is_type(DataclassTypeType)
+builtin("Object?", handle_is_type(ObjectType))
+builtin("Number?", handle_is_type(NumberType))
+builtin("String?", handle_is_type(StringType))
+builtin("Bool?", handle_is_type(BoolType))
+builtin("Null?", handle_is_type(NullType))
+builtin("Symbol?", handle_is_type(SymbolType))
+builtin("Tuple?", handle_is_type(TupleType))
+builtin("Vector?", handle_is_type(VectorType))
+builtin("Quote?", handle_is_type(QuoteType))
+builtin("Continuation?", handle_is_type(ContinuationType))
+builtin("Type?", handle_is_type(TypeType))
+builtin("DataclassType?", handle_is_type(DataclassTypeType))
 
 
 def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value) -> Value:
@@ -222,7 +217,7 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
 
     if class_name + "?" in ctxt.slots:
         raise ValueError(f"'{class_name}?' is already defined")
-    ctxt.slots[class_name + "?"] = handle_is_type(class_name + "?", _class)
+    ctxt.slots[class_name + "?"] = handle_is_type(_class)
 
     # TODO: This is all very hacky. Should just use multimethod dispatch instead of hardcoding.
     ctor_message = "".join(slot + ":" for slot in slots) if slots else "new"
