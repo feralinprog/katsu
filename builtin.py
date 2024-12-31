@@ -387,9 +387,19 @@ builtin_binary_op(
 builtin_binary_op(
     "==",
     [
-        (Value, Value, (lambda a, b: BoolValue(a.value == b.value))),
+        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value == b.value))),
+        (StringValue, StringValue, (lambda a, b: BoolValue(a.value == b.value))),
+        (BoolValue, BoolValue, (lambda a, b: BoolValue(a.value == b.value))),
+        (NullValue, NullValue, (lambda a, b: BoolValue(True))),
+        (SymbolValue, SymbolValue, (lambda a, b: BoolValue(a.value == b.value))),
+        # TODO: deep equality
+        (TupleValue, TupleValue, (lambda a, b: BoolValue(a == b))),
+        # TODO: deep equality
+        (VectorValue, VectorValue, (lambda a, b: BoolValue(a == b))),
+        (Value, Value, (lambda a, b: BoolValue(a == b))),
     ],
 )
+# TODO: fix this operator
 builtin_binary_op(
     "!=",
     [
