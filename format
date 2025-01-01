@@ -1,0 +1,14 @@
+#!/bin/bash
+
+. venv/bin/activate
+autoflake --in-place *.py
+isort .
+black --line-length=100 .
+
+if git diff --quiet *.py; then
+    # diff!
+    exit 1
+else
+    # no diff
+    exit 0
+fi
