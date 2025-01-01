@@ -176,3 +176,5 @@ p Point?
 p Number?
 p Object?
 p Object? Bool?
+
+t type == Bool
