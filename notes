@@ -97,3 +97,30 @@ evaluation model:
         invoke result with receiver+args along with information about current-context
     ... ok so it's not really message sending
     "context" is pretty much a prototype-based object, but only for message handlers
+
+continuations and error handling:
+* implement call/cc? maybe, not sure if required
+  - maybe just delimited continuations? and implement fibers separately
+  - or maybe just don't do either! that would be easier.
+* error handling:
+  * scheme dynamic-unwind?
+  * would like to support signaling conditions and handling with handlers (and restarts, which can be built in-language)
+    - though this seems like it requires some form of dynamic-unwind (if implementing try/catch via continuation-in-handler)
+      or otherwise a simple upward unwind (if using something like return-from which is guaranteed to only go away from
+      top-of-stack)
+    - maybe best option is to have primitives:
+      * unwind-protect (quote to call, and quote to run no matter what while unwinding stack frames)
+      * call/cc but the continuation is only valid in dynamic scope of the called quote (i.e. can only return to call/cc site)
+      * and finally, hard-code calling signal: method on any exception
+
+TODO:
+* inheritance / type hierarchy
+* multiple dispatch
+* error handling mechanism(s)
+* coroutines / fibers
+* add a bit more smarts to bytecode compiler. should have conditionals and jumps,
+  and should inline any other methods that invoke any of the call* family of methods
+  (or which request to be inlined)
+  - also delete some of the builtins which should be handled as part of compiler (let:=:, if:then:else:, etc.)?
+* literal data structure syntax?
+  * %{ { key; value}; { key; value } ... }
