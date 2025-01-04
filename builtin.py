@@ -448,7 +448,7 @@ builtin_binary_op(
 builtin_binary_op(
     "/",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value / b.value))),
+        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value // b.value))),
     ],
 )
 
