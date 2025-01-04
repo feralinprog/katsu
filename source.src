@@ -178,3 +178,70 @@ p Object?
 p Object? Bool?
 
 t type == Bool
+
+method: [while-with-break: cond do: body] does: [
+    \cc [
+        while: cond do: [body call: cc]
+    ] call/cc
+]
+
+let: 'i =: 0
+while-with-break: [t] do: \break [
+    print: i
+    if: i == 5 then: [break call: "result of break"]
+    'i = i + 1
+]
+
+method: [while-with-break-and-continue: cond do: body] does: [
+    \break-cc [
+        while: cond do: [
+            \cont-cc [
+                body call*: break-cc, cont-cc
+            ] call/cc
+        ]
+    ] call/cc
+]
+
+'i = 0
+while-with-break-and-continue: [t] do: \break continue [
+    'i = i + 1
+    print: i
+    if: i == 3 then: [continue call: "result of continue"]
+    if: i == 5 then: [break call: "result of break"]
+    print: "end of while loop body"
+]
+
+method: [assert: condition] does: [
+    if: not condition call then: [
+        print: "Assertion failed: " ~ condition >string
+        assertion-failed
+    ]
+]
+
+method: [switch: options] does: [
+    assert: [options Vector?]
+    let: 'i =: 0
+    while-with-break: [i < options length] do: \break [
+        let: 'option =: (options at: i)
+        assert: [option length == 2]
+        let: 'condition =: (option at: 0)
+        let: 'response =: (option at: 1)
+        if: condition call then: [break call: response call]
+        'i = i + 1
+    ]
+    if: i == options length then: [
+        switch-fall-through
+    ]
+]
+
+'i = 5
+switch: {
+    #{ [test]; [response]; :blah }
+    { [(i / 2) * 2 == i]; [print: "i is even"] }
+    { [i == 5]; [print: "i is 5"] }
+    { t; [print: "i is odd and not 5"] }
+}
+
+#[ exception! ] call-with-handlers: {
+#    { :undefined-slot; [ print ] }
+#}
