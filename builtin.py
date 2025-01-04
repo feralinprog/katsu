@@ -2,24 +2,39 @@ from parser import NameExpr, NAryMessageExpr, ParenExpr, UnaryMessageExpr
 from typing import Any, Callable, Optional, Tuple, Type
 
 from interpreter import (
+    BoolType,
     BoolValue,
     Context,
-    ContinuationValue,
+    ContinuationType,
+    DataclassTypeType,
     DataclassTypeValue,
     DataclassValue,
     Method,
+    MultiMethod,
     NativeHandler,
+    NullType,
     NullValue,
+    NumberType,
     NumberValue,
+    ParameterAnyMatcher,
+    ParameterTypeMatcher,
+    QuoteType,
     QuoteValue,
+    StringType,
     StringValue,
+    SymbolType,
     SymbolValue,
+    TupleType,
     TupleValue,
+    TypeType,
     TypeValue,
     Value,
+    VectorType,
     VectorValue,
     eval_toplevel,
     intrinsic_handlers,
+    is_subtype,
+    type_of,
 )
 
 global_context = Context(slots={}, base=None)
@@ -36,20 +51,6 @@ def builtin(name: str, handler):
     builtin_value(name, NativeHandler(handler))
 
 
-ObjectType = TypeValue("Object", bases=[])
-NumberType = TypeValue("Number", bases=[ObjectType])
-StringType = TypeValue("String", bases=[ObjectType])
-BoolType = TypeValue("Bool", bases=[ObjectType])
-NullType = TypeValue("Null", bases=[ObjectType])
-SymbolType = TypeValue("Symbol", bases=[ObjectType])
-VectorType = TypeValue("Vector", bases=[ObjectType])
-TupleType = TypeValue("Tuple", bases=[ObjectType])
-QuoteType = TypeValue("Quote", bases=[ObjectType])
-ContinuationType = TypeValue("Continuation", bases=[ObjectType])
-TypeType = TypeValue("Type", bases=[ObjectType])
-DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
-
-builtin_value("Object", ObjectType)
 builtin_value("Number", NumberType)
 builtin_value("String", StringType)
 builtin_value("Bool", BoolType)
@@ -69,11 +70,12 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
     if not isinstance(decl, QuoteValue):
         raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
 
-    def param_name_and_type(expr, error_msg):
+    def param_name_and_matcher(expr, error_msg):
+        # TODO: parse value matchers as well.
         if isinstance(expr, NameExpr):
             name = expr.name.value
-            _type = ObjectType
-            return (name, _type)
+            matcher = ParameterAnyMatcher()
+            return (name, matcher)
         elif (
             isinstance(expr, ParenExpr)
             and isinstance(expr.inner, NAryMessageExpr)
@@ -83,14 +85,15 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
             name = expr.inner.messages[0].value
             # TODO: don't use eval_toplevel.
             _type = eval_toplevel(expr.inner.args[0], ctxt)
-            return (name, _type)
+            matcher = ParameterTypeMatcher(_type)
+            return (name, matcher)
         else:
             raise ValueError(error_msg)
 
     if isinstance(decl.body, NameExpr):
         message = decl.body.name.value
         param_names = ["self"]
-        param_types = [ObjectType]
+        param_matchers = [ParameterAnyMatcher()]
     elif isinstance(decl.body, UnaryMessageExpr):
         format_msg = (
             "When the method:does: 'declaration' argument is a unary message, "
@@ -98,9 +101,9 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
             "or else a unary message of the form [(target-name: type) message-name]"
         )
         message = decl.body.message.value
-        param_name, param_type = param_name_and_type(decl.body.target, format_msg)
+        param_name, param_matcher = param_name_and_matcher(decl.body.target, format_msg)
         param_names = [param_name]
-        param_types = [param_type]
+        param_matchers = [param_matcher]
     elif isinstance(decl.body, NAryMessageExpr):
         format_msg = (
             "When the method:does: 'declaration' argument is an n-ary message, "
@@ -110,20 +113,20 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
         )
         message = "".join(message.value + ":" for message in decl.body.messages)
         param_names = []
-        param_types = []
+        param_matchers = []
 
         if decl.body.target:
-            param_name, param_type = param_name_and_type(decl.body.target, format_msg)
+            param_name, param_matcher = param_name_and_matcher(decl.body.target, format_msg)
             param_names.append(param_name)
-            param_types.append(param_type)
+            param_matchers.append(param_matcher)
         else:
             param_names.append("self")
-            param_types.append(ObjectType)
+            param_matchers.append(ParameterAnyMatcher())
 
         for arg in decl.body.args:
-            param_name, param_type = param_name_and_type(arg, format_msg)
+            param_name, param_matcher = param_name_and_matcher(arg, format_msg)
             param_names.append(param_name)
-            param_types.append(param_type)
+            param_matchers.append(param_matcher)
     else:
         raise ValueError(
             f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
@@ -142,44 +145,25 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
     method = Method(
         context=body.context,
         param_names=param_names,
-        param_types=param_types,
+        param_matchers=param_matchers,
         body_expr=body.body,
         body=None,
     )
+
+    # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
     if message in ctxt.slots:
-        raise ValueError(f"Message '{message}' is already defined.")
-    ctxt.slots[message] = method
+        multimethod = ctxt.slots[message]
+        if not isinstance(multimethod, MultiMethod):
+            raise ValueError(f"Slot '{message}' is already defined and is not a multi-method.")
+    else:
+        multimethod = MultiMethod(name=message, methods=[])
+        ctxt.slots[message] = multimethod
+    multimethod.add_method(method)
+
     return NullValue()
 
 
 builtin("method:does:", handle__method_does_)
-
-
-def type_of(value: Value) -> TypeValue:
-    if isinstance(value, NumberValue):
-        return NumberType
-    elif isinstance(value, StringValue):
-        return StringType
-    elif isinstance(value, BoolValue):
-        return BoolType
-    elif isinstance(value, NullValue):
-        return NullType
-    elif isinstance(value, SymbolValue):
-        return SymbolType
-    elif isinstance(value, TupleValue):
-        return TupleType
-    elif isinstance(value, VectorValue):
-        return VectorType
-    elif isinstance(value, QuoteValue):
-        return QuoteType
-    elif isinstance(value, ContinuationValue):
-        return ContinuationType
-    elif isinstance(value, TypeValue):
-        return TypeType
-    elif isinstance(value, DataclassTypeValue):
-        return DataclassTypeType
-    elif isinstance(value, DataclassValue):
-        return value.type
 
 
 def handle__type(ctxt: Context, receiver: Value) -> Value:
@@ -189,16 +173,6 @@ def handle__type(ctxt: Context, receiver: Value) -> Value:
 builtin("type", handle__type)
 
 
-def is_subtype(a: TypeValue, b: TypeValue) -> bool:
-    # TODO: check for no recursion... either here or whenever creating new types
-    if a == b:
-        return True
-    for base in a.bases:
-        if is_subtype(base, b):
-            return True
-    return False
-
-
 def handle_is_type(_type: TypeValue):
     def handler(ctxt: Context, receiver: Value) -> Value:
         return BoolValue(is_subtype(type_of(receiver), _type))
@@ -206,7 +180,6 @@ def handle_is_type(_type: TypeValue):
     return handler
 
 
-builtin("Object?", handle_is_type(ObjectType))
 builtin("Number?", handle_is_type(NumberType))
 builtin("String?", handle_is_type(StringType))
 builtin("Bool?", handle_is_type(BoolType))
@@ -245,7 +218,9 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
     if class_name in ctxt.slots:
         raise ValueError(f"'{class_name}' is already defined")
     # TODO: allow inheritance
-    _class = DataclassTypeValue(name=class_name, bases=[ObjectType], slots=slots)
+    # make sure to disallow diamond inheritance
+    # and also calculate the C3 linearization while we're here
+    _class = DataclassTypeValue(name=class_name, bases=[], slots=slots)
     ctxt.slots[class_name] = _class
 
     if class_name + "?" in ctxt.slots:

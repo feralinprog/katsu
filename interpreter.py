@@ -15,8 +15,8 @@ from parser import (
 )
 from typing import Callable, Optional, Tuple, Union
 
-from error import RunError
-from lexer import Token, TokenType
+from error import RunError, SignalError
+from lexer import TokenType
 from span import SourceSpan
 
 #################################################
@@ -148,6 +148,61 @@ class DataclassValue(Value):
             )
 
 
+NumberType = TypeValue("Number", bases=[])
+StringType = TypeValue("String", bases=[])
+BoolType = TypeValue("Bool", bases=[])
+NullType = TypeValue("Null", bases=[])
+SymbolType = TypeValue("Symbol", bases=[])
+VectorType = TypeValue("Vector", bases=[])
+TupleType = TypeValue("Tuple", bases=[])
+QuoteType = TypeValue("Quote", bases=[])
+ContinuationType = TypeValue("Continuation", bases=[])
+TypeType = TypeValue("Type", bases=[])
+DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
+
+
+def type_of(value: Value) -> TypeValue:
+    if isinstance(value, NumberValue):
+        return NumberType
+    elif isinstance(value, StringValue):
+        return StringType
+    elif isinstance(value, BoolValue):
+        return BoolType
+    elif isinstance(value, NullValue):
+        return NullType
+    elif isinstance(value, SymbolValue):
+        return SymbolType
+    elif isinstance(value, TupleValue):
+        return TupleType
+    elif isinstance(value, VectorValue):
+        return VectorType
+    elif isinstance(value, QuoteValue):
+        return QuoteType
+    elif isinstance(value, ContinuationValue):
+        return ContinuationType
+    elif isinstance(value, TypeValue):
+        return TypeType
+    elif isinstance(value, DataclassTypeValue):
+        return DataclassTypeType
+    elif isinstance(value, DataclassValue):
+        return value.type
+
+
+def handle__type(ctxt: "Context", receiver: Value) -> Value:
+    return type_of(receiver)
+
+
+def is_subtype(a: TypeValue, b: TypeValue) -> bool:
+    # TODO: check for no recursion... either here or whenever creating new types
+    # also make this waaaay more efficient (use cached linearizations?)
+    if a == b:
+        return True
+    for base in a.bases:
+        if is_subtype(base, b):
+            return True
+    return False
+
+
 #################################################
 # Runtime State Model
 #################################################
@@ -175,7 +230,7 @@ class NativeHandler:
 
 @dataclass
 class Context:
-    slots: dict[str, Union[Value, "Method", IntrinsicHandler, NativeHandler]]
+    slots: dict[str, Union[Value, "MultiMethod", IntrinsicHandler, NativeHandler]]
     base: Optional["Context"]
 
 
@@ -234,14 +289,149 @@ class RuntimeState:
 
 
 @dataclass
+class ParameterMatcher:
+    def matches(self, arg: Value) -> bool:
+        raise NotImplementedError("Subclasses must implement.")
+
+
+@dataclass
+class ParameterAnyMatcher(ParameterMatcher):
+    def matches(self, arg: Value) -> bool:
+        # Matches any value!
+        return True
+
+    def __str__(self):
+        return "<match:any>"
+
+
+@dataclass
+class ParameterTypeMatcher(ParameterMatcher):
+    param_type: TypeValue
+
+    def matches(self, arg: Value) -> bool:
+        return is_subtype(type_of(arg), self.param_type)
+
+    def __str__(self):
+        return f"<match:type<={self.param_type}>"
+
+
+@dataclass
+class ParameterValueMatcher(ParameterMatcher):
+    param_value: Value
+
+    def matches(self, arg: Value) -> bool:
+        # TODO: structural (==) equality instead?
+        return arg is self.param_value
+
+    def __str__(self):
+        return f"<match:value={self.param_value}>"
+
+
+@dataclass
 class Method:
     context: Context
     # This includes the receiver name.
     param_names: list[str]
-    # This also includes the receiver type.
-    param_types: list[TypeValue]
+    # This also includes a matcher for the receiver.
+    param_matchers: list[Optional[ParameterMatcher]]
     body_expr: Expr
     body: BytecodeSequence
+
+
+# a <= b if a is at least as specific as b.
+# (Think of the sets of matched values.)
+def matcher_lte(a: ParameterMatcher, b: ParameterMatcher):
+    # A value matcher is more specific than a type matcher, which is more specific than an 'any' matcher.
+    # Value matchers are unordered.
+    # Type matchers are partially ordered by their parameter types.
+    # 'Any' matchers are all equal.
+    if isinstance(b, ParameterAnyMatcher):
+        return True
+    elif isinstance(b, ParameterTypeMatcher):
+        if isinstance(a, ParameterAnyMatcher):
+            return False
+        elif isinstance(a, ParameterTypeMatcher):
+            return is_subtype(a.param_type, b.param_type)
+        elif isinstance(a, ParameterValueMatcher):
+            return True
+        else:
+            raise AssertionError(f"Forgot matcher type: {a}")
+    elif isinstance(b, ParameterValueMatcher):
+        if isinstance(a, ParameterAnyMatcher):
+            return False
+        elif isinstance(a, ParameterTypeMatcher):
+            return False
+        elif isinstance(a, ParameterValueMatcher):
+            # TODO: structural (==) equality instead?
+            return a.param_value is b.param_value
+        else:
+            raise AssertionError(f"Forgot matcher type: {a}")
+    else:
+        raise AssertionError(f"Forgot matcher type: {b}")
+
+
+# a <= b if a is at least as specific as b.
+# (Think of the sets of matched values-tuples.)
+def method_lte(a: Method, b: Method):
+    assert len(a.param_matchers) == len(b.param_matchers)
+    return all(matcher_lte(ma, mb) for ma, mb in zip(a.param_matchers, b.param_matchers))
+
+
+@dataclass
+class MultiMethod:
+    # Just for debug / error messages.
+    name: str
+    # TODO: support multiple dispatch for builtins too.
+    methods: list[Method]
+
+    def add_method(self, method: Method) -> None:
+        # Make sure the method signature doesn't duplicate a previously added method.
+        for existing in self.methods:
+            if method.param_matchers == existing.param_matchers:
+                # TODO: improve error message
+                raise ValueError(f"Method signature already exists for '{self.name}'.")
+        # TODO: come back to this if deciding to allow ambiguous multimethod resolution;
+        # this would require more constraints on the sort ordering.
+        # Sort so that if method A < method B, then A is before B in the list.
+        # (A <= B if for each parameter index, the parameter matcher in A is at least as
+        # specific as the parameter matcher in B, i.e. matcher-from-A <= matcher-from-B.
+        # Then we define A < B if A <= B and A != B.)
+        found_spot = False
+        for i in range(len(self.methods)):
+            if method_lte(method, self.methods[i]):
+                found_spot = True
+                break
+        if found_spot:
+            self.methods.insert(i, method)
+        else:
+            self.methods.append(method)
+
+    def select_method(self, args: list[Value]) -> Optional[Method]:
+        options = []
+        for method in self.methods:
+            assert len(args) == len(method.param_matchers)
+            if all(matcher.matches(arg) for arg, matcher in zip(args, method.param_matchers)):
+                options.append(method)
+        if len(options) == 1:
+            return options[0]
+        elif len(options) == 0:
+            raise SignalError(
+                condition_name="no-matching-method",
+                message=f"No matching method found for multi-method {self.name} "
+                f"with values: {', '.join(str(arg) for arg in args)}.",
+            )
+        else:
+            # Determine if there is a single most-specific option. Otherwise the resolution
+            # is ambiguous.
+            # Note that self.methods is pre-sorted to allow these comparisons.
+            candidate = min(options, key=self.methods.index)
+            if all(method_lte(candidate, option) for option in options):
+                return candidate
+            raise SignalError(
+                condition_name="ambiguous-method-resolution",
+                message=f"There were multiple matching methods found for multi-method {self.name} "
+                f"with values: {', '.join(str(arg) for arg in args)}.",
+            )
 
 
 #################################################
@@ -411,21 +601,30 @@ def eval_one_op(state: RuntimeState) -> None:
             frame.spot += 1
         else:
             stack_len = len(state.data_stack)
-            receiver = state.data_stack[stack_len - nargs]
-            args = state.data_stack[stack_len - (nargs - 1) :]
+            # Note: args includes the receiver.
+            args = state.data_stack[stack_len - nargs :]
             state.data_stack = state.data_stack[:-nargs]
-            if isinstance(handler, Method):
-                method = handler
+            if isinstance(handler, MultiMethod):
+                multimethod = handler
+
+                try:
+                    method = multimethod.select_method(args)
+                except SignalError as e:
+                    signal_error(
+                        condition_name=e.condition_name,
+                        error_message=str(e),
+                        state=state,
+                    )
 
                 if not method.body:
                     # TODO: do this earlier, within method:does:.
                     method.body = compile(method.body_expr)
 
                 body_ctxt = Context(slots={}, base=method.context)
-                assert 1 + len(args) == len(
+                assert len(args) == len(
                     method.param_names
-                ), f"1 + {len(args)} != len({method.param_names})"
-                for param_name, arg in zip(method.param_names, [receiver or NullValue()] + args):
+                ), f"{len(args)} != len({method.param_names})"
+                for param_name, arg in zip(method.param_names, args):
                     body_ctxt.slots[param_name] = arg
 
                 # TODO: use reified context as default receiver?
@@ -434,7 +633,7 @@ def eval_one_op(state: RuntimeState) -> None:
                 try:
                     # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
                     # responsibility for updating the frame as necessary.
-                    handler.handler(state, receiver, *args)
+                    handler.handler(state, *args)
                 except Exception as e:
                     # TODO: allow handlers to raise more targeted exceptions that already include a condition name
                     signal_error(
@@ -448,7 +647,7 @@ def eval_one_op(state: RuntimeState) -> None:
                 # It should not call evaluation functions. (It can, but the stack is not reified and
                 # uses host language stack instead).
                 try:
-                    result = handler.handler(frame.context, receiver, *args)
+                    result = handler.handler(frame.context, *args)
                 except Exception as e:
                     # TODO: allow handlers to raise more targeted exceptions that already include a condition name
                     signal_error(
