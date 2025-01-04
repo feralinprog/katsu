@@ -175,9 +175,7 @@ class NativeHandler:
 
 @dataclass
 class Context:
-    # Each slot value is either a Value, or a python callable of the form
-    #   (self, ctxt: Context, receiver: Value, *args: list[Value]) -> Value
-    slots: dict[str, Union[Value, Callable[["Context", Value, list[Value]], Value]]]
+    slots: dict[str, Union[Value, "MultiMethod", IntrinsicHandler, NativeHandler]]
     base: Optional["Context"]
 
 
@@ -443,12 +441,12 @@ def eval_one_op(state: RuntimeState) -> None:
                         state=state,
                     )
                     return
-            else:
+            elif isinstance(handler, NativeHandler):
                 # handler is something which can be called with a context, receiver, and arguments.
                 # It should not call evaluation functions. (It can, but the stack is not reified and
                 # uses host language stack instead).
                 try:
-                    result = handler(frame.context, receiver, *args)
+                    result = handler.handler(frame.context, receiver, *args)
                 except Exception as e:
                     # TODO: allow handlers to raise more targeted exceptions that already include a condition name
                     signal_error(
@@ -462,6 +460,8 @@ def eval_one_op(state: RuntimeState) -> None:
                 ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
                 state.data_stack.append(result)
                 frame.spot += 1
+            else:
+                raise AssertionError(f"Unexpected slot value '{handler}'")
     elif op == "components>vector":
         (length,) = bytecode.args
         assert isinstance(length, int)

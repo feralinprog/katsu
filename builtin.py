@@ -8,6 +8,7 @@ from interpreter import (
     DataclassTypeValue,
     DataclassValue,
     Method,
+    NativeHandler,
     NullValue,
     NumberValue,
     QuoteValue,
@@ -25,9 +26,13 @@ for slot, handler in intrinsic_handlers.items():
     global_context.slots[slot] = handler
 
 
-def builtin(name: str, handler):
+def builtin_value(name: str, value):
     assert name not in global_context.slots, f"{name} already is defined as a builtin."
-    global_context.slots[name] = handler
+    global_context.slots[name] = value
+
+
+def builtin(name: str, handler):
+    builtin_value(name, NativeHandler(handler))
 
 
 ObjectType = TypeValue("Object", bases=[])
@@ -43,18 +48,18 @@ ContinuationType = TypeValue("Continuation", bases=[ObjectType])
 TypeType = TypeValue("Type", bases=[ObjectType])
 DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
 
-builtin("Object", ObjectType)
-builtin("Number", NumberType)
-builtin("String", StringType)
-builtin("Bool", BoolType)
-builtin("Null", NullType)
-builtin("Symbol", SymbolType)
-builtin("Vector", VectorType)
-builtin("Tuple", TupleType)
-builtin("Quote", QuoteType)
-builtin("Continuation", ContinuationType)
-builtin("Type", TypeType)
-builtin("DataclassType", DataclassTypeType)
+builtin_value("Object", ObjectType)
+builtin_value("Number", NumberType)
+builtin_value("String", StringType)
+builtin_value("Bool", BoolType)
+builtin_value("Null", NullType)
+builtin_value("Symbol", SymbolType)
+builtin_value("Vector", VectorType)
+builtin_value("Tuple", TupleType)
+builtin_value("Quote", QuoteType)
+builtin_value("Continuation", ContinuationType)
+builtin_value("Type", TypeType)
+builtin_value("DataclassType", DataclassTypeType)
 
 
 def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Value) -> Value:
@@ -218,7 +223,7 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
 
     if class_name + "?" in ctxt.slots:
         raise ValueError(f"'{class_name}?' is already defined")
-    ctxt.slots[class_name + "?"] = handle_is_type(_class)
+    ctxt.slots[class_name + "?"] = NativeHandler(handle_is_type(_class))
 
     # TODO: This is all very hacky. Should just use multimethod dispatch instead of hardcoding.
     ctor_message = "".join(slot + ":" for slot in slots) if slots else "new"
@@ -236,7 +241,7 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
     return NullValue()
 
 
-def handle_generic_dataclass_constructor(message: str):
+def handle_generic_dataclass_constructor(message: str) -> NativeHandler:
     def handler(ctxt: Context, receiver: Value, *values: list[Value]) -> Value:
         values = list(values)  # was a tuple
         if not isinstance(receiver, DataclassTypeValue):
@@ -244,10 +249,10 @@ def handle_generic_dataclass_constructor(message: str):
         assert len(values) == len(receiver.slots)
         return DataclassValue(type=receiver, values=values)
 
-    return handler
+    return NativeHandler(handler)
 
 
-def handle_generic_dataclass_get(message: str, slot: str):
+def handle_generic_dataclass_get(message: str, slot: str) -> NativeHandler:
     def handler(ctxt: Context, receiver: Value) -> Value:
         if not isinstance(receiver, DataclassValue):
             raise ValueError(f"{message} expects a dataclass value as receiver")
@@ -256,10 +261,10 @@ def handle_generic_dataclass_get(message: str, slot: str):
         else:
             raise ValueError(f"dataclass '{receiver.type.name}' has no slot '{slot}'")
 
-    return handler
+    return NativeHandler(handler)
 
 
-def handle_generic_dataclass_set(message: str, slot: str):
+def handle_generic_dataclass_set(message: str, slot: str) -> NativeHandler:
     def handler(ctxt: Context, receiver: Value, value: Value) -> Value:
         if not isinstance(receiver, DataclassValue):
             raise ValueError(f"{message} expects a dataclass value as receiver")
@@ -269,7 +274,7 @@ def handle_generic_dataclass_set(message: str, slot: str):
         else:
             raise ValueError(f"dataclass '{receiver.type.name}' has no slot '{slot}'")
 
-    return handler
+    return NativeHandler(handler)
 
 
 builtin("data:has:", handle__data_has_)
@@ -488,9 +493,9 @@ def handle__print_(ctxt: Context, receiver: Value, value: Value) -> Value:
 
 builtin("print:", handle__print_)
 
-builtin("t", BoolValue(True))
-builtin("f", BoolValue(False))
-builtin("null", NullValue())
+builtin_value("t", BoolValue(True))
+builtin_value("f", BoolValue(False))
+builtin_value("null", NullValue())
 
 
 def handle__to_string(ctxt: Context, receiver: Value) -> Value:
