@@ -1,4 +1,4 @@
-from parser import NameExpr, NAryMessageExpr, UnaryMessageExpr
+from parser import NameExpr, NAryMessageExpr, ParenExpr, UnaryMessageExpr
 from typing import Any, Callable, Optional, Tuple, Type
 
 from interpreter import (
@@ -18,6 +18,7 @@ from interpreter import (
     TypeValue,
     Value,
     VectorValue,
+    eval_toplevel,
     intrinsic_handlers,
 )
 
@@ -68,36 +69,61 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
     if not isinstance(decl, QuoteValue):
         raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
 
+    def param_name_and_type(expr, error_msg):
+        if isinstance(expr, NameExpr):
+            name = expr.name.value
+            _type = ObjectType
+            return (name, _type)
+        elif (
+            isinstance(expr, ParenExpr)
+            and isinstance(expr.inner, NAryMessageExpr)
+            and expr.inner.target is None
+            and len(expr.inner.messages) == 1
+        ):
+            name = expr.inner.messages[0].value
+            # TODO: don't use eval_toplevel.
+            _type = eval_toplevel(expr.inner.args[0], ctxt)
+            return (name, _type)
+        else:
+            raise ValueError(error_msg)
+
     if isinstance(decl.body, NameExpr):
         message = decl.body.name.value
         param_names = ["self"]
+        param_types = [ObjectType]
     elif isinstance(decl.body, UnaryMessageExpr):
-        if isinstance(decl.body.target, NameExpr):
-            message = decl.body.message.value
-            param_names = [decl.body.target.name.value]
-        else:
-            raise ValueError(
-                "When the method:does: 'declaration' argument is a unary message, "
-                "it must be a simple unary message of the form [target-name message-name]"
-            )
+        format_msg = (
+            "When the method:does: 'declaration' argument is a unary message, "
+            "it must be a simple unary message of the form [target-name message-name] "
+            "or else a unary message of the form [(target-name: type) message-name]"
+        )
+        message = decl.body.message.value
+        param_name, param_type = param_name_and_type(decl.body.target, format_msg)
+        param_names = [param_name]
+        param_types = [param_type]
     elif isinstance(decl.body, NAryMessageExpr):
-        if decl.body.target:
-            if not isinstance(decl.body.target, NameExpr):
-                raise ValueError(
-                    "When the method:does: 'declaration' argument is an n-ary message, "
-                    "it must be a simple n-ary message of the form [target-name message: param-name ...] "
-                    "(the target-name is optional)"
-                )
-        for arg in decl.body.args:
-            if not isinstance(arg, NameExpr):
-                raise ValueError(
-                    "When the method:does: 'declaration' argument is an n-ary message, "
-                    "it must be a simple n-ary message of the form [target-name message: param-name ...] "
-                    "(the target-name is optional)"
-                )
+        format_msg = (
+            "When the method:does: 'declaration' argument is an n-ary message, "
+            "it must be a simple n-ary message of the form [target-name message: param-name ...] "
+            "or else an n-ary message of the form [(target-name: type) message: (param-name: type) ...] "
+            "(the target-name is optional, as is each parameter type declaration)"
+        )
         message = "".join(message.value + ":" for message in decl.body.messages)
-        param_names = [decl.body.target.name.value if decl.body.target else "self"]
-        param_names += [arg.name.value for arg in decl.body.args]
+        param_names = []
+        param_types = []
+
+        if decl.body.target:
+            param_name, param_type = param_name_and_type(decl.body.target, format_msg)
+            param_names.append(param_name)
+            param_types.append(param_type)
+        else:
+            param_names.append("self")
+            param_types.append(ObjectType)
+
+        for arg in decl.body.args:
+            param_name, param_type = param_name_and_type(arg, format_msg)
+            param_names.append(param_name)
+            param_types.append(param_type)
     else:
         raise ValueError(
             f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
@@ -116,6 +142,7 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
     method = Method(
         context=body.context,
         param_names=param_names,
+        param_types=param_types,
         body_expr=body.body,
         body=None,
     )

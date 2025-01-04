@@ -175,7 +175,7 @@ class NativeHandler:
 
 @dataclass
 class Context:
-    slots: dict[str, Union[Value, "MultiMethod", IntrinsicHandler, NativeHandler]]
+    slots: dict[str, Union[Value, "Method", IntrinsicHandler, NativeHandler]]
     base: Optional["Context"]
 
 
@@ -238,6 +238,8 @@ class Method:
     context: Context
     # This includes the receiver name.
     param_names: list[str]
+    # This also includes the receiver type.
+    param_types: list[TypeValue]
     body_expr: Expr
     body: BytecodeSequence
 
