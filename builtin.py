@@ -98,7 +98,7 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
         format_msg = (
             "When the method:does: 'declaration' argument is a unary message, "
             "it must be a simple unary message of the form [target-name message-name] "
-            "or else a unary message of the form [(target-name: type) message-name]"
+            "or else a unary message of the form [(target-name: matcher) message-name]"
         )
         message = decl.body.message.value
         param_name, param_matcher = param_name_and_matcher(decl.body.target, format_msg)
@@ -108,8 +108,8 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
         format_msg = (
             "When the method:does: 'declaration' argument is an n-ary message, "
             "it must be a simple n-ary message of the form [target-name message: param-name ...] "
-            "or else an n-ary message of the form [(target-name: type) message: (param-name: type) ...] "
-            "(the target-name is optional, as is each parameter type declaration)"
+            "or else an n-ary message of the form [(target-name: matcher) message: (param-name: matcher) ...] "
+            "(the target-name is optional, as is each parameter matcher declaration)"
         )
         message = "".join(message.value + ":" for message in decl.body.messages)
         param_names = []
