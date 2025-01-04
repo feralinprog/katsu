@@ -59,64 +59,65 @@ builtin("DataclassType", DataclassTypeType)
 
 def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Value) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
-    if isinstance(decl, QuoteValue):
-        if isinstance(decl.body, NameExpr):
-            message = decl.body.name.value
-            receiver_name = "self"
-            param_names = []
-        elif isinstance(decl.body, UnaryMessageExpr):
-            if isinstance(decl.body.target, NameExpr):
-                message = decl.body.message.value
-                receiver_name = decl.body.target.name.value
-                param_names = []
-            else:
-                raise ValueError(
-                    "When the method:does: 'declaration' argument is a unary message, it must be a simple unary message of the form {target-name message-name}"
-                )
-        elif isinstance(decl.body, NAryMessageExpr):
-            if decl.body.target:
-                if not isinstance(decl.body.target, NameExpr):
-                    raise ValueError(
-                        "When the method:does: 'declaration' argument is an n-ary message, it must be a simple n-ary message of the form {[target-name] message: param-name ...}"
-                    )
-            for arg in decl.body.args:
-                if not isinstance(arg, NameExpr):
-                    raise ValueError(
-                        "When the method:does: 'declaration' argument is an n-ary message, it must be a simple n-ary message of the form {[target-name] message: param-name ...}"
-                    )
-            message = "".join(message.value + ":" for message in decl.body.messages)
-            receiver_name = decl.body.target.name.value if decl.body.target else "self"
-            param_names = [arg.name.value for arg in decl.body.args]
+    # TODO: support return type declaration? (how can we enforce that...?)
+    if not isinstance(decl, QuoteValue):
+        raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
+
+    if isinstance(decl.body, NameExpr):
+        message = decl.body.name.value
+        param_names = ["self"]
+    elif isinstance(decl.body, UnaryMessageExpr):
+        if isinstance(decl.body.target, NameExpr):
+            message = decl.body.message.value
+            param_names = [decl.body.target.name.value]
         else:
             raise ValueError(
-                f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
+                "When the method:does: 'declaration' argument is a unary message, "
+                "it must be a simple unary message of the form [target-name message-name]"
             )
-
-        if decl.parameters:
-            raise ValueError(
-                "method:does: 'declaration' argument should not specify any parameters"
-            )
-
-        # Fill in the body and context, then define the method.
-        if not isinstance(body, QuoteValue):
-            raise ValueError("method:does: 'body' argument should be a quote")
-        if body.parameters:
-            raise ValueError("method:does: 'body' argument should not specify any parameters")
-
-        # TODO: compile here instead of on-demand in the 'invoke' bytecode evaluator.
-        method = Method(
-            context=body.context,
-            receiver_name=receiver_name,
-            param_names=param_names,
-            body_expr=body.body,
-            body=None,
-        )
-        if message in ctxt.slots:
-            raise ValueError(f"Message '{message}' is already defined.")
-        ctxt.slots[message] = method
-        return NullValue()
+    elif isinstance(decl.body, NAryMessageExpr):
+        if decl.body.target:
+            if not isinstance(decl.body.target, NameExpr):
+                raise ValueError(
+                    "When the method:does: 'declaration' argument is an n-ary message, "
+                    "it must be a simple n-ary message of the form [target-name message: param-name ...] "
+                    "(the target-name is optional)"
+                )
+        for arg in decl.body.args:
+            if not isinstance(arg, NameExpr):
+                raise ValueError(
+                    "When the method:does: 'declaration' argument is an n-ary message, "
+                    "it must be a simple n-ary message of the form [target-name message: param-name ...] "
+                    "(the target-name is optional)"
+                )
+        message = "".join(message.value + ":" for message in decl.body.messages)
+        param_names = [decl.body.target.name.value if decl.body.target else "self"]
+        param_names += [arg.name.value for arg in decl.body.args]
     else:
-        raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
+        raise ValueError(
+            f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
+        )
+
+    if decl.parameters:
+        raise ValueError("method:does: 'declaration' argument should not specify any parameters")
+
+    # Fill in the body and context, then define the method.
+    if not isinstance(body, QuoteValue):
+        raise ValueError("method:does: 'body' argument should be a quote")
+    if body.parameters:
+        raise ValueError("method:does: 'body' argument should not specify any parameters")
+
+    # TODO: compile here instead of on-demand in the 'invoke' bytecode evaluator.
+    method = Method(
+        context=body.context,
+        param_names=param_names,
+        body_expr=body.body,
+        body=None,
+    )
+    if message in ctxt.slots:
+        raise ValueError(f"Message '{message}' is already defined.")
+    ctxt.slots[message] = method
+    return NullValue()
 
 
 builtin("method:does:", handle__method_does_)

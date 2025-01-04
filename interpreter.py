@@ -199,7 +199,7 @@ class BytecodeOp:
 # push-block <Block>
 # push-current-context
 # context+block>quote
-# invoke <message: str> <nargs: int>      (nargs does not include receiver)
+# invoke <message: str> <nargs: int>      (nargs includes the receiver)
 # components>vector <length: int>
 # components>tuple <length: int>
 # drop
@@ -238,7 +238,7 @@ class RuntimeState:
 @dataclass
 class Method:
     context: Context
-    receiver_name: str
+    # This includes the receiver name.
     param_names: list[str]
     body_expr: Expr
     body: BytecodeSequence
@@ -257,15 +257,15 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
 
     if isinstance(expr, UnaryOpExpr):
         compile_into(expr.arg, sequence)
-        add("invoke", expr.op.value, 0, span=expr.span)
+        add("invoke", expr.op.value, 1, span=expr.span)
     elif isinstance(expr, BinaryOpExpr):
         add("push-default-receiver", span=expr.op.span)
         compile_into(expr.left, sequence)
         compile_into(expr.right, sequence)
-        add("invoke", expr.op.value + ":_:", 2, span=expr.span)
+        add("invoke", expr.op.value + ":_:", 3, span=expr.span)
     elif isinstance(expr, NameExpr):
         add("push-default-receiver", span=expr.name.span)
-        add("invoke", expr.name.value, 0, span=expr.span)
+        add("invoke", expr.name.value, 1, span=expr.span)
     elif isinstance(expr, LiteralExpr):
         literal = expr.literal
         if literal._type == TokenType.SYMBOL:
@@ -278,7 +278,7 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
             raise AssertionError(f"Forgot a literal token type! {literal._type} ({literal})")
     elif isinstance(expr, UnaryMessageExpr):
         compile_into(expr.target, sequence)
-        add("invoke", expr.message.value, 0, span=expr.span)
+        add("invoke", expr.message.value, 1, span=expr.span)
     elif isinstance(expr, NAryMessageExpr):
         if expr.target is None:
             # TODO: use smaller span?
@@ -289,7 +289,7 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
             compile_into(arg, sequence)
         assert len(expr.messages) == len(expr.args)
         message = "".join(message.value + ":" for message in expr.messages)
-        add("invoke", message, len(expr.args), span=expr.span)
+        add("invoke", message, 1 + len(expr.args), span=expr.span)
     elif isinstance(expr, ParenExpr):
         compile_into(expr.inner, sequence)
     elif isinstance(expr, QuoteExpr):
@@ -328,137 +328,167 @@ def compile(expr: Expr) -> BytecodeSequence:
 
 
 def eval_one_op(state: RuntimeState) -> None:
-    try:
-        assert state
-        assert state.call_stack
-        frame = state.call_stack[-1]
-        assert 0 <= frame.spot <= len(frame.sequence.code)
+    assert state
+    assert state.call_stack
+    frame = state.call_stack[-1]
+    assert 0 <= frame.spot <= len(frame.sequence.code)
 
-        if frame.spot == len(frame.sequence.code):
-            # Return from invocation.
-            state.call_stack.pop()
+    if frame.spot == len(frame.sequence.code):
+        # Return from invocation.
+        unwind_frame(state)
+        return
+
+    bytecode = frame.sequence.code[frame.spot]
+    op = bytecode.op
+
+    if op == "push-default-receiver":
+        assert not bytecode.args
+        state.data_stack.append(frame.default_receiver)
+        frame.spot += 1
+    elif op == "push-number":
+        (v,) = bytecode.args
+        assert isinstance(v, int)
+        state.data_stack.append(NumberValue(v))
+        frame.spot += 1
+    elif op == "push-string":
+        (v,) = bytecode.args
+        assert isinstance(v, str)
+        state.data_stack.append(StringValue(v))
+        frame.spot += 1
+    elif op == "push-symbol":
+        (v,) = bytecode.args
+        assert isinstance(v, str)
+        state.data_stack.append(SymbolValue(v))
+        frame.spot += 1
+    elif op == "push-block":
+        (v,) = bytecode.args
+        assert isinstance(v, Block)
+        state.data_stack.append(v)
+        frame.spot += 1
+    elif op == "push-current-context":
+        assert not bytecode.args
+        state.data_stack.append(frame.context)
+        frame.spot += 1
+    elif op == "context+block>quote":
+        assert not bytecode.args
+        block = state.data_stack.pop()
+        assert isinstance(block, Block)
+        ctxt = state.data_stack.pop()
+        assert isinstance(ctxt, Context)
+        state.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
+        frame.spot += 1
+    elif op == "invoke":
+        message, nargs = bytecode.args
+        assert isinstance(message, str)
+        assert isinstance(nargs, int)
+        assert nargs > 0
+        assert len(state.data_stack) >= nargs
+
+        def signal_error(condition_name: str, error_message: str, state: RuntimeState):
+            raise RunError(
+                f"Evaluation error ({condition_name}): {error_message}", runtime_state=state
+            )
+
+        # Find the handler:
+        ctxt = frame.context
+        handler = None
+        while ctxt is not None:
+            if message in ctxt.slots:
+                handler = ctxt.slots[message]
+                break
+            ctxt = ctxt.base
+        if not handler:
+            signal_error(
+                condition_name="undefined-slot",
+                error_message=f"Could not invoke '{message}'; slot is not defined.",
+                state=state,
+            )
             return
 
-        bytecode = frame.sequence.code[frame.spot]
-        op = bytecode.op
+        if isinstance(handler, Value):
+            state.data_stack = state.data_stack[:-nargs]
+            state.data_stack.append(handler)
+            frame.spot += 1
+        else:
+            stack_len = len(state.data_stack)
+            receiver = state.data_stack[stack_len - nargs]
+            args = state.data_stack[stack_len - (nargs - 1) :]
+            state.data_stack = state.data_stack[:-nargs]
+            if isinstance(handler, Method):
+                method = handler
 
-        if op == "push-default-receiver":
-            assert not bytecode.args
-            state.data_stack.append(frame.default_receiver)
-            frame.spot += 1
-        elif op == "push-number":
-            (v,) = bytecode.args
-            assert isinstance(v, int)
-            state.data_stack.append(NumberValue(v))
-            frame.spot += 1
-        elif op == "push-string":
-            (v,) = bytecode.args
-            assert isinstance(v, str)
-            state.data_stack.append(StringValue(v))
-            frame.spot += 1
-        elif op == "push-symbol":
-            (v,) = bytecode.args
-            assert isinstance(v, str)
-            state.data_stack.append(SymbolValue(v))
-            frame.spot += 1
-        elif op == "push-block":
-            (v,) = bytecode.args
-            assert isinstance(v, Block)
-            state.data_stack.append(v)
-            frame.spot += 1
-        elif op == "push-current-context":
-            assert not bytecode.args
-            state.data_stack.append(frame.context)
-            frame.spot += 1
-        elif op == "context+block>quote":
-            assert not bytecode.args
-            block = state.data_stack.pop()
-            assert isinstance(block, Block)
-            ctxt = state.data_stack.pop()
-            assert isinstance(ctxt, Context)
-            state.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
-            frame.spot += 1
-        elif op == "invoke":
-            message, nargs = bytecode.args
-            assert isinstance(message, str)
-            assert isinstance(nargs, int)
-            assert len(state.data_stack) >= nargs + 1
+                if not method.body:
+                    # TODO: do this earlier, within method:does:.
+                    method.body = compile(method.body_expr)
 
-            # Find the handler:
-            ctxt = frame.context
-            handler = None
-            while ctxt is not None:
-                if message in ctxt.slots:
-                    handler = ctxt.slots[message]
-                    break
-                ctxt = ctxt.base
-            if not handler:
-                raise RunError(f"Could not invoke message; no slot defined for '{message}'.", state)
+                body_ctxt = Context(slots={}, base=method.context)
+                assert 1 + len(args) == len(
+                    method.param_names
+                ), f"1 + {len(args)} != len({method.param_names})"
+                for param_name, arg in zip(method.param_names, [receiver or NullValue()] + args):
+                    body_ctxt.slots[param_name] = arg
 
-            if isinstance(handler, Value):
-                state.data_stack = state.data_stack[: -(nargs + 1)]
-                state.data_stack.append(handler)
-                frame.spot += 1
-            else:
-                stack_len = len(state.data_stack)
-                receiver = state.data_stack[stack_len - 1 - nargs]
-                args = state.data_stack[stack_len - nargs :]
-                state.data_stack = state.data_stack[: -(nargs + 1)]
-                if isinstance(handler, Method):
-                    method = handler
-
-                    if not method.body:
-                        # TODO: do this earlier, within method:does:.
-                        method.body = compile(method.body_expr)
-
-                    body_ctxt = Context(slots={}, base=method.context)
-                    body_ctxt.slots[method.receiver_name] = receiver or NullValue()
-                    assert len(args) == len(
-                        method.param_names
-                    ), f"{len(args)} != len({method.param_names})"
-                    for param_name, arg in zip(method.param_names, args):
-                        body_ctxt.slots[param_name] = arg
-
-                    # TODO: use reified context as default receiver?
-                    invoke_compiled(state, method.body, body_ctxt, default_receiver=NullValue())
-                elif isinstance(handler, IntrinsicHandler):
+                # TODO: use reified context as default receiver?
+                invoke_compiled(state, method.body, body_ctxt, default_receiver=NullValue())
+            elif isinstance(handler, IntrinsicHandler):
+                try:
                     # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
                     # responsibility for updating the frame as necessary.
                     handler.handler(state, receiver, *args)
-                else:
-                    # handler is something which can be called with a context, receiver, and arguments.
-                    # It should not call evaluation functions. (It can, but the stack is not reified and
-                    # uses host language stack instead).
+                except Exception as e:
+                    # TODO: allow handlers to raise more targeted exceptions that already include a condition name
+                    signal_error(
+                        condition_name="internal-error",
+                        error_message=f"error from intrinsic handler: {e}",
+                        state=state,
+                    )
+                    return
+            else:
+                # handler is something which can be called with a context, receiver, and arguments.
+                # It should not call evaluation functions. (It can, but the stack is not reified and
+                # uses host language stack instead).
+                try:
                     result = handler(frame.context, receiver, *args)
-                    assert isinstance(
-                        result, Value
-                    ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
-                    state.data_stack.append(result)
-                    frame.spot += 1
-        elif op == "components>vector":
-            (length,) = bytecode.args
-            assert isinstance(length, int)
-            assert 0 <= length <= len(state.data_stack)
-            components = state.data_stack[len(state.data_stack) - length :]
-            state.data_stack = state.data_stack[: len(state.data_stack) - length]
-            state.data_stack.append(VectorValue(components))
-            frame.spot += 1
-        elif op == "components>tuple":
-            (length,) = bytecode.args
-            assert isinstance(length, int)
-            assert 0 <= length <= len(state.data_stack)
-            components = state.data_stack[len(state.data_stack) - length :]
-            state.data_stack = state.data_stack[: len(state.data_stack) - length]
-            state.data_stack.append(TupleValue(components))
-            frame.spot += 1
-        elif op == "drop":
-            assert not bytecode.args
-            state.data_stack.pop()
-            frame.spot += 1
-        else:
-            raise AssertionError(f"Forgot a bytecode op! {op}")
-    except Exception as e:
-        raise RunError("Error!", state) from e
+                except Exception as e:
+                    # TODO: allow handlers to raise more targeted exceptions that already include a condition name
+                    signal_error(
+                        condition_name="internal-error",
+                        error_message=f"error from builtin handler: {e}",
+                        state=state,
+                    )
+                    return
+                assert isinstance(
+                    result, Value
+                ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
+                state.data_stack.append(result)
+                frame.spot += 1
+    elif op == "components>vector":
+        (length,) = bytecode.args
+        assert isinstance(length, int)
+        assert 0 <= length <= len(state.data_stack)
+        components = state.data_stack[len(state.data_stack) - length :]
+        state.data_stack = state.data_stack[: len(state.data_stack) - length]
+        state.data_stack.append(VectorValue(components))
+        frame.spot += 1
+    elif op == "components>tuple":
+        (length,) = bytecode.args
+        assert isinstance(length, int)
+        assert 0 <= length <= len(state.data_stack)
+        components = state.data_stack[len(state.data_stack) - length :]
+        state.data_stack = state.data_stack[: len(state.data_stack) - length]
+        state.data_stack.append(TupleValue(components))
+        frame.spot += 1
+    elif op == "drop":
+        assert not bytecode.args
+        state.data_stack.pop()
+        frame.spot += 1
+    else:
+        raise AssertionError(f"Forgot a bytecode op! {op}")
+
+
+def unwind_frame(state: RuntimeState) -> None:
+    assert state.call_stack
+    frame = state.call_stack.pop()
 
 
 def invoke_compiled(
@@ -468,7 +498,7 @@ def invoke_compiled(
     frame = state.call_stack[-1]
     # Tail-call optimization!
     if frame.spot == len(frame.sequence.code) - 1:
-        state.call_stack.pop()
+        unwind_frame(state)
     else:
         frame.spot += 1
     state.call_stack.append(
