@@ -1,5 +1,5 @@
 from parser import NameExpr, NAryMessageExpr, ParenExpr, UnaryMessageExpr
-from typing import Any, Callable, Optional, Tuple, Type
+from typing import Callable, Tuple, Union
 
 from interpreter import (
     BoolType,
@@ -9,15 +9,20 @@ from interpreter import (
     DataclassTypeType,
     DataclassTypeValue,
     DataclassValue,
+    IntrinsicMethodBody,
     Method,
+    MethodBody,
     MultiMethod,
     NativeHandler,
+    NativeMethodBody,
     NullType,
     NullValue,
     NumberType,
     NumberValue,
     ParameterAnyMatcher,
+    ParameterMatcher,
     ParameterTypeMatcher,
+    QuoteMethodBody,
     QuoteType,
     QuoteValue,
     StringType,
@@ -37,18 +42,62 @@ from interpreter import (
     type_of,
 )
 
+# def add_method_to_slot(slot: Value, param_matchers: list[ParameterMatcher], body: MethodBody) -> None:
+#    if not isinstance(slot, MultiMethod):
+#        raise ValueError(f"Could not add method: slot value {slot} is not a multimethod.")
+#    multimethod = slot
+#
+#    method = Method(param_matchers=param_matchers, body=body)
+#    multimethod.add_method(method)
+
+
+def create_or_add_method(ctxt: Context, slot: str, method: Method):
+    if slot in ctxt.slots:
+        multimethod = ctxt.slots[slot]
+        if not isinstance(multimethod, MultiMethod):
+            raise ValueError(f"Slot '{slot}' is already defined and is not a multi-method.")
+    else:
+        multimethod = MultiMethod(name=slot, methods=[])
+        ctxt.slots[slot] = multimethod
+    multimethod.add_method(method)
+
+
 global_context = Context(slots={}, base=None)
-for slot, handler in intrinsic_handlers.items():
-    global_context.slots[slot] = handler
+for slot, (param_matchers, handler) in intrinsic_handlers.items():
+    create_or_add_method(
+        global_context,
+        slot,
+        Method(param_matchers=param_matchers, body=IntrinsicMethodBody(handler)),
+    )
 
 
-def builtin_value(name: str, value):
+def builtin_value(name: str, value: Value) -> None:
     assert name not in global_context.slots, f"{name} already is defined as a builtin."
     global_context.slots[name] = value
 
 
-def builtin(name: str, handler):
-    builtin_value(name, NativeHandler(handler))
+# Add a method to a multimethod.
+# For convenience in specifying parameter matchers:
+# * None -> an 'any' matcher
+# * TypeValue -> a type matcher
+# * otherwise, must be a full ParameterMatcher
+def builtin_method(
+    name: str, param_matchers: list[Union[ParameterMatcher, TypeValue, None]], handler
+) -> None:
+    matchers = []
+    for matcher in param_matchers:
+        if matcher is None:
+            matchers.append(ParameterAnyMatcher())
+        elif isinstance(matcher, TypeValue):
+            matchers.append(ParameterTypeMatcher(matcher))
+        elif isinstance(matcher, ParameterMatcher):
+            matchers.append(matcher)
+        else:
+            raise AssertionError(f"Unexpected param matcher '{matcher}'.")
+
+    create_or_add_method(
+        global_context, name, Method(matchers, body=NativeMethodBody(NativeHandler(handler)))
+    )
 
 
 builtin_value("Number", NumberType)
@@ -143,34 +192,29 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
 
     # TODO: compile here instead of on-demand in the 'invoke' bytecode evaluator.
     method = Method(
-        context=body.context,
-        param_names=param_names,
         param_matchers=param_matchers,
-        body_expr=body.body,
-        body=None,
+        body=QuoteMethodBody(
+            context=body.context,
+            param_names=param_names,
+            body_expr=body.body,
+            body=None,
+        ),
     )
 
     # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
-    if message in ctxt.slots:
-        multimethod = ctxt.slots[message]
-        if not isinstance(multimethod, MultiMethod):
-            raise ValueError(f"Slot '{message}' is already defined and is not a multi-method.")
-    else:
-        multimethod = MultiMethod(name=message, methods=[])
-        ctxt.slots[message] = multimethod
-    multimethod.add_method(method)
+    create_or_add_method(ctxt, message, method)
 
     return NullValue()
 
 
-builtin("method:does:", handle__method_does_)
+builtin_method("method:does:", (None, QuoteType, QuoteType), handle__method_does_)
 
 
 def handle__type(ctxt: Context, receiver: Value) -> Value:
     return type_of(receiver)
 
 
-builtin("type", handle__type)
+builtin_method("type", (None,), handle__type)
 
 
 def handle_is_type(_type: TypeValue):
@@ -180,17 +224,17 @@ def handle_is_type(_type: TypeValue):
     return handler
 
 
-builtin("Number?", handle_is_type(NumberType))
-builtin("String?", handle_is_type(StringType))
-builtin("Bool?", handle_is_type(BoolType))
-builtin("Null?", handle_is_type(NullType))
-builtin("Symbol?", handle_is_type(SymbolType))
-builtin("Tuple?", handle_is_type(TupleType))
-builtin("Vector?", handle_is_type(VectorType))
-builtin("Quote?", handle_is_type(QuoteType))
-builtin("Continuation?", handle_is_type(ContinuationType))
-builtin("Type?", handle_is_type(TypeType))
-builtin("DataclassType?", handle_is_type(DataclassTypeType))
+builtin_method("Number?", (None,), handle_is_type(NumberType))
+builtin_method("String?", (None,), handle_is_type(StringType))
+builtin_method("Bool?", (None,), handle_is_type(BoolType))
+builtin_method("Null?", (None,), handle_is_type(NullType))
+builtin_method("Symbol?", (None,), handle_is_type(SymbolType))
+builtin_method("Tuple?", (None,), handle_is_type(TupleType))
+builtin_method("Vector?", (None,), handle_is_type(VectorType))
+builtin_method("Quote?", (None,), handle_is_type(QuoteType))
+builtin_method("Continuation?", (None,), handle_is_type(ContinuationType))
+builtin_method("Type?", (None,), handle_is_type(TypeType))
+builtin_method("DataclassType?", (None,), handle_is_type(DataclassTypeType))
 
 
 def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value) -> Value:
@@ -223,22 +267,47 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
     _class = DataclassTypeValue(name=class_name, bases=[], slots=slots)
     ctxt.slots[class_name] = _class
 
-    if class_name + "?" in ctxt.slots:
-        raise ValueError(f"'{class_name}?' is already defined")
-    ctxt.slots[class_name + "?"] = NativeHandler(handle_is_type(_class))
+    create_or_add_method(
+        ctxt,
+        class_name + "?",
+        Method(
+            param_matchers=[ParameterAnyMatcher()],
+            body=NativeMethodBody(NativeHandler(handle_is_type(_class))),
+        ),
+    )
 
-    # TODO: This is all very hacky. Should just use multimethod dispatch instead of hardcoding.
     ctor_message = "".join(slot + ":" for slot in slots) if slots else "new"
-    if ctor_message not in ctxt.slots:
-        ctxt.slots[ctor_message] = handle_generic_dataclass_constructor(ctor_message)
+    create_or_add_method(
+        ctxt,
+        ctor_message,
+        Method(
+            # TODO: allow specifying types for slots
+            param_matchers=[ParameterAnyMatcher()] * (1 + len(slots)),
+            body=NativeMethodBody(handle_generic_dataclass_constructor(ctor_message)),
+        ),
+    )
 
     for slot in slots:
         get_msg = "." + slot
-        if get_msg not in ctxt.slots:
-            ctxt.slots[get_msg] = handle_generic_dataclass_get(get_msg, slot)
+        create_or_add_method(
+            ctxt,
+            get_msg,
+            Method(
+                param_matchers=[ParameterTypeMatcher(_class)],
+                body=NativeMethodBody(handle_generic_dataclass_get(get_msg, slot)),
+            ),
+        )
+
         set_msg = "set-" + slot + ":"
-        if set_msg not in ctxt.slots:
-            ctxt.slots[set_msg] = handle_generic_dataclass_set(set_msg, slot)
+        # TODO: allow specifying types for slots
+        create_or_add_method(
+            ctxt,
+            set_msg,
+            Method(
+                param_matchers=[ParameterTypeMatcher(_class), ParameterAnyMatcher()],
+                body=NativeMethodBody(handle_generic_dataclass_set(set_msg, slot)),
+            ),
+        )
 
     return NullValue()
 
@@ -279,7 +348,7 @@ def handle_generic_dataclass_set(message: str, slot: str) -> NativeHandler:
     return NativeHandler(handler)
 
 
-builtin("data:has:", handle__data_has_)
+builtin_method("data:has:", (None, QuoteType, VectorType), handle__data_has_)
 
 
 def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
@@ -298,7 +367,7 @@ def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -
     return value
 
 
-builtin("let:=:", handle__let_eq_)
+builtin_method("let:=:", (None, QuoteType, None), handle__let_eq_)
 
 
 def handle__set(ctxt: Context, receiver: Value, slot: Value, value: Value) -> Value:
@@ -319,163 +388,149 @@ def handle__set(ctxt: Context, receiver: Value, slot: Value, value: Value) -> Va
     return value
 
 
-builtin("=:_:", handle__set)
+builtin_method("=:_:", (None, QuoteType, None), handle__set)
 
 
-def generic_unary_op_handler(
-    op: str,
-    handlers: list[Tuple[Type, Callable[[Any], Value]]],
-    default_handler: Optional[Callable[[Value], Value]] = None,
+# Each handler is a function from value -> value, where the input value satisfies the provided receiver matcher.
+def builtin_unary_op(
+    op, methods: list[Tuple[Union[ParameterTypeMatcher, TypeValue, None], Callable[[Value], Value]]]
 ):
-    def handle__generic_unary_op(ctxt: Context, receiver: Value) -> Value:
-        assert receiver
-        for receiver_type, handler in handlers:
-            if isinstance(receiver, receiver_type):
-                return handler(receiver)
-        if default_handler:
-            return default_handler(receiver)
-        else:
-            raise ValueError(f"Invalid input types for '{op}': {receiver}")
-
-    return handle__generic_unary_op
+    for receiver_matcher, handler in methods:
+        builtin_method(
+            op,
+            param_matchers=[receiver_matcher],
+            handler=(lambda ctxt, receiver: handler(receiver)),
+        )
 
 
-def builtin_unary_op(op, handlers, default_handler=None):
-    builtin(op, generic_unary_op_handler(op, handlers, default_handler))
-
-
-def generic_binary_op_handler(
+# Each handler is a function from (value, value) -> value, where the input components satisfies the provided left_matcher / right_matcher.
+def builtin_binary_op(
     op: str,
-    handlers: list[Tuple[Type, Type, Callable[[Any, Any], Value]]],
-    default_handler: Optional[Callable[[Value, Value], Value]] = None,
+    methods: list[
+        Tuple[
+            Union[ParameterTypeMatcher, TypeValue, None],
+            Union[ParameterTypeMatcher, TypeValue, None],
+            Callable[[Value, Value], Value],
+        ]
+    ],
 ):
-    def handle__generic_binary_op(
-        ctxt: Context, receiver: Value, left: Value, right: Value
-    ) -> Value:
-        for left_type, right_type, handler in handlers:
-            if isinstance(left, left_type) and isinstance(right, right_type):
-                return handler(left, right)
-        if default_handler:
-            return default_handler(left, right)
-        else:
-            raise ValueError(f"Invalid input types for '{op}': {left}, {right}")
-
-    return handle__generic_binary_op
-
-
-def builtin_binary_op(op, handlers, default_handler=None):
-    builtin(op + ":_:", generic_binary_op_handler(op, handlers, default_handler))
+    for left_matcher, right_matcher, handler in methods:
+        builtin_method(
+            op + ":_:",
+            param_matchers=[None, left_matcher, right_matcher],
+            handler=(lambda ctxt, receiver, left, right: handler(left, right)),
+        )
 
 
 builtin_binary_op(
     "~",
     [
-        (StringValue, StringValue, (lambda a, b: StringValue(a.value + b.value))),
+        (StringType, StringType, (lambda a, b: StringValue(a.value + b.value))),
     ],
 )
 
 builtin_binary_op(
     "and",
     [
-        (BoolValue, BoolValue, (lambda a, b: BoolValue(a.value and b.value))),
+        (BoolType, BoolType, (lambda a, b: BoolValue(a.value and b.value))),
     ],
 )
 builtin_binary_op(
     "or",
     [
-        (BoolValue, BoolValue, (lambda a, b: BoolValue(a.value or b.value))),
+        (BoolType, BoolType, (lambda a, b: BoolValue(a.value or b.value))),
     ],
 )
 
 builtin_binary_op(
     "==",
     [
-        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value == b.value))),
-        (StringValue, StringValue, (lambda a, b: BoolValue(a.value == b.value))),
-        (BoolValue, BoolValue, (lambda a, b: BoolValue(a.value == b.value))),
-        (NullValue, NullValue, (lambda a, b: BoolValue(True))),
-        (SymbolValue, SymbolValue, (lambda a, b: BoolValue(a.value == b.value))),
+        (NumberType, NumberType, (lambda a, b: BoolValue(a.value == b.value))),
+        (StringType, StringType, (lambda a, b: BoolValue(a.value == b.value))),
+        (BoolType, BoolType, (lambda a, b: BoolValue(a.value == b.value))),
+        (NullType, NullType, (lambda a, b: BoolValue(True))),
+        (SymbolType, SymbolType, (lambda a, b: BoolValue(a.value == b.value))),
         # TODO: deep equality
-        (TupleValue, TupleValue, (lambda a, b: BoolValue(a == b))),
+        (TupleType, TupleType, (lambda a, b: BoolValue(a == b))),
         # TODO: deep equality
-        (VectorValue, VectorValue, (lambda a, b: BoolValue(a == b))),
-        (Value, Value, (lambda a, b: BoolValue(a == b))),
+        (VectorType, VectorType, (lambda a, b: BoolValue(a == b))),
+        (None, None, (lambda a, b: BoolValue(a == b))),
     ],
 )
 # TODO: fix this operator
 builtin_binary_op(
     "!=",
     [
-        (Value, Value, (lambda a, b: BoolValue(a.value == b.value))),
+        (None, None, (lambda a, b: BoolValue(a.value == b.value))),
     ],
 )
 
 builtin_binary_op(
     "<",
     [
-        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value < b.value))),
+        (NumberType, NumberType, (lambda a, b: BoolValue(a.value < b.value))),
     ],
 )
 builtin_binary_op(
     "<=",
     [
-        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value <= b.value))),
+        (NumberType, NumberType, (lambda a, b: BoolValue(a.value <= b.value))),
     ],
 )
 builtin_binary_op(
     ">",
     [
-        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value > b.value))),
+        (NumberType, NumberType, (lambda a, b: BoolValue(a.value > b.value))),
     ],
 )
 builtin_binary_op(
     ">=",
     [
-        (NumberValue, NumberValue, (lambda a, b: BoolValue(a.value >= b.value))),
+        (NumberType, NumberType, (lambda a, b: BoolValue(a.value >= b.value))),
     ],
 )
 
 builtin_binary_op(
     "+",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value + b.value))),
+        (NumberType, NumberType, (lambda a, b: NumberValue(a.value + b.value))),
     ],
 )
 builtin_binary_op(
     "-",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value - b.value))),
+        (NumberType, NumberType, (lambda a, b: NumberValue(a.value - b.value))),
     ],
 )
 builtin_binary_op(
     "*",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value * b.value))),
+        (NumberType, NumberType, (lambda a, b: NumberValue(a.value * b.value))),
     ],
 )
 builtin_binary_op(
     "/",
     [
-        (NumberValue, NumberValue, (lambda a, b: NumberValue(a.value // b.value))),
+        (NumberType, NumberType, (lambda a, b: NumberValue(a.value // b.value))),
     ],
 )
 
 builtin_unary_op(
     "not",
     [
-        (BoolValue, (lambda v: BoolValue(not v.value))),
+        (BoolType, (lambda v: BoolValue(not v.value))),
     ],
 )
 builtin_unary_op(
     "+",
     [
-        (NumberValue, (lambda v: NumberValue(+v.value))),
+        (NumberType, (lambda v: NumberValue(+v.value))),
     ],
 )
 builtin_unary_op(
     "-",
     [
-        (NumberValue, (lambda v: NumberValue(-v.value))),
+        (NumberType, (lambda v: NumberValue(-v.value))),
     ],
 )
 
@@ -485,7 +540,7 @@ def handle__print(ctxt: Context, receiver: Value) -> Value:
     return NullValue()
 
 
-builtin("print", handle__print)
+builtin_method("print", (None,), handle__print)
 
 
 def handle__print_(ctxt: Context, receiver: Value, value: Value) -> Value:
@@ -493,7 +548,7 @@ def handle__print_(ctxt: Context, receiver: Value, value: Value) -> Value:
     return NullValue()
 
 
-builtin("print:", handle__print_)
+builtin_method("print:", (None, None), handle__print_)
 
 builtin_value("t", BoolValue(True))
 builtin_value("f", BoolValue(False))
@@ -504,7 +559,7 @@ def handle__to_string(ctxt: Context, receiver: Value) -> Value:
     return StringValue(str(receiver))
 
 
-builtin(">string", handle__to_string)
+builtin_method(">string", (None,), handle__to_string)
 
 
 def handle__at_(ctxt: Context, receiver: Value, index: Value) -> Value:
@@ -517,7 +572,7 @@ def handle__at_(ctxt: Context, receiver: Value, index: Value) -> Value:
         raise ValueError(f"at: requires a vector; got {receiver}")
 
 
-builtin("at:", handle__at_)
+builtin_method("at:", (VectorType, NumberType), handle__at_)
 
 
 def handle__at_eq_(ctxt: Context, receiver: Value, index: Value, value: Value) -> Value:
@@ -531,7 +586,7 @@ def handle__at_eq_(ctxt: Context, receiver: Value, index: Value, value: Value) -
         raise ValueError(f"at: requires a vector; got {receiver}")
 
 
-builtin("at:=:", handle__at_eq_)
+builtin_method("at:=:", (VectorType, NumberType, None), handle__at_eq_)
 
 
 def handle__append_(ctxt: Context, receiver: Value, value: Value) -> Value:
@@ -542,7 +597,7 @@ def handle__append_(ctxt: Context, receiver: Value, value: Value) -> Value:
         raise ValueError(f"append: requires a vector; got {receiver}")
 
 
-builtin("append:", handle__append_)
+builtin_method("append:", (VectorType, None), handle__append_)
 
 
 def handle__length(ctxt: Context, receiver: Value) -> Value:
@@ -554,7 +609,8 @@ def handle__length(ctxt: Context, receiver: Value) -> Value:
         raise ValueError(f"length requires a vector or string; got {receiver}")
 
 
-builtin("length", handle__length)
+builtin_method("length", (VectorType,), handle__length)
+builtin_method("length", (StringType,), handle__length)
 
 
 def handle__show_current_context(ctxt: Context, receiver: Value) -> Value:
@@ -569,4 +625,4 @@ def handle__show_current_context(ctxt: Context, receiver: Value) -> Value:
     return NullValue()
 
 
-builtin("<show-current-context>", handle__show_current_context)
+builtin_method("<show-current-context>", (None,), handle__show_current_context)

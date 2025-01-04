@@ -230,7 +230,9 @@ class NativeHandler:
 
 @dataclass
 class Context:
-    slots: dict[str, Union[Value, "MultiMethod", IntrinsicHandler, NativeHandler]]
+    # TODO: add back IntrinsicHandler / NativeHandler? Maybe multimethods should just
+    # be implemented in-language instead of being so intrinsic...
+    slots: dict[str, Union[Value, "MultiMethod"]]
     base: Optional["Context"]
 
 
@@ -328,14 +330,34 @@ class ParameterValueMatcher(ParameterMatcher):
 
 
 @dataclass
-class Method:
+class MethodBody:
+    pass
+
+
+@dataclass
+class QuoteMethodBody(MethodBody):
     context: Context
     # This includes the receiver name.
     param_names: list[str]
-    # This also includes a matcher for the receiver.
-    param_matchers: list[Optional[ParameterMatcher]]
     body_expr: Expr
     body: BytecodeSequence
+
+
+@dataclass
+class IntrinsicMethodBody(MethodBody):
+    handler: IntrinsicHandler
+
+
+@dataclass
+class NativeMethodBody(MethodBody):
+    handler: NativeHandler
+
+
+@dataclass
+class Method:
+    # This also includes a matcher for the receiver.
+    param_matchers: list[ParameterMatcher]
+    body: MethodBody
 
 
 # a <= b if a is at least as specific as b.
@@ -381,10 +403,14 @@ def method_lte(a: Method, b: Method):
 class MultiMethod:
     # Just for debug / error messages.
     name: str
-    # TODO: support multiple dispatch for builtins too.
     methods: list[Method]
 
     def add_method(self, method: Method) -> None:
+        assert isinstance(method, Method)
+        assert isinstance(method.param_matchers, list) or isinstance(method.param_matchers, tuple)
+        for matcher in method.param_matchers:
+            assert isinstance(matcher, ParameterMatcher)
+
         # Make sure the method signature doesn't duplicate a previously added method.
         for existing in self.methods:
             if method.param_matchers == existing.param_matchers:
@@ -409,7 +435,9 @@ class MultiMethod:
     def select_method(self, args: list[Value]) -> Optional[Method]:
         options = []
         for method in self.methods:
-            assert len(args) == len(method.param_matchers)
+            assert len(args) == len(
+                method.param_matchers
+            ), f"Multimethod {self.name} has method {method} not matching argument count for {args}."
             if all(matcher.matches(arg) for arg, matcher in zip(args, method.param_matchers)):
                 options.append(method)
         if len(options) == 1:
@@ -579,15 +607,15 @@ def eval_one_op(state: RuntimeState) -> None:
                 f"Evaluation error ({condition_name}): {error_message}", runtime_state=state
             )
 
-        # Find the handler:
+        # Find the slot value:
         ctxt = frame.context
-        handler = None
+        slot = None
         while ctxt is not None:
             if message in ctxt.slots:
-                handler = ctxt.slots[message]
+                slot = ctxt.slots[message]
                 break
             ctxt = ctxt.base
-        if not handler:
+        if not slot:
             signal_error(
                 condition_name="undefined-slot",
                 error_message=f"Could not invoke '{message}'; slot is not defined.",
@@ -595,17 +623,17 @@ def eval_one_op(state: RuntimeState) -> None:
             )
             return
 
-        if isinstance(handler, Value):
+        if isinstance(slot, Value):
             state.data_stack = state.data_stack[:-nargs]
-            state.data_stack.append(handler)
+            state.data_stack.append(slot)
             frame.spot += 1
         else:
             stack_len = len(state.data_stack)
             # Note: args includes the receiver.
             args = state.data_stack[stack_len - nargs :]
             state.data_stack = state.data_stack[:-nargs]
-            if isinstance(handler, MultiMethod):
-                multimethod = handler
+            if isinstance(slot, MultiMethod):
+                multimethod = slot
 
                 try:
                     method = multimethod.select_method(args)
@@ -616,53 +644,61 @@ def eval_one_op(state: RuntimeState) -> None:
                         state=state,
                     )
 
-                if not method.body:
-                    # TODO: do this earlier, within method:does:.
-                    method.body = compile(method.body_expr)
+                method_body = method.body
+                if isinstance(method_body, QuoteMethodBody):
+                    if not method_body.body:
+                        # TODO: do this earlier, within method:does:.
+                        method_body.body = compile(method_body.body_expr)
 
-                body_ctxt = Context(slots={}, base=method.context)
-                assert len(args) == len(
-                    method.param_names
-                ), f"{len(args)} != len({method.param_names})"
-                for param_name, arg in zip(method.param_names, args):
-                    body_ctxt.slots[param_name] = arg
+                    body_ctxt = Context(slots={}, base=method_body.context)
+                    assert len(args) == len(
+                        method_body.param_names
+                    ), f"{len(args)} != len({method_body.param_names})"
+                    for param_name, arg in zip(method_body.param_names, args):
+                        body_ctxt.slots[param_name] = arg
 
-                # TODO: use reified context as default receiver?
-                invoke_compiled(state, method.body, body_ctxt, default_receiver=NullValue())
-            elif isinstance(handler, IntrinsicHandler):
-                try:
-                    # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
-                    # responsibility for updating the frame as necessary.
-                    handler.handler(state, *args)
-                except Exception as e:
-                    # TODO: allow handlers to raise more targeted exceptions that already include a condition name
-                    signal_error(
-                        condition_name="internal-error",
-                        error_message=f"error from intrinsic handler: {e}",
-                        state=state,
+                    # TODO: use reified context as default receiver?
+                    invoke_compiled(
+                        state, method_body.body, body_ctxt, default_receiver=NullValue()
                     )
-                    return
-            elif isinstance(handler, NativeHandler):
-                # handler is something which can be called with a context, receiver, and arguments.
-                # It should not call evaluation functions. (It can, but the stack is not reified and
-                # uses host language stack instead).
-                try:
-                    result = handler.handler(frame.context, *args)
-                except Exception as e:
-                    # TODO: allow handlers to raise more targeted exceptions that already include a condition name
-                    signal_error(
-                        condition_name="internal-error",
-                        error_message=f"error from builtin handler: {e}",
-                        state=state,
-                    )
-                    return
-                assert isinstance(
-                    result, Value
-                ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
-                state.data_stack.append(result)
-                frame.spot += 1
+                elif isinstance(method_body, IntrinsicMethodBody):
+                    try:
+                        handler = method_body.handler
+                        # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
+                        # responsibility for updating the frame as necessary.
+                        handler.handler(state, *args)
+                    except Exception as e:
+                        # TODO: allow handlers to raise more targeted exceptions that already include a condition name
+                        signal_error(
+                            condition_name="internal-error",
+                            error_message=f"error from intrinsic handler: {e}",
+                            state=state,
+                        )
+                        return
+                elif isinstance(method_body, NativeMethodBody):
+                    try:
+                        handler = method_body.handler
+                        # handler is something which can be called with a context, receiver, and arguments.
+                        # It should not call evaluation functions. (It can, but the stack is not reified and
+                        # uses host language stack instead).
+                        result = handler.handler(frame.context, *args)
+                    except Exception as e:
+                        # TODO: allow handlers to raise more targeted exceptions that already include a condition name
+                        signal_error(
+                            condition_name="internal-error",
+                            error_message=f"error from builtin handler: {e}",
+                            state=state,
+                        )
+                        return
+                    assert isinstance(
+                        result, Value
+                    ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
+                    state.data_stack.append(result)
+                    frame.spot += 1
+                else:
+                    raise AssertionError(f"Unexpected method body '{method_body}'")
             else:
-                raise AssertionError(f"Unexpected slot value '{handler}'")
+                raise AssertionError(f"Unexpected slot value '{slot}'")
     elif op == "components>vector":
         (length,) = bytecode.args
         assert isinstance(length, int)
@@ -802,15 +838,58 @@ def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
         state=RuntimeState(
             call_stack=[frame.copy() for frame in state.call_stack],
             data_stack=list(state.data_stack),
+            condition_handlers_stack=list(state.condition_handlers_stack),
         )
     )
-    call_impl("call/cc", state, receiver, args=[current_continuation])
+    call_impl(
+        "call/cc",
+        state,
+        receiver,
+        args=[current_continuation],
+        pop_condition_handlers_on_unwind=False,
+    )
+
+
+def intrinsic__call_with_handlers_(state: RuntimeState, receiver: Value, handlers: Value) -> None:
+    if not isinstance(handlers, VectorValue):
+        raise ValueError("call-with-handlers: handlers must be a mapping vector keyed by symbols")
+    handler_map = {}
+    for handler in handlers.components:
+        if not isinstance(handler, VectorValue):
+            raise ValueError(
+                "call-with-handlers: handlers must be a mapping vector keyed by symbols"
+            )
+        if len(handler.components) != 2:
+            raise ValueError(
+                "call-with-handlers: handlers must be a mapping vector keyed by symbols"
+            )
+        key, value = handler.components
+        if not isinstance(key, SymbolValue):
+            raise ValueError(
+                "call-with-handlers: handlers must be a mapping vector keyed by symbols"
+            )
+        handler_map[key.symbol] = value
+    state.condition_handlers_stack.append(handler_map)
+    call_impl(
+        "call-with-handlers:", state, receiver, args=[], pop_condition_handlers_on_unwind=True
+    )
 
 
 intrinsic_handlers = {
-    "if:then:else:": IntrinsicHandler(intrinsic__if_then_else),
-    "call": IntrinsicHandler(intrinsic__call),
-    "call:": IntrinsicHandler(intrinsic__call_),
-    "call*:": IntrinsicHandler(intrinsic__call_star_),
-    "call/cc": IntrinsicHandler(intrinsic__call_cc),
+    "if:then:else:": (
+        (
+            ParameterAnyMatcher(),
+            ParameterTypeMatcher(BoolType),
+            ParameterAnyMatcher(),
+            ParameterAnyMatcher(),
+        ),
+        IntrinsicHandler(intrinsic__if_then_else),
+    ),
+    "call": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call)),
+    "call:": ((ParameterAnyMatcher(), ParameterAnyMatcher()), IntrinsicHandler(intrinsic__call_)),
+    "call*:": (
+        (ParameterAnyMatcher(), ParameterTypeMatcher(TupleType)),
+        IntrinsicHandler(intrinsic__call_star_),
+    ),
+    "call/cc": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call_cc)),
 }
