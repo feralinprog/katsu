@@ -432,7 +432,7 @@ class MultiMethod:
         else:
             self.methods.append(method)
 
-    def select_method(self, args: list[Value]) -> Optional[Method]:
+    def select_method(self, args: list[Value]) -> Method:
         options = []
         for method in self.methods:
             assert len(args) == len(
