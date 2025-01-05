@@ -42,14 +42,6 @@ from interpreter import (
     type_of,
 )
 
-# def add_method_to_slot(slot: Value, param_matchers: list[ParameterMatcher], body: MethodBody) -> None:
-#    if not isinstance(slot, MultiMethod):
-#        raise ValueError(f"Could not add method: slot value {slot} is not a multimethod.")
-#    multimethod = slot
-#
-#    method = Method(param_matchers=param_matchers, body=body)
-#    multimethod.add_method(method)
-
 
 def create_or_add_method(ctxt: Context, slot: str, method: Method):
     if slot in ctxt.slots:
