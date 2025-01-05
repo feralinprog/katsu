@@ -767,6 +767,7 @@ def eval_one_op(state: RuntimeState) -> None:
 def unwind_frame(state: RuntimeState) -> None:
     assert state.call_stack
     frame = state.call_stack.pop()
+    assert not (frame.is_cleanup and frame.force_unwind)
     if frame.is_cleanup:
         # Cleanup actions, like any other invocation, leave a value on the data stack.
         # We ignore the result.
@@ -927,11 +928,13 @@ def call_impl(
         if not found_frame:
             raise ValueError(f"{message} receiver (a dynamic continuation) is no longer in scope")
         # Force frames from top-of-stack down to just above the `return_to_frame` to exit early
-        # when we next get around to running any bytecode.
+        # when we next get around to running any bytecode. Leave is_cleanup frames alone, though;
+        # we still want to execute those!
         for frame in reversed(state.call_stack):
             if frame is return_to_frame:
                 break
-            frame.force_unwind = True
+            if not frame.is_cleanup:
+                frame.force_unwind = True
         state.data_stack.append(args[0])
         assert state.call_stack
         shift_frame(state)

@@ -242,7 +242,7 @@ switch: {
 }
 
 [ print: "in body" ] cleanup: [ print: "in cleanup" ]
-[ print: "in body 2" ] cleanup: "cleaning up!"
+[ print: "in body 2" ] cleanup: "shouldn't see this string!"
 null cleanup: [ print: "cleaning up from null" ]
 
 [
@@ -253,3 +253,24 @@ null cleanup: [ print: "cleaning up from null" ]
     ] call/dc
     print: "result: " ~ result >string
 ] call
+
+method: [top: return] does: [
+    print: "top, before return"
+    1 + (return call: "<the result from top>")
+    print: "top, after return (BAD)"
+]
+method: [middle: return] does: [
+    print: "middle, before calling top"
+    [top: return] cleanup: [
+        print: "middle, doing cleanup"
+    ]
+    print: "middle, after calling top (BAD)"
+]
+method: [bottom: return] does: [
+    print: "bottom, before calling middle"
+    [middle: return] cleanup: [
+        print: "bottom, doing cleanup"
+    ]
+    print: "bottom, after calling middle (BAD)"
+]
+print: \ret [bottom: ret] call/dc
