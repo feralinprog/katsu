@@ -241,6 +241,6 @@ switch: {
     { t; [print: "i is odd and not 5"] }
 }
 
-#[ exception! ] call-with-handlers: {
-#    { :undefined-slot; [ print ] }
-#}
+[ print: "in body" ] cleanup: [ print: "in cleanup" ]
+[ print: "in body 2" ] cleanup: "cleaning up!"
+null cleanup: [ print: "cleaning up from null" ]

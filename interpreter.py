@@ -274,6 +274,10 @@ class CallFrame:
     context: Context
     # Receiver to use if none is explicitly provided in an invocation.
     default_receiver: Value
+    # Optional value to call when unwinding this call frame.
+    cleanup: Optional[Value]
+    # Is this frame the invocation of a cleanup action?
+    is_cleanup: bool
 
     def copy(self) -> "CallFrame":
         return CallFrame(
@@ -281,6 +285,8 @@ class CallFrame:
             spot=self.spot,
             context=self.context,
             default_receiver=self.default_receiver,
+            cleanup=self.cleanup,
+            is_cleanup=self.is_cleanup,
         )
 
 
@@ -659,7 +665,12 @@ def eval_one_op(state: RuntimeState) -> None:
 
                     # TODO: use reified context as default receiver?
                     invoke_compiled(
-                        state, method_body.body, body_ctxt, default_receiver=NullValue()
+                        state,
+                        method_body.body,
+                        body_ctxt,
+                        default_receiver=NullValue(),
+                        cleanup=None,
+                        is_cleanup=False,
                     )
                 elif isinstance(method_body, IntrinsicMethodBody):
                     try:
@@ -726,20 +737,44 @@ def eval_one_op(state: RuntimeState) -> None:
 def unwind_frame(state: RuntimeState) -> None:
     assert state.call_stack
     frame = state.call_stack.pop()
+    if frame.is_cleanup:
+        # Cleanup actions, like any other invocation, leave a value on the data stack.
+        # We ignore the result.
+        state.data_stack.pop()
+    if frame.cleanup:
+        call_impl("call", state, receiver=frame.cleanup, args=[], cleanup=None, is_cleanup=True)
 
 
 def invoke_compiled(
-    state: RuntimeState, code: BytecodeSequence, ctxt: Context, default_receiver: Value
+    state: RuntimeState,
+    code: BytecodeSequence,
+    ctxt: Context,
+    default_receiver: Value,
+    cleanup: Optional[Value],
+    is_cleanup: bool,
 ) -> None:
-    assert state.call_stack
-    frame = state.call_stack[-1]
-    # Tail-call optimization!
-    if frame.spot == len(frame.sequence.code) - 1:
-        unwind_frame(state)
-    else:
-        frame.spot += 1
+    # There is not necessarily any call frame currently active; for instance,
+    # we could be invoking the cleanup action of a top level call frame with
+    # tail-call optimization in effect.
+    if not is_cleanup:
+        assert state.call_stack
+    if state.call_stack:
+        frame = state.call_stack[-1]
+        assert 0 <= frame.spot < len(frame.sequence.code)
+        # Tail-call optimization!
+        if frame.spot == len(frame.sequence.code) - 1:
+            unwind_frame(state)
+        else:
+            frame.spot += 1
     state.call_stack.append(
-        CallFrame(sequence=code, spot=0, context=ctxt, default_receiver=default_receiver)
+        CallFrame(
+            sequence=code,
+            spot=0,
+            context=ctxt,
+            default_receiver=default_receiver,
+            cleanup=cleanup,
+            is_cleanup=is_cleanup,
+        )
     )
 
 
@@ -747,13 +782,23 @@ def shift_frame(state: RuntimeState) -> None:
     assert state.call_stack
     frame = state.call_stack[-1]
     frame.spot += 1
+    assert 0 <= frame.spot <= len(frame.sequence.code)
 
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
     bytecode = compile(expr)
     state = RuntimeState(
         # TODO: maybe default_receiver should be a reified global context instead?
-        call_stack=[CallFrame(bytecode, spot=0, context=context, default_receiver=NullValue())],
+        call_stack=[
+            CallFrame(
+                bytecode,
+                spot=0,
+                context=context,
+                default_receiver=NullValue(),
+                cleanup=None,
+                is_cleanup=False,
+            )
+        ],
         data_stack=[],
     )
     while state.call_stack:
@@ -777,13 +822,27 @@ def intrinsic__if_then_else(
     if isinstance(body, QuoteValue):
         # TODO: use reified context as default receiver?
         # TODO: compile ahead of time somehow...
-        invoke_compiled(state, compile(body.body), body.context, default_receiver=NullValue())
+        invoke_compiled(
+            state,
+            compile(body.body),
+            body.context,
+            default_receiver=NullValue(),
+            cleanup=None,
+            is_cleanup=False,
+        )
     else:
         state.data_stack.append(body)
         shift_frame(state)
 
 
-def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Value]):
+def call_impl(
+    message: str,
+    state: RuntimeState,
+    receiver: Value,
+    args: list[Value],
+    cleanup: Optional[Value],
+    is_cleanup: bool,
+):
     if isinstance(receiver, QuoteValue):
         # Special-case no parameters with one argument.
         if not receiver.parameters and len(args) == 1:
@@ -804,8 +863,12 @@ def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Val
             compile(receiver.body),
             Context(slots=new_slots, base=receiver.context),
             default_receiver=default_receiver,
+            cleanup=cleanup,
+            is_cleanup=is_cleanup,
         )
     elif isinstance(receiver, ContinuationValue):
+        if cleanup or is_cleanup:
+            raise NotImplementedError()
         if len(args) != 1:
             raise ValueError(
                 f"{message} receiver (a continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
@@ -815,22 +878,30 @@ def call_impl(message: str, state: RuntimeState, receiver: Value, args: list[Val
         state.data_stack = list(continuation.data_stack)
         state.data_stack.append(args[0])
     else:
-        state.data_stack.append(receiver)
-        shift_frame(state)
+        # There is not necessarily any call frame currently active; for instance,
+        # we could be invoking the cleanup action of a top level call frame with
+        # tail-call optimization in effect.
+        if not is_cleanup:
+            state.data_stack.append(receiver)
+            assert state.call_stack
+            if not cleanup:
+                shift_frame(state)
+        if cleanup:
+            call_impl("call", state, receiver=cleanup, args=[], cleanup=None, is_cleanup=True)
 
 
 def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
-    call_impl("call", state, receiver, args=[])
+    call_impl("call", state, receiver, args=[], cleanup=None, is_cleanup=False)
 
 
 def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None:
-    call_impl("call:", state, receiver, args=[value])
+    call_impl("call:", state, receiver, args=[value], cleanup=None, is_cleanup=False)
 
 
 def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) -> None:
     if not isinstance(value, TupleValue):
         raise ValueError("call*: value must be a tuple")
-    call_impl("call*:", state, receiver, args=value.components)
+    call_impl("call*:", state, receiver, args=value.components, cleanup=None, is_cleanup=False)
 
 
 def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
@@ -838,7 +909,6 @@ def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
         state=RuntimeState(
             call_stack=[frame.copy() for frame in state.call_stack],
             data_stack=list(state.data_stack),
-            condition_handlers_stack=list(state.condition_handlers_stack),
         )
     )
     call_impl(
@@ -846,33 +916,13 @@ def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
         state,
         receiver,
         args=[current_continuation],
-        pop_condition_handlers_on_unwind=False,
+        cleanup=None,
+        is_cleanup=False,
     )
 
 
-def intrinsic__call_with_handlers_(state: RuntimeState, receiver: Value, handlers: Value) -> None:
-    if not isinstance(handlers, VectorValue):
-        raise ValueError("call-with-handlers: handlers must be a mapping vector keyed by symbols")
-    handler_map = {}
-    for handler in handlers.components:
-        if not isinstance(handler, VectorValue):
-            raise ValueError(
-                "call-with-handlers: handlers must be a mapping vector keyed by symbols"
-            )
-        if len(handler.components) != 2:
-            raise ValueError(
-                "call-with-handlers: handlers must be a mapping vector keyed by symbols"
-            )
-        key, value = handler.components
-        if not isinstance(key, SymbolValue):
-            raise ValueError(
-                "call-with-handlers: handlers must be a mapping vector keyed by symbols"
-            )
-        handler_map[key.symbol] = value
-    state.condition_handlers_stack.append(handler_map)
-    call_impl(
-        "call-with-handlers:", state, receiver, args=[], pop_condition_handlers_on_unwind=True
-    )
+def intrinsic__cleanup_(state: RuntimeState, receiver: Value, cleanup: Value) -> None:
+    call_impl("cleanup:", state, receiver, args=[], cleanup=cleanup, is_cleanup=False)
 
 
 intrinsic_handlers = {
@@ -892,4 +942,8 @@ intrinsic_handlers = {
         IntrinsicHandler(intrinsic__call_star_),
     ),
     "call/cc": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call_cc)),
+    "cleanup:": (
+        (ParameterAnyMatcher(), ParameterAnyMatcher()),
+        IntrinsicHandler(intrinsic__cleanup_),
+    ),
 }
