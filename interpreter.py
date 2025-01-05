@@ -63,7 +63,7 @@ class SymbolValue(Value):
     symbol: str
 
     def __str__(self):
-        return self.value
+        return ":" + self.symbol
 
 
 @dataclass
