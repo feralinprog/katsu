@@ -274,3 +274,13 @@ method: [bottom: return] does: [
     print: "bottom, after calling middle (BAD)"
 ]
 print: \ret [bottom: ret] call/dc
+
+[
+    let: 'dc-handle =: null
+    \dc ['dc-handle = dc] call/dc
+    print: dc-handle
+    # This raises an error now.
+    #dc-handle call: 5
+    # TODO: hm, need to fix some syntax here. shouldn't need to put an expr at the end...
+    1
+] call

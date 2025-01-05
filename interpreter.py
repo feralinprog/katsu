@@ -920,8 +920,11 @@ def call_impl(
                 f"{message} receiver (a dynamic continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
             )
         return_to_frame = receiver.return_to
+        # Look for the frame in anything below the current top of stack.
+        # (This only supports unwinding to a strictly lower point in the stack;
+        # no sideways motion allowed in the current frame.)
         found_frame = False
-        for frame in reversed(state.call_stack):
+        for frame in reversed(state.call_stack[:-1]):
             if frame is return_to_frame:
                 found_frame = True
                 break
