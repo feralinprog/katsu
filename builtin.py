@@ -41,6 +41,8 @@ from interpreter import (
     type_of,
 )
 
+# TODO: go through all handlers, delete unnecessary type checks (since multimethod dispatch guarantees correct types)
+
 
 def create_or_add_method(ctxt: Context, slot: str, method: Method):
     if slot in ctxt.slots:
@@ -591,6 +593,16 @@ def handle__append_(ctxt: Context, receiver: Value, value: Value) -> Value:
 
 
 builtin_method("append:", (VectorType, None), handle__append_)
+
+
+def handle__pop_(ctxt: Context, receiver: Value) -> Value:
+    if isinstance(receiver, VectorValue):
+        return receiver.components.pop()
+    else:
+        raise ValueError(f"pop: requires a vector; got {receiver}")
+
+
+builtin_method("pop", (VectorType,), handle__pop_)
 
 
 def handle__length(ctxt: Context, receiver: Value) -> Value:

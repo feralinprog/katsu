@@ -93,7 +93,7 @@ class QuoteValue(Value):
     def __str__(self):
         # TODO: pprint, make less verbose
         return (
-            ("\\" + " ".join(self.parameters) if self.parameters else "")
+            ("\\" + " ".join(self.parameters) + " " if self.parameters else "")
             + "[ "
             + str(self.body)
             + " ]"
@@ -106,6 +106,15 @@ class Block:
     body: Expr
     # Source span, to allow for informative error messages.
     span: Optional[SourceSpan]
+
+    def __str__(self):
+        # TODO: pprint, make less verbose
+        return (
+            ("\\" + " ".join(self.parameters) + " " if self.parameters else "")
+            + "[ "
+            + str(self.body)
+            + " ]"
+        )
 
 
 @dataclass
@@ -230,7 +239,11 @@ class IntrinsicHandler:
     # the runtime state arbitrarily. This handler must also update the state's
     # top of stack frame position as necessary; the interpreter gives up this
     # responsibility. On entry, the data stack has the receiver and arguments
-    # already removed.
+    # already removed. If the handler raises an exception, it must ensure that
+    # the data stack is left in a state where pushing one more value to the
+    # stack allows that value to be treated as the result of the handler
+    # invocation. (For instance, not modifying the data stack at all meets
+    # this criterion.)
     handler: Callable[["RuntimeState", Value, list[Value]], None]
 
 
@@ -286,6 +299,7 @@ class CallFrame:
     # Next index to execute (or == len(sequence.code) if the next operation
     # is to return.
     spot: int
+    data_stack: list[Union[Value, Expr, Context]]
     context: Context
     # Receiver to use if none is explicitly provided in an invocation.
     default_receiver: Value
@@ -293,30 +307,30 @@ class CallFrame:
     cleanup: Optional[Value]
     # Is this frame the invocation of a cleanup action?
     is_cleanup: bool
+    # If is_cleanup, this holds the value being returned to the first non-is_cleanup
+    # frame in the call stack.
+    cleanup_retain: Optional[Value]
     # If true, when we next attempt to execute any bytecode in this frame,
-    # the frame will be immediately unwound instead, with no net delta to
-    # the data stack.
+    # the frame will be immediately unwound instead.
     force_unwind: bool
-    # Size of the data stack on entering this call frame.
-    initial_data_stack_size: int
 
     def copy(self) -> "CallFrame":
         return CallFrame(
             sequence=self.sequence,
             spot=self.spot,
+            data_stack=list(self.data_stack),
             context=self.context,
             default_receiver=self.default_receiver,
             cleanup=self.cleanup,
             is_cleanup=self.is_cleanup,
+            cleanup_retain=self.cleanup_retain,
             force_unwind=self.force_unwind,
-            initial_data_stack_size=self.initial_data_stack_size,
         )
 
 
 @dataclass
 class RuntimeState:
     call_stack: list[CallFrame]
-    data_stack: list[Union[Value, Expr, Context]]
 
 
 @dataclass
@@ -573,23 +587,127 @@ def compile(expr: Expr) -> BytecodeSequence:
 # Runtime Interpreter / Evaluation
 #################################################
 
+should_log_states = False
+
+
+def debug_log_state(state: RuntimeState) -> None:
+    if not should_log_states:
+        return
+
+    print("============ RUNTIME STATE ===============")
+
+    for depth, frame in enumerate(state.call_stack):
+        if frame.spot == len(frame.sequence.code):
+            location_msg = f"just after "
+            bytecode = frame.sequence.code[-1]
+        else:
+            location_msg = f"at "
+            bytecode = frame.sequence.code[frame.spot]
+        location_msg += f"{repr(bytecode.span.file.source[bytecode.span.start.index:bytecode.span.end.index])} (at {bytecode.span})"
+        print(f"[{depth}] call frame: {location_msg}")
+
+        flags = []
+        if frame.is_cleanup:
+            flags.append("is-cleanup")
+        if frame.force_unwind:
+            flags.append("force-unwind")
+        if flags:
+            print("  " + " ".join(flags))
+
+        print("  bytecode:")
+        for spot, bytecode in enumerate(frame.sequence.code):
+            prefix = "  -> " if spot == frame.spot else "     "
+            print(
+                f"{prefix}{bytecode.op}{''.join(' ' + (repr(arg) if isinstance(arg, str) else str(arg)) for arg in bytecode.args)}"
+            )
+        if frame.spot == len(frame.sequence.code):
+            print("  -> [about to return]")
+
+        print(f"  default-receiver: {frame.default_receiver}")
+
+        print("  context:" + ("" if frame.context.base else " <global>"))
+        if frame.context.base:
+            context = frame.context
+            print("    slots:")
+            while context.base:
+                for slot, value in context.slots.items():
+                    if isinstance(value, Context):
+                        value_str = "<a context> (!!!!!!)"
+                    else:
+                        value_str = str(value)
+                    print(f"      {slot} -> {value_str}")
+                context = context.base
+            print("    <global>")
+
+        if frame.cleanup:
+            print(f"  cleanup-action: {frame.cleanup}")
+
+        if frame.cleanup_retain:
+            if isinstance(frame.cleanup_retain, Context):
+                value_str = "<a context> (!!!!!!)"
+            else:
+                value_str = str(frame.cleanup_retain)
+            print(f"  cleanup-action retain value: {value_str}")
+
+        print("  data stack:")
+        for value in frame.data_stack:
+            if isinstance(value, Context):
+                value_str = "<a context>"
+            elif isinstance(value, Expr):
+                value_str = f"<expr {value}>"
+            else:
+                value_str = str(value)
+            print(f"  >> {value_str}")
+
+    print("================ END =====================")
+
 
 def eval_one_op(state: RuntimeState) -> None:
     assert state
     assert state.call_stack
     frame = state.call_stack[-1]
     assert 0 <= frame.spot <= len(frame.sequence.code)
+    assert not (frame.is_cleanup and frame.force_unwind)
+
+    debug_log_state(state)
 
     if frame.spot == len(frame.sequence.code) or frame.force_unwind:
-        # Return from invocation. If the unwind is forced, then drop values from the data stack
-        # so as to make the entire frame execution a net zero delta. (Keep the top value of the
-        # data stack, though; this is the value we are non-locally-returning to a caller.)
-        if frame.force_unwind:
-            assert len(state.data_stack) >= frame.initial_data_stack_size + 1
-            nonlocal_return_value = state.data_stack.pop()
-            state.data_stack = state.data_stack[: frame.initial_data_stack_size]
-            state.data_stack.append(nonlocal_return_value)
-        unwind_frame(state)
+        # Return from invocation. The current frame's top-of-data-stack holds the return value,
+        # so push this to the next lower call frame's data stack. (Well, that's mostly true.
+        # If the current frame is_cleanup, then the return value is held in cleanup_retain, so
+        # pass this down to the next frame instead. Also, if the next frame _also_ is_cleanup,
+        # then we don't want to set its cleanup_retain at all; this is just a regular return
+        # to an in-progress cleanup action which already has a return value retained.)
+
+        if frame.is_cleanup:
+            assert frame.cleanup_retain
+            return_value = frame.cleanup_retain
+        else:
+            # The frame may have multiple values in the data stack, for instance if it is
+            # performing a non-local return from within a subexpression.
+            return_value = frame.data_stack.pop()
+
+        cleanup_action = frame.cleanup
+
+        state.call_stack.pop()
+
+        if cleanup_action:
+            call_impl(
+                "call",
+                state,
+                receiver=cleanup_action,
+                args=[],
+                cleanup=None,
+                is_cleanup=True,
+                cleanup_retain=return_value,
+            )
+        else:
+            next_frame = state.call_stack[-1]
+            # Sanity check:
+            if next_frame.is_cleanup:
+                assert next_frame.cleanup_retain
+            next_frame.data_stack.append(return_value)
+
         return
 
     bytecode = frame.sequence.code[frame.spot]
@@ -597,51 +715,176 @@ def eval_one_op(state: RuntimeState) -> None:
 
     if op == "push-default-receiver":
         assert not bytecode.args
-        state.data_stack.append(frame.default_receiver)
+        frame.data_stack.append(frame.default_receiver)
         frame.spot += 1
     elif op == "push-number":
         (v,) = bytecode.args
         assert isinstance(v, int)
-        state.data_stack.append(NumberValue(v))
+        frame.data_stack.append(NumberValue(v))
         frame.spot += 1
     elif op == "push-string":
         (v,) = bytecode.args
         assert isinstance(v, str)
-        state.data_stack.append(StringValue(v))
+        frame.data_stack.append(StringValue(v))
         frame.spot += 1
     elif op == "push-symbol":
         (v,) = bytecode.args
         assert isinstance(v, str)
-        state.data_stack.append(SymbolValue(v))
+        frame.data_stack.append(SymbolValue(v))
         frame.spot += 1
     elif op == "push-block":
         (v,) = bytecode.args
         assert isinstance(v, Block)
-        state.data_stack.append(v)
+        frame.data_stack.append(v)
         frame.spot += 1
     elif op == "push-current-context":
         assert not bytecode.args
-        state.data_stack.append(frame.context)
+        frame.data_stack.append(frame.context)
         frame.spot += 1
     elif op == "context+block>quote":
         assert not bytecode.args
-        block = state.data_stack.pop()
+        block = frame.data_stack.pop()
         assert isinstance(block, Block)
-        ctxt = state.data_stack.pop()
+        ctxt = frame.data_stack.pop()
         assert isinstance(ctxt, Context)
-        state.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
+        frame.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
         frame.spot += 1
     elif op == "invoke":
         message, nargs = bytecode.args
         assert isinstance(message, str)
         assert isinstance(nargs, int)
         assert nargs > 0
-        assert len(state.data_stack) >= nargs
+        assert len(frame.data_stack) >= nargs
 
-        def signal_error(condition_name: str, error_message: str, state: RuntimeState):
-            raise RunError(
-                f"Evaluation error ({condition_name}): {error_message}", runtime_state=state
+        def signal_error(
+            condition_name: str,
+            error_message: str,
+            state: RuntimeState,
+            source_exception: Optional[Exception],
+            already_signaled: bool,
+        ):
+            # Don't infinitely recurse if condition-handling itself signals a condition.
+            if already_signaled:
+                # TODO: spin up a debugger or something.
+                raise RunError(
+                    f"Evaluation error while attempting to signal ({condition_name}): {error_message}",
+                    runtime_state=state,
+                ) from source_exception
+
+            # Call into language-space to handle the condition.
+            signal_message = "handle-signal:"
+            ctxt = frame.context
+            slot = None
+            while ctxt is not None:
+                if signal_message in ctxt.slots:
+                    slot = ctxt.slots[signal_message]
+                    break
+                ctxt = ctxt.base
+
+            if not slot:
+                # TODO: spin up a debugger or something.
+                raise RunError(
+                    f"Could not handle-signal: evaluation error ({condition_name}): {error_message}",
+                    runtime_state=state,
+                ) from source_exception
+
+            signal_arg = TupleValue(
+                components=[SymbolValue(condition_name), StringValue(error_message)]
             )
+            frame.data_stack.append(frame.context)
+            frame.data_stack.append(signal_arg)
+            _do_invoke(state, frame, signal_message, slot, 2, already_signaled=True)
+
+        def _do_invoke(state, frame, message, slot, nargs, already_signaled):
+            if isinstance(slot, Value):
+                frame.data_stack = frame.data_stack[:-nargs]
+                frame.data_stack.append(slot)
+                frame.spot += 1
+            else:
+                stack_len = len(frame.data_stack)
+                # Note: args includes the receiver.
+                args = frame.data_stack[stack_len - nargs :]
+                frame.data_stack = frame.data_stack[:-nargs]
+                if isinstance(slot, MultiMethod):
+                    multimethod = slot
+
+                    try:
+                        method = multimethod.select_method(args)
+                    except SignalError as e:
+                        signal_error(
+                            condition_name=e.condition_name,
+                            error_message=str(e),
+                            state=state,
+                            source_exception=None,
+                            already_signaled=already_signaled,
+                        )
+                        return
+
+                    method_body = method.body
+                    if isinstance(method_body, QuoteMethodBody):
+                        if not method_body.body:
+                            # TODO: do this earlier, within method:does:.
+                            method_body.body = compile(method_body.body_expr)
+
+                        body_ctxt = Context(slots={}, base=method_body.context)
+                        assert len(args) == len(
+                            method_body.param_names
+                        ), f"{len(args)} != len({method_body.param_names})"
+                        for param_name, arg in zip(method_body.param_names, args):
+                            body_ctxt.slots[param_name] = arg
+
+                        # TODO: use reified context as default receiver?
+                        invoke_compiled(
+                            state,
+                            method_body.body,
+                            body_ctxt,
+                            default_receiver=NullValue(),
+                            cleanup=None,
+                            is_cleanup=False,
+                            cleanup_retain=None,
+                        )
+                    elif isinstance(method_body, IntrinsicMethodBody):
+                        try:
+                            handler = method_body.handler
+                            # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
+                            # responsibility for updating the frame as necessary.
+                            handler.handler(state, *args)
+                        except Exception as e:
+                            # TODO: allow handlers to raise more targeted exceptions that already include a condition name
+                            signal_error(
+                                condition_name="internal-error",
+                                error_message=f"error from intrinsic handler: {e}",
+                                state=state,
+                                source_exception=e,
+                                already_signaled=already_signaled,
+                            )
+                            return
+                    elif isinstance(method_body, NativeMethodBody):
+                        try:
+                            handler = method_body.handler
+                            # handler is something which can be called with a context, receiver, and arguments.
+                            # It should not call evaluation functions. (It can, but the stack is not reified and
+                            # uses host language stack instead).
+                            result = handler.handler(frame.context, *args)
+                        except Exception as e:
+                            # TODO: allow handlers to raise more targeted exceptions that already include a condition name
+                            signal_error(
+                                condition_name="internal-error",
+                                error_message=f"error from builtin handler: {e}",
+                                state=state,
+                                source_exception=e,
+                                already_signaled=already_signaled,
+                            )
+                            return
+                        assert isinstance(
+                            result, Value
+                        ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
+                        frame.data_stack.append(result)
+                        frame.spot += 1
+                    else:
+                        raise AssertionError(f"Unexpected method body '{method_body}'")
+                else:
+                    raise AssertionError(f"Unexpected slot value '{slot}'")
 
         # Find the slot value:
         ctxt = frame.context
@@ -656,124 +899,34 @@ def eval_one_op(state: RuntimeState) -> None:
                 condition_name="undefined-slot",
                 error_message=f"Could not invoke '{message}'; slot is not defined.",
                 state=state,
+                source_exception=None,
+                already_signaled=False,
             )
             return
 
-        if isinstance(slot, Value):
-            state.data_stack = state.data_stack[:-nargs]
-            state.data_stack.append(slot)
-            frame.spot += 1
-        else:
-            stack_len = len(state.data_stack)
-            # Note: args includes the receiver.
-            args = state.data_stack[stack_len - nargs :]
-            state.data_stack = state.data_stack[:-nargs]
-            if isinstance(slot, MultiMethod):
-                multimethod = slot
-
-                try:
-                    method = multimethod.select_method(args)
-                except SignalError as e:
-                    signal_error(
-                        condition_name=e.condition_name,
-                        error_message=str(e),
-                        state=state,
-                    )
-
-                method_body = method.body
-                if isinstance(method_body, QuoteMethodBody):
-                    if not method_body.body:
-                        # TODO: do this earlier, within method:does:.
-                        method_body.body = compile(method_body.body_expr)
-
-                    body_ctxt = Context(slots={}, base=method_body.context)
-                    assert len(args) == len(
-                        method_body.param_names
-                    ), f"{len(args)} != len({method_body.param_names})"
-                    for param_name, arg in zip(method_body.param_names, args):
-                        body_ctxt.slots[param_name] = arg
-
-                    # TODO: use reified context as default receiver?
-                    invoke_compiled(
-                        state,
-                        method_body.body,
-                        body_ctxt,
-                        default_receiver=NullValue(),
-                        cleanup=None,
-                        is_cleanup=False,
-                    )
-                elif isinstance(method_body, IntrinsicMethodBody):
-                    try:
-                        handler = method_body.handler
-                        # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
-                        # responsibility for updating the frame as necessary.
-                        handler.handler(state, *args)
-                    except Exception as e:
-                        # TODO: allow handlers to raise more targeted exceptions that already include a condition name
-                        signal_error(
-                            condition_name="internal-error",
-                            error_message=f"error from intrinsic handler: {e}",
-                            state=state,
-                        )
-                        return
-                elif isinstance(method_body, NativeMethodBody):
-                    try:
-                        handler = method_body.handler
-                        # handler is something which can be called with a context, receiver, and arguments.
-                        # It should not call evaluation functions. (It can, but the stack is not reified and
-                        # uses host language stack instead).
-                        result = handler.handler(frame.context, *args)
-                    except Exception as e:
-                        # TODO: allow handlers to raise more targeted exceptions that already include a condition name
-                        signal_error(
-                            condition_name="internal-error",
-                            error_message=f"error from builtin handler: {e}",
-                            state=state,
-                        )
-                        return
-                    assert isinstance(
-                        result, Value
-                    ), f"Result from builtin handler '{message}' must be a Value; got '{result}'."
-                    state.data_stack.append(result)
-                    frame.spot += 1
-                else:
-                    raise AssertionError(f"Unexpected method body '{method_body}'")
-            else:
-                raise AssertionError(f"Unexpected slot value '{slot}'")
+        _do_invoke(state, frame, message, slot, nargs, already_signaled=False)
     elif op == "components>vector":
         (length,) = bytecode.args
         assert isinstance(length, int)
-        assert 0 <= length <= len(state.data_stack)
-        components = state.data_stack[len(state.data_stack) - length :]
-        state.data_stack = state.data_stack[: len(state.data_stack) - length]
-        state.data_stack.append(VectorValue(components))
+        assert 0 <= length <= len(frame.data_stack)
+        components = frame.data_stack[len(frame.data_stack) - length :]
+        frame.data_stack = frame.data_stack[: len(frame.data_stack) - length]
+        frame.data_stack.append(VectorValue(components))
         frame.spot += 1
     elif op == "components>tuple":
         (length,) = bytecode.args
         assert isinstance(length, int)
-        assert 0 <= length <= len(state.data_stack)
-        components = state.data_stack[len(state.data_stack) - length :]
-        state.data_stack = state.data_stack[: len(state.data_stack) - length]
-        state.data_stack.append(TupleValue(components))
+        assert 0 <= length <= len(frame.data_stack)
+        components = frame.data_stack[len(frame.data_stack) - length :]
+        frame.data_stack = frame.data_stack[: len(frame.data_stack) - length]
+        frame.data_stack.append(TupleValue(components))
         frame.spot += 1
     elif op == "drop":
         assert not bytecode.args
-        state.data_stack.pop()
+        frame.data_stack.pop()
         frame.spot += 1
     else:
         raise AssertionError(f"Forgot a bytecode op! {op}")
-
-
-def unwind_frame(state: RuntimeState) -> None:
-    assert state.call_stack
-    frame = state.call_stack.pop()
-    assert not (frame.is_cleanup and frame.force_unwind)
-    if frame.is_cleanup:
-        # Cleanup actions, like any other invocation, leave a value on the data stack.
-        # We ignore the result.
-        state.data_stack.pop()
-    if frame.cleanup:
-        call_impl("call", state, receiver=frame.cleanup, args=[], cleanup=None, is_cleanup=True)
 
 
 def invoke_compiled(
@@ -783,30 +936,51 @@ def invoke_compiled(
     default_receiver: Value,
     cleanup: Optional[Value],
     is_cleanup: bool,
+    cleanup_retain: Optional[Value],
 ) -> None:
-    # There is not necessarily any call frame currently active; for instance,
-    # we could be invoking the cleanup action of a top level call frame with
-    # tail-call optimization in effect.
     if not is_cleanup:
-        assert state.call_stack
+        assert not cleanup_retain
+    assert not (cleanup and is_cleanup)
+
+    # There may not be any call frame active, for instance if we are invoking the
+    # cleanup action of some top-level block with tail-call optimization in effect.
     if state.call_stack:
         frame = state.call_stack[-1]
-        assert 0 <= frame.spot < len(frame.sequence.code)
-        # Tail-call optimization!
-        if frame.spot == len(frame.sequence.code) - 1:
-            unwind_frame(state)
+
+        if is_cleanup:
+            # This could be a tail-call cleanup-action invocation.
+            assert 0 <= frame.spot <= len(frame.sequence.code)
         else:
+            assert 0 <= frame.spot < len(frame.sequence.code)
+
+        # Tail-call optimization! Don't tail-call if the current frame has a cleanup
+        # action or if the current frame _is_ a cleanup action, though, to keep things
+        # simpler.
+        # TODO: support tail-call if current frame and even next frame both have cleanup
+        # actions required.
+        if frame.spot == len(frame.sequence.code) - 1 and not (frame.is_cleanup or frame.cleanup):
+            # Unwind the frame. It hasn't yet produced a return value; that's what
+            # we are about to calculate with a new frame.
+            state.call_stack.pop()
+        # Don't shift the frame if is_cleanup, since in this case we are setting
+        # up a frame to handle a cleanup action, and this frame was _not_ created
+        # due to explicitly invoking some callable object (i.e. as a normal part
+        # of the frame's bytecode sequence), but rather automatically while unwinding
+        # a frame.
+        elif not is_cleanup:
             frame.spot += 1
+
     state.call_stack.append(
         CallFrame(
             sequence=code,
             spot=0,
+            data_stack=[],
             context=ctxt,
             default_receiver=default_receiver,
             cleanup=cleanup,
             is_cleanup=is_cleanup,
+            cleanup_retain=cleanup_retain,
             force_unwind=False,
-            initial_data_stack_size=len(state.data_stack),
         )
     )
 
@@ -826,20 +1000,30 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
             CallFrame(
                 bytecode,
                 spot=0,
+                data_stack=[],
                 context=context,
                 default_receiver=NullValue(),
                 cleanup=None,
                 is_cleanup=False,
+                cleanup_retain=None,
                 force_unwind=False,
-                initial_data_stack_size=0,
             )
         ],
-        data_stack=[],
     )
-    while state.call_stack:
+    while True:
+        if len(state.call_stack) == 1:
+            frame = state.call_stack[0]
+            if frame.spot == len(frame.sequence.code) and not frame.cleanup:
+                break
         eval_one_op(state)
-    assert len(state.data_stack) == 1
-    return state.data_stack.pop()
+    debug_log_state(state)
+    frame = state.call_stack[0]
+    assert len(state.call_stack[0].data_stack) == 1
+    if frame.is_cleanup:
+        assert frame.cleanup_retain
+        return frame.cleanup_retain
+    else:
+        return state.call_stack[0].data_stack[0]
 
 
 #################################################
@@ -864,9 +1048,10 @@ def intrinsic__if_then_else(
             default_receiver=NullValue(),
             cleanup=None,
             is_cleanup=False,
+            cleanup_retain=None,
         )
     else:
-        state.data_stack.append(body)
+        state.call_stack[-1].data_stack.append(body)
         shift_frame(state)
 
 
@@ -877,7 +1062,12 @@ def call_impl(
     args: list[Value],
     cleanup: Optional[Value],
     is_cleanup: bool,
+    cleanup_retain: Optional[Value],
 ):
+    if not is_cleanup:
+        assert not cleanup_retain
+    assert not (cleanup and is_cleanup)
+
     if isinstance(receiver, QuoteValue):
         # Special-case no parameters with one argument.
         if not receiver.parameters and len(args) == 1:
@@ -900,6 +1090,7 @@ def call_impl(
             default_receiver=default_receiver,
             cleanup=cleanup,
             is_cleanup=is_cleanup,
+            cleanup_retain=cleanup_retain,
         )
     elif isinstance(receiver, ContinuationValue):
         if cleanup or is_cleanup:
@@ -910,8 +1101,7 @@ def call_impl(
             )
         continuation = receiver.state
         state.call_stack = [frame.copy() for frame in continuation.call_stack]
-        state.data_stack = list(continuation.data_stack)
-        state.data_stack.append(args[0])
+        state.call_stack[-1].data_stack.append(args[0])
     elif isinstance(receiver, ReturnContinuationValue):
         if cleanup or is_cleanup:
             raise NotImplementedError()
@@ -938,41 +1128,56 @@ def call_impl(
                 break
             if not frame.is_cleanup:
                 frame.force_unwind = True
-        state.data_stack.append(args[0])
+        state.call_stack[-1].data_stack.append(args[0])
         assert state.call_stack
         shift_frame(state)
     else:
-        # There is not necessarily any call frame currently active; for instance,
-        # we could be invoking the cleanup action of a top level call frame with
-        # tail-call optimization in effect.
-        if not is_cleanup:
-            state.data_stack.append(receiver)
-            assert state.call_stack
-            if not cleanup:
-                shift_frame(state)
+        # Calling a non-callable value; the result is simply the value.
         if cleanup:
-            call_impl("call", state, receiver=cleanup, args=[], cleanup=None, is_cleanup=True)
+            # Someone called `cleanup:` on a non-callable value. Kinda pointless, but run the
+            # cleanup action regardless.
+            call_impl(
+                "call",
+                state,
+                receiver=cleanup,
+                args=[],
+                cleanup=None,
+                is_cleanup=True,
+                cleanup_retain=receiver,
+            )
+        else:
+            state.call_stack[-1].data_stack.append(receiver)
+            shift_frame(state)
 
 
 def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
-    call_impl("call", state, receiver, args=[], cleanup=None, is_cleanup=False)
+    call_impl("call", state, receiver, args=[], cleanup=None, is_cleanup=False, cleanup_retain=None)
 
 
 def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None:
-    call_impl("call:", state, receiver, args=[value], cleanup=None, is_cleanup=False)
+    call_impl(
+        "call:", state, receiver, args=[value], cleanup=None, is_cleanup=False, cleanup_retain=None
+    )
 
 
 def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) -> None:
     if not isinstance(value, TupleValue):
         raise ValueError("call*: value must be a tuple")
-    call_impl("call*:", state, receiver, args=value.components, cleanup=None, is_cleanup=False)
+    call_impl(
+        "call*:",
+        state,
+        receiver,
+        args=value.components,
+        cleanup=None,
+        is_cleanup=False,
+        cleanup_retain=None,
+    )
 
 
 def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
     current_continuation = ContinuationValue(
         state=RuntimeState(
             call_stack=[frame.copy() for frame in state.call_stack],
-            data_stack=list(state.data_stack),
         )
     )
     call_impl(
@@ -982,11 +1187,14 @@ def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
         args=[current_continuation],
         cleanup=None,
         is_cleanup=False,
+        cleanup_retain=None,
     )
 
 
 def intrinsic__cleanup_(state: RuntimeState, receiver: Value, cleanup: Value) -> None:
-    call_impl("cleanup:", state, receiver, args=[], cleanup=cleanup, is_cleanup=False)
+    call_impl(
+        "cleanup:", state, receiver, args=[], cleanup=cleanup, is_cleanup=False, cleanup_retain=None
+    )
 
 
 def intrinsic__call_rc(state: RuntimeState, receiver: Value) -> None:
@@ -998,6 +1206,7 @@ def intrinsic__call_rc(state: RuntimeState, receiver: Value) -> None:
         args=[return_continuation],
         cleanup=None,
         is_cleanup=False,
+        cleanup_retain=None,
     )
 
 
@@ -1019,7 +1228,7 @@ intrinsic_handlers = {
     ),
     "call/cc": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call_cc)),
     "cleanup:": (
-        (ParameterAnyMatcher(), ParameterAnyMatcher()),
+        (ParameterAnyMatcher(), ParameterTypeMatcher(QuoteType)),
         IntrinsicHandler(intrinsic__cleanup_),
     ),
     # call/return-continuation

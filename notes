@@ -111,7 +111,7 @@ continuations and error handling:
     - maybe best option is to have primitives:
       * unwind-protect (quote to call, and quote to run no matter what while unwinding stack frames)
       * call/cc but the continuation is only valid in dynamic scope of the called quote (i.e. can only return to call/cc site)
-      * and finally, hard-code calling signal: method on any exception
+      * and finally, hard-code calling handle-signal: method on any exception
 
 TODO:
 * inheritance / type hierarchy
@@ -124,3 +124,5 @@ TODO:
   - also delete some of the builtins which should be handled as part of compiler (let:=:, if:then:else:, etc.)?
 * literal data structure syntax?
   * %{ { key; value}; { key; value } ... }
+* modules?
+  * should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)

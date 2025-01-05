@@ -69,6 +69,14 @@ method: [vec each: action] does: [
     ]
 ]
 
+method: [vec each-reversed: action] does: [
+    let: 'i =: vec length - 1
+    while: [i >= 0] do: [
+        action call: (vec at: i)
+        'i = i - 1
+    ]
+]
+
 let: 'data =: {
     { 1; 2; 3 }
     { 4; 5; }
@@ -242,8 +250,8 @@ switch: {
 }
 
 [ print: "in body" ] cleanup: [ print: "in cleanup" ]
-[ print: "in body 2" ] cleanup: "shouldn't see this string!"
-null cleanup: [ print: "cleaning up from null" ]
+#[ print: "in body 2" ] cleanup: "shouldn't see this string!"
+1234 cleanup: [ print: "cleaning up from 1234" ]
 
 [
     let: 'result =: \ret [
@@ -275,12 +283,148 @@ method: [bottom: return] does: [
 ]
 print: \ret [bottom: ret] call/rc
 
+#method: [handle-signal: condition] does: [
+#    print: "handle-signal: got a condition : " ~ condition >string
+#    "<result from handle-signal:>"
+#]
+
 [
     let: 'rc-handle =: null
     \rc ['rc-handle = rc] call/rc
     print: rc-handle
     # This raises an error now.
-    #rc-handle call: 5
+    #print: (rc-handle call: 5)
     # TODO: hm, need to fix some syntax here. shouldn't need to put an expr at the end after a comment...
     1
 ] call
+
+#\cc [cc call*: 1,2] call/cc
+
+# TODO: fix things so that TCO doesn't invalidate return-continuations.
+# This is currently broken: if `<quote> call/rc` is in tail position,
+# then `call/rc` produces a return-continuation referring to `<quote> call/rc`,
+# but then TCO replaces this call frame with an invocation of `<quote>`.
+method: [no-tco!] does: [self]
+
+[
+    \ret [
+        [
+            ret call: 1234
+        ] cleanup: [ print: "first cleanup" ]
+    ] call/rc no-tco!
+] cleanup: [
+    print: "second cleanup"
+]
+
+method: [do-a-tail-cleanup] does: [ [ [ 1234 ] call ] cleanup: [ print: "other cleanup" ] ]
+[ do-a-tail-cleanup ] cleanup: [ print: "some cleanup" ]
+
+
+###################################################################
+
+let: 'namestack =: {{}}
+method: [push-scope: vars] does: [namestack append: vars]
+method: [pop-scope] does: [namestack pop]
+method: [scope has-var: (var: Symbol)] does: [
+    \ret [
+        scope each: \entry [
+            if: (entry at: 0) == var then: [ret call: t]
+        ]
+        f
+    ] call/rc no-tco!
+]
+method: [scope get-var: (var: Symbol)] does: [
+    \ret [
+        scope each: \entry [
+            if: (entry at: 0) == var then: [ret call: (entry at: 1)]
+        ]
+    ] call/rc no-tco!
+]
+method: [scope set: (var: Symbol) value: value] does: [
+    \ret [
+        scope each: \entry [
+            if: (entry at: 0) == var then: [
+                entry at: 1 =: value
+                ret call
+            ]
+        ]
+        scope append: {var; value}
+    ] call/rc no-tco!
+    value
+]
+method: [(name: Symbol) get] does: [
+    \ret [
+        namestack each-reversed: \scope [
+            if: (scope has-var: name) then: [ret call: (scope get-var: name)]
+        ]
+    ] call/rc no-tco!
+]
+method: [(name: Symbol) set: value] does: [(namestack at: (namestack length - 1)) set: name value: value ]
+method: [with-scope: (body: Quote)] does: [
+    push-scope: {}
+    body cleanup: [pop-scope]
+]
+
+###################################################################
+
+:x set: 1
+print: :x get
+with-scope: [
+    print: :x get
+    :x set: 2
+    print: :x get
+]
+print: :x get
+
+###################################################################
+
+# TODO: use separate namestack
+method: [(body: Quote) with-handlers: handlers] does: [
+    with-scope: [
+        handlers each: \entry [
+            let: 'condition =: (entry at: 0)
+            let: 'handler =: (entry at: 1)
+            condition set: handler
+        ]
+        body call
+    ]
+]
+
+# TODO: use separate namestack
+method: [(body: Quote) with-restarts: restarts] does: [
+    with-scope: [
+        restarts each: \entry [
+            let: 'restart =: (entry at: 0)
+            let: 'handler =: (entry at: 1)
+            restart set: handler
+        ]
+        body call
+    ]
+]
+
+# TODO: use separate namestack
+method: [(restart: Symbol) invoke-restart] does: [
+    restart get call
+]
+
+method: [handle-signal: condition-tuple] does: [
+    print: "GOT A CONDITION: " ~ condition-tuple >string
+    \condition message [
+        let: 'handler =: condition get
+        handler call: message
+    ] call*: condition-tuple
+]
+
+[
+    [ blah ] with-restarts: {
+        { :use-10; [ 10 ] }
+    }
+] with-handlers: {
+    {
+        :undefined-slot; \message [
+            print: "got an :undefined-slot: " ~ message
+            print: "invoking :use-10 restart!"
+            :use-10 invoke-restart
+        ]
+    }
+}
