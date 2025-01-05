@@ -9,7 +9,6 @@ from interpreter import (
     DataclassTypeType,
     DataclassTypeValue,
     DataclassValue,
-    DynamicContinuationType,
     IntrinsicMethodBody,
     Method,
     MultiMethod,
@@ -25,6 +24,7 @@ from interpreter import (
     QuoteMethodBody,
     QuoteType,
     QuoteValue,
+    ReturnContinuationType,
     StringType,
     StringValue,
     SymbolType,
@@ -100,7 +100,7 @@ builtin_value("Vector", VectorType)
 builtin_value("Tuple", TupleType)
 builtin_value("Quote", QuoteType)
 builtin_value("Continuation", ContinuationType)
-builtin_value("DynamicContinuation", DynamicContinuationType)
+builtin_value("ReturnContinuation", ReturnContinuationType)
 builtin_value("Type", TypeType)
 builtin_value("DataclassType", DataclassTypeType)
 
@@ -225,7 +225,7 @@ builtin_method("Tuple?", (None,), handle_is_type(TupleType))
 builtin_method("Vector?", (None,), handle_is_type(VectorType))
 builtin_method("Quote?", (None,), handle_is_type(QuoteType))
 builtin_method("Continuation?", (None,), handle_is_type(ContinuationType))
-builtin_method("DynamicContinuation?", (None,), handle_is_type(DynamicContinuationType))
+builtin_method("ReturnContinuation?", (None,), handle_is_type(ReturnContinuationType))
 builtin_method("Type?", (None,), handle_is_type(TypeType))
 builtin_method("DataclassType?", (None,), handle_is_type(DataclassTypeType))
 

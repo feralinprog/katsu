@@ -118,7 +118,7 @@ class ContinuationValue(Value):
 
 
 @dataclass
-class DynamicContinuationValue(Value):
+class ReturnContinuationValue(Value):
     # Uses reference equality to determine if the return_to frame is still
     # in the current dynamic scope (i.e. on the call stack).
     # TODO: make this work with continuations (since those are implemented
@@ -126,7 +126,7 @@ class DynamicContinuationValue(Value):
     return_to: "CallFrame"
 
     def __str__(self):
-        return "<dynamic-continuation>"
+        return "<return-continuation>"
 
 
 @dataclass
@@ -169,7 +169,7 @@ VectorType = TypeValue("Vector", bases=[])
 TupleType = TypeValue("Tuple", bases=[])
 QuoteType = TypeValue("Quote", bases=[])
 ContinuationType = TypeValue("Continuation", bases=[])
-DynamicContinuationType = TypeValue("DynamicContinuation", bases=[])
+ReturnContinuationType = TypeValue("ReturnContinuation", bases=[])
 TypeType = TypeValue("Type", bases=[])
 DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
 
@@ -193,8 +193,8 @@ def type_of(value: Value) -> TypeValue:
         return QuoteType
     elif isinstance(value, ContinuationValue):
         return ContinuationType
-    elif isinstance(value, DynamicContinuationValue):
-        return DynamicContinuationType
+    elif isinstance(value, ReturnContinuationValue):
+        return ReturnContinuationType
     elif isinstance(value, TypeValue):
         return TypeType
     elif isinstance(value, DataclassTypeValue):
@@ -912,12 +912,12 @@ def call_impl(
         state.call_stack = [frame.copy() for frame in continuation.call_stack]
         state.data_stack = list(continuation.data_stack)
         state.data_stack.append(args[0])
-    elif isinstance(receiver, DynamicContinuationValue):
+    elif isinstance(receiver, ReturnContinuationValue):
         if cleanup or is_cleanup:
             raise NotImplementedError()
         if len(args) != 1:
             raise ValueError(
-                f"{message} receiver (a dynamic continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
+                f"{message} receiver (a return-continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
             )
         return_to_frame = receiver.return_to
         # Look for the frame in anything below the current top of stack.
@@ -929,7 +929,7 @@ def call_impl(
                 found_frame = True
                 break
         if not found_frame:
-            raise ValueError(f"{message} receiver (a dynamic continuation) is no longer in scope")
+            raise ValueError(f"{message} receiver (a return-continuation) is no longer in scope")
         # Force frames from top-of-stack down to just above the `return_to_frame` to exit early
         # when we next get around to running any bytecode. Leave is_cleanup frames alone, though;
         # we still want to execute those!
@@ -989,13 +989,13 @@ def intrinsic__cleanup_(state: RuntimeState, receiver: Value, cleanup: Value) ->
     call_impl("cleanup:", state, receiver, args=[], cleanup=cleanup, is_cleanup=False)
 
 
-def intrinsic__call_dc(state: RuntimeState, receiver: Value) -> None:
-    dynamic_continuation = DynamicContinuationValue(return_to=state.call_stack[-1])
+def intrinsic__call_rc(state: RuntimeState, receiver: Value) -> None:
+    return_continuation = ReturnContinuationValue(return_to=state.call_stack[-1])
     call_impl(
-        "call/dc",
+        "call/rc",
         state,
         receiver,
-        args=[dynamic_continuation],
+        args=[return_continuation],
         cleanup=None,
         is_cleanup=False,
     )
@@ -1022,6 +1022,6 @@ intrinsic_handlers = {
         (ParameterAnyMatcher(), ParameterAnyMatcher()),
         IntrinsicHandler(intrinsic__cleanup_),
     ),
-    # call/dynamic-continuation
-    "call/dc": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call_dc)),
+    # call/return-continuation
+    "call/rc": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call_rc)),
 }

@@ -250,7 +250,7 @@ null cleanup: [ print: "cleaning up from null" ]
         print: "before return"
         1 + (ret call: "<the result>")
         print: "after return"
-    ] call/dc
+    ] call/rc
     print: "result: " ~ result >string
 ] call
 
@@ -273,14 +273,14 @@ method: [bottom: return] does: [
     ]
     print: "bottom, after calling middle (BAD)"
 ]
-print: \ret [bottom: ret] call/dc
+print: \ret [bottom: ret] call/rc
 
 [
-    let: 'dc-handle =: null
-    \dc ['dc-handle = dc] call/dc
-    print: dc-handle
+    let: 'rc-handle =: null
+    \rc ['rc-handle = rc] call/rc
+    print: rc-handle
     # This raises an error now.
-    #dc-handle call: 5
-    # TODO: hm, need to fix some syntax here. shouldn't need to put an expr at the end...
+    #rc-handle call: 5
+    # TODO: hm, need to fix some syntax here. shouldn't need to put an expr at the end after a comment...
     1
 ] call
