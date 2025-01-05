@@ -244,3 +244,12 @@ switch: {
 [ print: "in body" ] cleanup: [ print: "in cleanup" ]
 [ print: "in body 2" ] cleanup: "cleaning up!"
 null cleanup: [ print: "cleaning up from null" ]
+
+[
+    let: 'result =: \ret [
+        print: "before return"
+        1 + (ret call: "<the result>")
+        print: "after return"
+    ] call/dc
+    print: "result: " ~ result >string
+] call

@@ -118,6 +118,18 @@ class ContinuationValue(Value):
 
 
 @dataclass
+class DynamicContinuationValue(Value):
+    # Uses reference equality to determine if the return_to frame is still
+    # in the current dynamic scope (i.e. on the call stack).
+    # TODO: make this work with continuations (since those are implemented
+    # as wholesale copying call frames...)
+    return_to: "CallFrame"
+
+    def __str__(self):
+        return "<dynamic-continuation>"
+
+
+@dataclass
 class TypeValue(Value):
     name: str
     bases: list["TypeValue"]
@@ -157,6 +169,7 @@ VectorType = TypeValue("Vector", bases=[])
 TupleType = TypeValue("Tuple", bases=[])
 QuoteType = TypeValue("Quote", bases=[])
 ContinuationType = TypeValue("Continuation", bases=[])
+DynamicContinuationType = TypeValue("DynamicContinuation", bases=[])
 TypeType = TypeValue("Type", bases=[])
 DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
 
@@ -180,6 +193,8 @@ def type_of(value: Value) -> TypeValue:
         return QuoteType
     elif isinstance(value, ContinuationValue):
         return ContinuationType
+    elif isinstance(value, DynamicContinuationValue):
+        return DynamicContinuationType
     elif isinstance(value, TypeValue):
         return TypeType
     elif isinstance(value, DataclassTypeValue):
@@ -240,10 +255,10 @@ class Context:
 class BytecodeOp:
     # TODO: switch to enum
     op: str
+    # TODO: make subclasses per op for better type safety
+    args: Tuple
     # For stack traces / debugging
     span: SourceSpan
-    # TODO: make subclasses per op for better type safety
-    args: Optional[Tuple] = None
 
 
 # List of bytecode operations:
@@ -278,6 +293,12 @@ class CallFrame:
     cleanup: Optional[Value]
     # Is this frame the invocation of a cleanup action?
     is_cleanup: bool
+    # If true, when we next attempt to execute any bytecode in this frame,
+    # the frame will be immediately unwound instead, with no net delta to
+    # the data stack.
+    force_unwind: bool
+    # Size of the data stack on entering this call frame.
+    initial_data_stack_size: int
 
     def copy(self) -> "CallFrame":
         return CallFrame(
@@ -287,6 +308,8 @@ class CallFrame:
             default_receiver=self.default_receiver,
             cleanup=self.cleanup,
             is_cleanup=self.is_cleanup,
+            force_unwind=self.force_unwind,
+            initial_data_stack_size=self.initial_data_stack_size,
         )
 
 
@@ -477,7 +500,7 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
     assert expr is not None
 
     def add(op: str, *args, span: SourceSpan):
-        sequence.code.append(BytecodeOp(op, span, args))
+        sequence.code.append(BytecodeOp(op=op, args=args, span=span))
 
     if isinstance(expr, UnaryOpExpr):
         compile_into(expr.arg, sequence)
@@ -557,8 +580,15 @@ def eval_one_op(state: RuntimeState) -> None:
     frame = state.call_stack[-1]
     assert 0 <= frame.spot <= len(frame.sequence.code)
 
-    if frame.spot == len(frame.sequence.code):
-        # Return from invocation.
+    if frame.spot == len(frame.sequence.code) or frame.force_unwind:
+        # Return from invocation. If the unwind is forced, then drop values from the data stack
+        # so as to make the entire frame execution a net zero delta. (Keep the top value of the
+        # data stack, though; this is the value we are non-locally-returning to a caller.)
+        if frame.force_unwind:
+            assert len(state.data_stack) >= frame.initial_data_stack_size + 1
+            nonlocal_return_value = state.data_stack.pop()
+            state.data_stack = state.data_stack[: frame.initial_data_stack_size]
+            state.data_stack.append(nonlocal_return_value)
         unwind_frame(state)
         return
 
@@ -774,6 +804,8 @@ def invoke_compiled(
             default_receiver=default_receiver,
             cleanup=cleanup,
             is_cleanup=is_cleanup,
+            force_unwind=False,
+            initial_data_stack_size=len(state.data_stack),
         )
     )
 
@@ -797,6 +829,8 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
                 default_receiver=NullValue(),
                 cleanup=None,
                 is_cleanup=False,
+                force_unwind=False,
+                initial_data_stack_size=0,
             )
         ],
         data_stack=[],
@@ -877,6 +911,30 @@ def call_impl(
         state.call_stack = [frame.copy() for frame in continuation.call_stack]
         state.data_stack = list(continuation.data_stack)
         state.data_stack.append(args[0])
+    elif isinstance(receiver, DynamicContinuationValue):
+        if cleanup or is_cleanup:
+            raise NotImplementedError()
+        if len(args) != 1:
+            raise ValueError(
+                f"{message} receiver (a dynamic continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
+            )
+        return_to_frame = receiver.return_to
+        found_frame = False
+        for frame in reversed(state.call_stack):
+            if frame is return_to_frame:
+                found_frame = True
+                break
+        if not found_frame:
+            raise ValueError(f"{message} receiver (a dynamic continuation) is no longer in scope")
+        # Force frames from top-of-stack down to just above the `return_to_frame` to exit early
+        # when we next get around to running any bytecode.
+        for frame in reversed(state.call_stack):
+            if frame is return_to_frame:
+                break
+            frame.force_unwind = True
+        state.data_stack.append(args[0])
+        assert state.call_stack
+        shift_frame(state)
     else:
         # There is not necessarily any call frame currently active; for instance,
         # we could be invoking the cleanup action of a top level call frame with
@@ -925,6 +983,18 @@ def intrinsic__cleanup_(state: RuntimeState, receiver: Value, cleanup: Value) ->
     call_impl("cleanup:", state, receiver, args=[], cleanup=cleanup, is_cleanup=False)
 
 
+def intrinsic__call_dc(state: RuntimeState, receiver: Value) -> None:
+    dynamic_continuation = DynamicContinuationValue(return_to=state.call_stack[-1])
+    call_impl(
+        "call/dc",
+        state,
+        receiver,
+        args=[dynamic_continuation],
+        cleanup=None,
+        is_cleanup=False,
+    )
+
+
 intrinsic_handlers = {
     "if:then:else:": (
         (
@@ -946,4 +1016,6 @@ intrinsic_handlers = {
         (ParameterAnyMatcher(), ParameterAnyMatcher()),
         IntrinsicHandler(intrinsic__cleanup_),
     ),
+    # call/dynamic-continuation
+    "call/dc": ((ParameterAnyMatcher(),), IntrinsicHandler(intrinsic__call_dc)),
 }
