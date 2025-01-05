@@ -14,7 +14,7 @@ from parser import (
     parser,
 )
 
-from termcolor import colored, cprint
+from termcolor import colored
 
 from builtin import global_context
 from error import ParseError, RunError
