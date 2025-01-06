@@ -300,18 +300,12 @@ print: \ret [bottom: ret] call/rc
 
 #\cc [cc call*: 1,2] call/cc
 
-# TODO: fix things so that TCO doesn't invalidate return-continuations.
-# This is currently broken: if `<quote> call/rc` is in tail position,
-# then `call/rc` produces a return-continuation referring to `<quote> call/rc`,
-# but then TCO replaces this call frame with an invocation of `<quote>`.
-method: [no-tco!] does: [self]
-
 [
     \ret [
         [
             ret call: 1234
         ] cleanup: [ print: "first cleanup" ]
-    ] call/rc no-tco!
+    ] call/rc
 ] cleanup: [
     print: "second cleanup"
 ]
@@ -331,14 +325,14 @@ method: [scope has-var: (var: Symbol)] does: [
             if: (entry at: 0) == var then: [ret call: t]
         ]
         f
-    ] call/rc no-tco!
+    ] call/rc
 ]
 method: [scope get-var: (var: Symbol)] does: [
     \ret [
         scope each: \entry [
             if: (entry at: 0) == var then: [ret call: (entry at: 1)]
         ]
-    ] call/rc no-tco!
+    ] call/rc
 ]
 method: [scope set: (var: Symbol) value: value] does: [
     \ret [
@@ -349,7 +343,7 @@ method: [scope set: (var: Symbol) value: value] does: [
             ]
         ]
         scope append: {var; value}
-    ] call/rc no-tco!
+    ] call/rc
     value
 ]
 method: [(name: Symbol) get] does: [
@@ -357,7 +351,7 @@ method: [(name: Symbol) get] does: [
         namestack each-reversed: \scope [
             if: (scope has-var: name) then: [ret call: (scope get-var: name)]
         ]
-    ] call/rc no-tco!
+    ] call/rc
 ]
 method: [(name: Symbol) set: value] does: [(namestack at: (namestack length - 1)) set: name value: value ]
 method: [with-scope: (body: Quote)] does: [

@@ -313,6 +313,8 @@ class CallFrame:
     # If true, when we next attempt to execute any bytecode in this frame,
     # the frame will be immediately unwound instead.
     force_unwind: bool
+    # Number of return continuations pointing to this call frame.
+    num_nonlocal_returns: int
 
     def copy(self) -> "CallFrame":
         return CallFrame(
@@ -325,6 +327,9 @@ class CallFrame:
             is_cleanup=self.is_cleanup,
             cleanup_retain=self.cleanup_retain,
             force_unwind=self.force_unwind,
+            # TODO: ... should this just be 0? Need to figure out better way to handle
+            # return-continuation frame matching.
+            num_nonlocal_returns=self.num_nonlocal_returns,
         )
 
 
@@ -613,6 +618,9 @@ def debug_log_state(state: RuntimeState) -> None:
             flags.append("force-unwind")
         if flags:
             print("  " + " ".join(flags))
+
+        if frame.num_nonlocal_returns != 0:
+            print(f"  return continuations returning here: {frame.num_nonlocal_returns}")
 
         print("  bytecode:")
         for spot, bytecode in enumerate(frame.sequence.code):
@@ -953,12 +961,15 @@ def invoke_compiled(
         else:
             assert 0 <= frame.spot < len(frame.sequence.code)
 
-        # Tail-call optimization! Don't tail-call if the current frame has a cleanup
-        # action or if the current frame _is_ a cleanup action, though, to keep things
-        # simpler.
+        # Tail-call optimization! Don't tail-call if the frame has a non-local return
+        # continuation active, as tail-calling would invalidate that continuation.
+        # Also don't tail-call if the current frame has a cleanup action or if the
+        # current frame _is_ a cleanup action, though, to keep things simpler.
         # TODO: support tail-call if current frame and even next frame both have cleanup
         # actions required.
-        if frame.spot == len(frame.sequence.code) - 1 and not (frame.is_cleanup or frame.cleanup):
+        if frame.spot == len(frame.sequence.code) - 1 and not (
+            frame.is_cleanup or frame.cleanup or frame.num_nonlocal_returns > 0
+        ):
             # Unwind the frame. It hasn't yet produced a return value; that's what
             # we are about to calculate with a new frame.
             state.call_stack.pop()
@@ -981,6 +992,7 @@ def invoke_compiled(
             is_cleanup=is_cleanup,
             cleanup_retain=cleanup_retain,
             force_unwind=False,
+            num_nonlocal_returns=0,
         )
     )
 
@@ -1007,6 +1019,7 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
                 is_cleanup=False,
                 cleanup_retain=None,
                 force_unwind=False,
+                num_nonlocal_returns=0,
             )
         ],
     )
@@ -1100,6 +1113,9 @@ def call_impl(
                 f"{message} receiver (a continuation) requires 1 parameter, but is being provided {len(args)} argument(s)"
             )
         continuation = receiver.state
+        # TODO: fully delete (multi-shot) continuations? This does not interact nicely with return-continuations
+        # at all. For instance, using any regular continuation will invalidate all return continuations, even
+        # if not actually jumping sideways through call stacks.
         state.call_stack = [frame.copy() for frame in continuation.call_stack]
         state.call_stack[-1].data_stack.append(args[0])
     elif isinstance(receiver, ReturnContinuationValue):
@@ -1120,6 +1136,9 @@ def call_impl(
                 break
         if not found_frame:
             raise ValueError(f"{message} receiver (a return-continuation) is no longer in scope")
+        # This return-continuation is being finalized, so reduce the reference count on the frame.
+        assert frame.num_nonlocal_returns >= 1
+        frame.num_nonlocal_returns -= 1
         # Force frames from top-of-stack down to just above the `return_to_frame` to exit early
         # when we next get around to running any bytecode. Leave is_cleanup frames alone, though;
         # we still want to execute those!
@@ -1199,6 +1218,8 @@ def intrinsic__cleanup_(state: RuntimeState, receiver: Value, cleanup: Value) ->
 
 def intrinsic__call_rc(state: RuntimeState, receiver: Value) -> None:
     return_continuation = ReturnContinuationValue(return_to=state.call_stack[-1])
+    # Reference-count the return continuations.
+    return_continuation.return_to.num_nonlocal_returns += 1
     call_impl(
         "call/rc",
         state,
