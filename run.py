@@ -22,8 +22,8 @@ from interpreter import NullValue, eval_toplevel
 from lexer import Token, TokenStream, TokenType, get_all_tokens
 from span import SourceFile, SourceSpan
 
-source_path = "./source.src"
-with open("source.src", "r") as f:
+source_path = "./source.k"
+with open("source.k", "r") as f:
     source = f.read()
 
 parser.should_log = False
