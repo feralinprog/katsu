@@ -372,6 +372,25 @@ print: :x get
 
 ###################################################################
 
+data: 'Optional has: {
+    :has-value?
+    :value
+}
+
+method: [some: value] does: [ Optional has-value?: t value: value ]
+method: [none]        does: [ Optional has-value?: f value: null ]
+
+method: [(opt: Optional) then: some-body else: none-body] does: [
+    if: opt .has-value? then: [
+        some-body call: opt .value
+    ] else: [
+        none-body call
+    ]
+]
+
+(some: 5) then: [print] else: [print: "none"]
+none then: [print] else: [print: "none"]
+
 # TODO: use separate namestack
 method: [(body: Quote) with-handlers: handlers] does: [
     with-scope: [
@@ -403,14 +422,33 @@ method: [(restart: Symbol) invoke-restart] does: [
 
 method: [handle-signal: condition-tuple] does: [
     print: "GOT A CONDITION: " ~ condition-tuple >string
-    \condition message [
-        let: 'handler =: condition get
-        handler call: message
-    ] call*: condition-tuple
+    let: 'handler-result =: (
+        \condition message [
+            let: 'handler =: condition get
+            handler call: message
+        ] call*: condition-tuple
+    )
+    if: handler-result Null? then: [
+        panic!: condition-tuple
+    ] else: [ handler-result ]
 ]
 
 [
     [ blah ] with-restarts: {
+        { :use-10; [ 10 ] }
+    }
+] with-handlers: {
+    {
+        :undefined-slot; \message [
+            print: "got an :undefined-slot: " ~ message
+            print: "invoking :use-10 restart!"
+            :use-10 invoke-restart
+        ]
+    }
+}
+
+[
+    [ 1 / 0 ] with-restarts: {
         { :use-10; [ 10 ] }
     }
 ] with-handlers: {
