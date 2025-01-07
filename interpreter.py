@@ -941,6 +941,9 @@ def eval_one_op(state: RuntimeState) -> None:
         raise AssertionError(f"Forgot a bytecode op! {op}")
 
 
+optimize_tail_calls = True
+
+
 def invoke_compiled(
     state: RuntimeState,
     name: str,
@@ -972,8 +975,10 @@ def invoke_compiled(
         # current frame _is_ a cleanup action, though, to keep things simpler.
         # TODO: support tail-call if current frame and even next frame both have cleanup
         # actions required.
-        if frame.spot == len(frame.sequence.code) - 1 and not (
-            frame.is_cleanup or frame.cleanup or frame.num_nonlocal_returns > 0
+        if (
+            optimize_tail_calls
+            and frame.spot == len(frame.sequence.code) - 1
+            and not (frame.is_cleanup or frame.cleanup or frame.num_nonlocal_returns > 0)
         ):
             # Unwind the frame. It hasn't yet produced a return value; that's what
             # we are about to calculate with a new frame.
