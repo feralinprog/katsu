@@ -341,6 +341,7 @@ class CallFrame:
 @dataclass
 class RuntimeState:
     call_stack: list[CallFrame]
+    panic_value: Optional[Value]
 
 
 @dataclass
@@ -1040,6 +1041,7 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
                 num_nonlocal_returns=0,
             )
         ],
+        panic_value=None,
     )
     while True:
         if len(state.call_stack) == 1:
@@ -1048,10 +1050,9 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
                 break
         eval_one_op(state)
     debug_log_state(state)
+    if state.panic_value:
+        raise EvaluationError(state.panic_value)
     frame = state.call_stack[0]
-    if frame.force_unwind:
-        # Must have gotten here in a `panic!:`.
-        raise EvaluationError(frame.data_stack[-1])
     assert len(frame.data_stack) == 1
     if frame.is_cleanup:
         assert frame.cleanup_retain
@@ -1277,8 +1278,7 @@ def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None
 
 
 def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) -> None:
-    if not isinstance(value, TupleValue):
-        raise ValueError("call*: value must be a tuple")
+    assert isinstance(value, TupleValue)
     call_impl(
         "call*:",
         state,
@@ -1294,6 +1294,7 @@ def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
     current_continuation = ContinuationValue(
         state=RuntimeState(
             call_stack=[frame.copy() for frame in state.call_stack],
+            panic_value=state.panic_value,
         )
     )
     call_impl(
@@ -1334,7 +1335,10 @@ def intrinsic__panic_(state: RuntimeState, receiver: Value, value: Value) -> Non
     for frame in reversed(state.call_stack):
         if not frame.is_cleanup:
             frame.force_unwind = True
-    state.call_stack[-1].data_stack.append(value)
+    # HACK: this value is passed down is_cleanup frames but then must be ignored
+    # by eval_toplevel().
+    state.call_stack[-1].data_stack.append("<this value must not be used!>")
+    state.panic_value = value
     shift_top_frame(state)
 
 
