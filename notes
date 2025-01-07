@@ -126,3 +126,4 @@ TODO:
   * %{ { key; value}; { key; value } ... }
 * modules?
   * should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)
+* explicit tail-calls?
