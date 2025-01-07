@@ -18,58 +18,15 @@ from termcolor import colored
 
 from builtin import global_context
 from error import ParseError, RunError
-from interpreter import NullValue, eval_toplevel
+from interpreter import NullValue, eval_toplevel, pprint_stacktrace
 from lexer import Token, TokenStream, TokenType, get_all_tokens
-from span import SourceFile, SourceSpan
+from span import SourceFile
 
 source_path = "./source.k"
 with open("source.k", "r") as f:
     source = f.read()
 
 parser.should_log = False
-
-
-def show_error(header_prefix: str, span: SourceSpan):
-    start, end = span.start, span.end
-    print(f"{header_prefix} (at {span}):")
-
-    context_lines = 2  # excluding error line itself
-    color_output = True
-
-    text_lines = span.file.source.split("\n")
-    for line, text in enumerate(text_lines):
-        if color_output:
-            if not (start.line - context_lines <= line <= end.line + context_lines):
-                continue
-            if line == start.line:
-                end_col = end.column if end.line == start.line else len(text)
-                print(
-                    colored("! ", "blue")
-                    + text[: start.column]
-                    + colored(text[start.column : end_col], "red")
-                    + text[end_col:]
-                )
-            elif start.line < line < end.line:
-                print(colored("! ", "blue") + colored(text, "red"))
-            elif line == end.line:
-                print(
-                    colored("! ", "blue") + colored(text[: end.column], "red") + text[end.column :]
-                )
-            else:
-                # Just context line.
-                print(colored("| ", "green") + text)
-        else:
-            if start.line - context_lines <= line <= end.line + context_lines:
-                print(f"| {text}")
-            if line == start.line:
-                end_col = end.column if end.line == start.line else len(text)
-                print("! " + " " * start.column + "^" * (end_col - start.column))
-            elif start.line < line < end.line:
-                ws = len(text) - len(text.lstrip(" "))
-                print("! " + " " * ws + "^" * (len(text) - ws))
-            elif line == end.line:
-                ws = len(text) - len(text.lstrip(" "))
-                print("! " + " " * ws + "^" * (end.column - ws))
 
 
 def print_syntax_highlighted_tokens(tokens: list[Token]) -> None:
@@ -169,24 +126,6 @@ except ParseError as e:
     show_error("Parse error", e.span)
     print(e)
 except RunError as e:
-    for i, frame in enumerate(e.runtime_state.call_stack):
-        first = i == 0
-        if first:
-            msg = "Evaluation error"
-        else:
-            msg = "While invoking"
-
-        top = i == len(e.runtime_state.call_stack) - 1
-        if top:
-            # Cursor spot has not been ratcheted past the bytecode op producing an error.
-            # Log the current spot.
-            assert 0 <= frame.spot < len(frame.sequence.code)
-            show_error(msg, frame.sequence.code[frame.spot].span)
-        else:
-            # Cursor indicates the bytecode op to _return_ to; the previous op was the
-            # invocation leading to the next call frame.
-            assert 0 < frame.spot <= len(frame.sequence.code)
-            show_error(msg, frame.sequence.code[frame.spot - 1].span)
-        print()
+    pprint_stacktrace(e.runtime_state)
 
     raise e

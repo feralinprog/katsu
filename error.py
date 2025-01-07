@@ -17,3 +17,9 @@ class SignalError(Exception):
     def __init__(self, condition_name: str, message: str):
         super().__init__(message)
         self.condition_name = condition_name
+
+
+class EvaluationError(Exception):
+    def __init__(self, value):
+        super().__init__(str(value))
+        self.value = value
