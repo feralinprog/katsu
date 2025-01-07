@@ -259,6 +259,7 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
     # TODO: allow inheritance
     # make sure to disallow diamond inheritance
     # and also calculate the C3 linearization while we're here
+    # and also don't allow inheriting from sealed types
     _class = DataclassTypeValue(name=class_name, bases=[], slots=slots)
     ctxt.slots[class_name] = _class
 
@@ -276,6 +277,7 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
         ctxt,
         ctor_message,
         Method(
+            # TODO: use value matcher for receiver
             # TODO: allow specifying types for slots
             param_matchers=[ParameterAnyMatcher()] * (1 + len(slots)),
             body=NativeMethodBody(handle_generic_dataclass_constructor(ctor_message)),
