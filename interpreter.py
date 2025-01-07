@@ -1082,7 +1082,7 @@ def intrinsic__if_then_else(
         )
     else:
         state.call_stack[-1].data_stack.append(body)
-        shift_frame(state)
+        shift_top_frame(state)
 
 
 def call_impl(
@@ -1167,10 +1167,11 @@ def call_impl(
                 frame.force_unwind = True
         state.call_stack[-1].data_stack.append(args[0])
         assert state.call_stack
-        shift_frame(state)
+        shift_top_frame(state)
     else:
         # Calling a non-callable value; the result is simply the value.
         if cleanup:
+            frame = state.call_stack[-1]
             # Someone called `cleanup:` on a non-callable value. Kinda pointless, but run the
             # cleanup action regardless.
             call_impl(
@@ -1182,9 +1183,13 @@ def call_impl(
                 is_cleanup=True,
                 cleanup_retain=receiver,
             )
+            # This is a bit hacky. call_impl() -> invoke_compiled() doesn't realize that the
+            # cleanup body has no call frame and that the _previous_ frame therefore needs
+            # to be shifted instead. We just do that here instead.
+            shift_frame(frame)
         else:
             state.call_stack[-1].data_stack.append(receiver)
-            shift_frame(state)
+            shift_top_frame(state)
 
 
 def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
