@@ -295,6 +295,8 @@ class BytecodeSequence:
 
 @dataclass
 class CallFrame:
+    # For debug / logging.
+    name: str
     sequence: BytecodeSequence
     # Next index to execute (or == len(sequence.code) if the next operation
     # is to return.
@@ -318,6 +320,7 @@ class CallFrame:
 
     def copy(self) -> "CallFrame":
         return CallFrame(
+            name=self.name,
             sequence=self.sequence,
             spot=self.spot,
             data_stack=list(self.data_stack),
@@ -609,7 +612,7 @@ def debug_log_state(state: RuntimeState) -> None:
             location_msg = f"at "
             bytecode = frame.sequence.code[frame.spot]
         location_msg += f"{repr(bytecode.span.file.source[bytecode.span.start.index:bytecode.span.end.index])} (at {bytecode.span})"
-        print(f"[{depth}] call frame: {location_msg}")
+        print(f"call frame #{depth}: ({frame.name}) {location_msg}")
 
         flags = []
         if frame.is_cleanup:
@@ -844,6 +847,7 @@ def eval_one_op(state: RuntimeState) -> None:
                         # TODO: use reified context as default receiver?
                         invoke_compiled(
                             state,
+                            message,
                             method_body.body,
                             body_ctxt,
                             default_receiver=NullValue(),
@@ -939,6 +943,7 @@ def eval_one_op(state: RuntimeState) -> None:
 
 def invoke_compiled(
     state: RuntimeState,
+    name: str,
     code: BytecodeSequence,
     ctxt: Context,
     default_receiver: Value,
@@ -983,6 +988,7 @@ def invoke_compiled(
 
     state.call_stack.append(
         CallFrame(
+            name=name,
             sequence=code,
             spot=0,
             data_stack=[],
@@ -997,11 +1003,15 @@ def invoke_compiled(
     )
 
 
-def shift_frame(state: RuntimeState) -> None:
-    assert state.call_stack
-    frame = state.call_stack[-1]
+def shift_frame(frame: CallFrame) -> None:
     frame.spot += 1
     assert 0 <= frame.spot <= len(frame.sequence.code)
+
+
+def shift_top_frame(state: RuntimeState) -> None:
+    assert state.call_stack
+    frame = state.call_stack[-1]
+    shift_frame(frame)
 
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
@@ -1010,7 +1020,8 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
         # TODO: maybe default_receiver should be a reified global context instead?
         call_stack=[
             CallFrame(
-                bytecode,
+                name="<top level>",
+                sequence=bytecode,
                 spot=0,
                 data_stack=[],
                 context=context,
@@ -1056,6 +1067,7 @@ def intrinsic__if_then_else(
         # TODO: compile ahead of time somehow...
         invoke_compiled(
             state,
+            "<a quote>",
             compile(body.body),
             body.context,
             default_receiver=NullValue(),
@@ -1098,6 +1110,7 @@ def call_impl(
         # TODO: compile ahead of time somehow...
         invoke_compiled(
             state,
+            message,
             compile(receiver.body),
             Context(slots=new_slots, base=receiver.context),
             default_receiver=default_receiver,
