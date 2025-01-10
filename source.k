@@ -356,6 +356,34 @@ method: [(opt: Optional) value!] does: [
 (some: 5) then: [print] else: [print: "none"]
 none then: [print] else: [print: "none"]
 
+# Sequences must have:
+#   length
+#   at:
+mixin: 'Sequence
+method: [(seq: Sequence) each: (action: Quote)] does: [
+    let: 'i =: 0
+    while: [i < seq length] do: [
+        action call: (seq at: i)
+        'i = i + 1
+    ]
+]
+
+mix-in: Sequence to: Vector
+
+method: [(opt: Optional) length] does: [ opt then: 1 else: 0 ]
+method: [(opt: Optional) at: (i: Number)] does: [
+    if: i == 0 then: [
+        opt value!
+    ] else: [
+        signal: (:out-of-range, "index " ~ i >string ~ " out of range for optional")
+    ]
+]
+mix-in: Sequence to: Optional
+
+{ 1; 2; 3 } each: [print]
+(some: 123) each: [print]
+none each: [print]
+
 
 ###################################################################
 
@@ -498,7 +526,7 @@ method: [(restart: Symbol) invoke-restart] does: [
 ]
 
 method: [handle-signal: condition-tuple] does: [
-    print: "GOT A CONDITION: " ~ condition-tuple >string
+    #print: "GOT A CONDITION: " ~ condition-tuple >string
     \ret [
         handler-stack each-reversed: [
             if: not (let: 'handler-result =: (it call-handler*: condition-tuple)) Null? then: [
@@ -532,7 +560,7 @@ method: [signal: condition] does: [handle-signal: condition]
     {
         :internal-error; \message [
             print: "got an :internal-error: " ~ message
-            print: "invoking :use-10 restart!"
+            print: "invoking :use-15 restart, which does not exist!"
             :use-15 invoke-restart
         ]
     }

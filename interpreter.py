@@ -148,12 +148,32 @@ class TypeValue(Value):
     sealed: bool
     # C3 linearization.
     linearization: list["TypeValue"] = field(init=False, compare=False)
+    subtypes: list["TypeValue"] = field(init=False, compare=False)
 
     def __post_init__(self):
         self.linearization = c3_linearization(self)
+        self.subtypes = []
+        # (Skip self, which is always first in the linearization.)
+        for base in self.linearization[1:]:
+            if self not in base.subtypes:
+                base.subtypes.append(self)
 
     def __str__(self):
         return f"<class {self.name}>"
+
+    # Switches to new bases and attempts to calculate new linearization.
+    # If linearization fails, restores previous state.
+    def try_set_bases(self, new_bases: list["TypeValue"]) -> None:
+        old_bases = self.bases
+        try:
+            self.bases = new_bases
+            self.linearization = c3_linearization(self)
+        except:
+            self.bases = old_bases
+            raise
+        # Linearization of subtypes should not be able to fail now.
+        for subtype in self.subtypes:
+            subtype.linearization = c3_linearization(subtype)
 
 
 def c3_linearization(type: TypeValue) -> list[TypeValue]:

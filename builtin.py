@@ -11,6 +11,7 @@ from interpreter import (
     DataclassValue,
     IntrinsicMethodBody,
     Method,
+    MixinTypeValue,
     MultiMethod,
     NativeHandler,
     NativeMethodBody,
@@ -376,6 +377,32 @@ builtin_method(
     "data:extends:has:", (None, QuoteType, VectorType, VectorType), handle__data_extends_has_
 )
 builtin_method("data:has:", (None, QuoteType, VectorType), handle__data_has_)
+
+
+def handle__mixin_(ctxt: Context, receiver: Value, name: QuoteValue) -> Value:
+    if isinstance(name.body, NameExpr):
+        mixin_name = name.body.name.value
+    else:
+        raise ValueError(f"mixin: 'name' argument should be a quoted name; got {name}")
+    if mixin_name in ctxt.slots:
+        raise ValueError(f"mixin: slot {mixin_name} already exists")
+    # TODO: allow inheritance?
+    # TODO: allow specifying required methods? (i.e. checker for when we are later mixing-in)
+    ctxt.slots[mixin_name] = MixinTypeValue(name=mixin_name, bases=[], sealed=False)
+    return NullValue()
+
+
+builtin_method("mixin:", (None, QuoteType), handle__mixin_)
+
+
+def handle__mix_in_to_(ctxt: Context, receiver: Value, mixin: TypeValue, type: TypeValue) -> Value:
+    if not isinstance(mixin, MixinTypeValue):
+        raise ValueError(f"mix-in:to: type {mixin} is not a mixin")
+    type.try_set_bases(type.bases + [mixin])
+    return NullValue()
+
+
+builtin_method("mix-in:to:", (None, TypeType, TypeType), handle__mix_in_to_)
 
 
 def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
