@@ -114,9 +114,6 @@ continuations and error handling:
       * and finally, hard-code calling handle-signal: method on any exception
 
 TODO:
-* inheritance / type hierarchy
-* multiple dispatch
-* error handling mechanism(s)
 * coroutines / fibers
 * add a bit more smarts to bytecode compiler. should have conditionals and jumps,
   and should inline any other methods that invoke any of the call* family of methods
@@ -127,3 +124,5 @@ TODO:
 * modules?
   * should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)
 * explicit tail-calls?
+* method:does: should allow marking arguments optional (-> just generate all combos)
+* allow for docs everywhere!

@@ -21,6 +21,7 @@ from interpreter import (
     ParameterAnyMatcher,
     ParameterMatcher,
     ParameterTypeMatcher,
+    ParameterValueMatcher,
     QuoteMethodBody,
     QuoteType,
     QuoteValue,
@@ -171,6 +172,7 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
             param_names.append(param_name)
             param_matchers.append(param_matcher)
     else:
+        # TODO: allow unary / binary ops too
         raise ValueError(
             f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
         )
@@ -232,35 +234,46 @@ builtin_method("Type?", (None,), handle_is_type(TypeType))
 builtin_method("DataclassType?", (None,), handle_is_type(DataclassTypeType))
 
 
-def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value) -> Value:
-    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
-    if isinstance(decl, QuoteValue):
-        if isinstance(decl.body, NameExpr):
-            class_name = decl.body.name.value
-        else:
-            raise ValueError(
-                f"data:has: 'declaration' argument should be a quoted name; got {decl}"
-            )
+def define_dataclass(
+    message: str, ctxt: Context, decl: QuoteValue, extends: VectorValue, slots: VectorValue
+) -> None:
+    if isinstance(decl.body, NameExpr):
+        class_name = decl.body.name.value
     else:
-        raise ValueError("data:has: 'declaration' argument should be a quoted name")
+        raise ValueError(f"{message} 'declaration' argument should be a quoted name; got {decl}")
+
+    for base in extends.components:
+        if not isinstance(base, TypeValue):
+            raise ValueError(f"{message} 'extends' argument should be a vector of types")
+    bases: list[TypeValue] = list(extends.components)
+    for base in bases:
+        if base.sealed:
+            raise ValueError(f"Cannot extend from sealed class {base}")
+
+    # TODO: This feels a bit hacky. Better way? Maybe separate args.
+    base_dataclass = None
+    for base in bases:
+        if isinstance(base, DataclassTypeValue):
+            if base_dataclass:
+                raise ValueError(
+                    f"Cannot extend from multiple dataclasses: {base_dataclass}, {base}"
+                )
+            else:
+                base_dataclass = base
 
     # TODO: change format? maybe also should parse an AST node...
     # also consider adding "parsing methods", which have a property indicating that evaluation
     # of this form should always just pass in AST nodes (+ surrounding lexical context)
-    if not isinstance(slots, VectorValue):
-        raise ValueError("data:has: 'slots' argument should be a vector of symbols")
     for slot in slots.components:
         if not isinstance(slot, SymbolValue):
-            raise ValueError("data:has: 'slots' argument should be a vector of symbols")
-    slots = [slot.symbol for slot in slots.components]
+            raise ValueError(f"{message} 'slots' argument should be a vector of symbols")
+    slots = (base_dataclass.slots if base_dataclass else []) + [
+        slot.symbol for slot in slots.components
+    ]
 
     if class_name in ctxt.slots:
         raise ValueError(f"'{class_name}' is already defined")
-    # TODO: allow inheritance
-    # make sure to disallow diamond inheritance
-    # and also calculate the C3 linearization while we're here
-    # and also don't allow inheriting from sealed types
-    _class = DataclassTypeValue(name=class_name, bases=[], slots=slots)
+    _class = DataclassTypeValue(name=class_name, bases=bases, slots=slots, sealed=False)
     ctxt.slots[class_name] = _class
 
     create_or_add_method(
@@ -277,9 +290,8 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
         ctxt,
         ctor_message,
         Method(
-            # TODO: use value matcher for receiver
             # TODO: allow specifying types for slots
-            param_matchers=[ParameterAnyMatcher()] * (1 + len(slots)),
+            param_matchers=[ParameterValueMatcher(_class)] + [ParameterAnyMatcher()] * len(slots),
             body=NativeMethodBody(handle_generic_dataclass_constructor(ctor_message)),
         ),
     )
@@ -306,6 +318,21 @@ def handle__data_has_(ctxt: Context, receiver: Value, decl: Value, slots: Value)
             ),
         )
 
+
+def handle__data_extends_has_(
+    ctxt: Context, receiver: Value, decl: QuoteValue, extends: VectorValue, slots: VectorValue
+) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
+    define_dataclass("data:extends:has:", ctxt, decl, extends, slots)
+    return NullValue()
+
+
+def handle__data_has_(
+    ctxt: Context, receiver: Value, decl: QuoteValue, slots: VectorValue
+) -> Value:
+    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
+    extends = VectorValue(components=[])
+    define_dataclass("data:has:", ctxt, decl, extends, slots)
     return NullValue()
 
 
@@ -345,6 +372,9 @@ def handle_generic_dataclass_set(message: str, slot: str) -> NativeHandler:
     return NativeHandler(handler)
 
 
+builtin_method(
+    "data:extends:has:", (None, QuoteType, VectorType, VectorType), handle__data_extends_has_
+)
 builtin_method("data:has:", (None, QuoteType, VectorType), handle__data_has_)
 
 

@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from parser import (
     BinaryOpExpr,
     DataExpr,
@@ -144,9 +144,61 @@ class ReturnContinuationValue(Value):
 class TypeValue(Value):
     name: str
     bases: list["TypeValue"]
+    # Can user defined types inherit from this?
+    sealed: bool
+    # C3 linearization.
+    linearization: list["TypeValue"] = field(init=False, compare=False)
+
+    def __post_init__(self):
+        self.linearization = c3_linearization(self)
 
     def __str__(self):
         return f"<class {self.name}>"
+
+
+def c3_linearization(type: TypeValue) -> list[TypeValue]:
+    # Calculate linearization, or None if not possible.
+    def c3_merge(linearizations: list[list[TypeValue]]) -> Optional[list[TypeValue]]:
+        # Should start with all nonempty linearizations.
+        assert all(linearizations), linearizations
+        merged = []
+        while any(linearizations):
+            head = None
+            for lin in linearizations:
+                candidate = lin[0]
+                if all(candidate not in lin[1:] for lin in linearizations):
+                    head = candidate
+                    break
+            if head:
+                merged.append(head)
+                for lin in linearizations:
+                    if lin and lin[0] == head:
+                        lin.remove(head)
+                linearizations = [lin for lin in linearizations if lin]
+            else:
+                return None
+        return merged
+
+    for base in type.bases:
+        if type in base.linearization:
+            raise ValueError(f"Inheritance cycle starting from {type}")
+
+    if type.bases:
+        base_linearization = c3_merge(
+            [list(base.linearization) for base in type.bases] + [list(type.bases)]
+        )
+        if base_linearization is None:
+            raise ValueError(f"Could not determine linearization of {type}")
+    else:
+        base_linearization = []
+
+    return [type] + base_linearization
+
+
+@dataclass
+class MixinTypeValue(TypeValue):
+    def __str__(self):
+        return f"<mixin {self.name}>"
 
 
 @dataclass
@@ -171,18 +223,19 @@ class DataclassValue(Value):
             )
 
 
-NumberType = TypeValue("Number", bases=[])
-StringType = TypeValue("String", bases=[])
-BoolType = TypeValue("Bool", bases=[])
-NullType = TypeValue("Null", bases=[])
-SymbolType = TypeValue("Symbol", bases=[])
-VectorType = TypeValue("Vector", bases=[])
-TupleType = TypeValue("Tuple", bases=[])
-QuoteType = TypeValue("Quote", bases=[])
-ContinuationType = TypeValue("Continuation", bases=[])
-ReturnContinuationType = TypeValue("ReturnContinuation", bases=[])
-TypeType = TypeValue("Type", bases=[])
-DataclassTypeType = TypeValue("DataclassType", bases=[TypeType])
+NumberType = TypeValue("Number", bases=[], sealed=True)
+StringType = TypeValue("String", bases=[], sealed=True)
+BoolType = TypeValue("Bool", bases=[], sealed=True)
+NullType = TypeValue("Null", bases=[], sealed=True)
+SymbolType = TypeValue("Symbol", bases=[], sealed=True)
+VectorType = TypeValue("Vector", bases=[], sealed=True)
+TupleType = TypeValue("Tuple", bases=[], sealed=True)
+QuoteType = TypeValue("Quote", bases=[], sealed=True)
+ContinuationType = TypeValue("Continuation", bases=[], sealed=True)
+ReturnContinuationType = TypeValue("ReturnContinuation", bases=[], sealed=True)
+TypeType = TypeValue("Type", bases=[], sealed=True)
+# TODO: delete?
+DataclassTypeType = TypeValue("DataclassType", bases=[TypeType], sealed=True)
 
 
 def type_of(value: Value) -> TypeValue:
@@ -215,14 +268,13 @@ def type_of(value: Value) -> TypeValue:
 
 
 def is_subtype(a: TypeValue, b: TypeValue) -> bool:
-    # TODO: check for no recursion... either here or whenever creating new types
-    # also make this waaaay more efficient (use cached linearizations?)
-    if a == b:
-        return True
-    for base in a.bases:
-        if is_subtype(base, b):
-            return True
-    return False
+    assert a.linearization, a
+    assert b.linearization, b
+    # Neat, eh?
+    return (
+        len(a.linearization) >= len(b.linearization)
+        and a.linearization[len(a.linearization) - len(b.linearization)] == b.linearization[0]
+    )
 
 
 #################################################

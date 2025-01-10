@@ -177,6 +177,7 @@ print: p .x
 print: p .y
 p set-x: 6
 print: p
+p set-x: 5
 
 p type
 p type == Point
@@ -185,6 +186,28 @@ p Number?
 p String? Bool?
 
 t type == Bool
+
+data: 'Point3D extends: { Point } has: { :z }
+
+method: [+: (p: Point) _: (q: Point)] does: [
+    Point x: (p .x + q .x) y: (p .y + q .y)
+]
+
+let: 'p3 =: (Point3D x: 5 y: 10 z: 15)
+let: 'q =: (Point x: 3 y: 2)
+let: 'q3 =: (Point3D x: 3 y: 2 z: 1)
+p + q
+p + q3
+p3 + q
+p3 + q3
+
+method: [+: (p: Point3D) _: (q: Point3D)] does: [
+    Point3D x: (p .x + q .x) y: (p .y + q .y) z: (p .z + q .z)
+]
+p + q
+p + q3
+p3 + q
+p3 + q3
 
 method: [while-with-break: cond do: body] does: [
     \cc [
@@ -283,11 +306,6 @@ method: [bottom: return] does: [
 ]
 print: \ret [bottom: ret] call/rc
 
-#method: [handle-signal: condition] does: [
-#    print: "handle-signal: got a condition : " ~ condition >string
-#    "<result from handle-signal:>"
-#]
-
 [
     let: 'rc-handle =: null
     \rc ['rc-handle = rc] call/rc
@@ -313,63 +331,6 @@ print: \ret [bottom: ret] call/rc
 method: [do-a-tail-cleanup] does: [ [ [ 1234 ] call ] cleanup: [ print: "other cleanup" ] ]
 [ do-a-tail-cleanup ] cleanup: [ print: "some cleanup" ]
 
-
-###################################################################
-
-let: 'namestack =: {{}}
-method: [push-scope: vars] does: [namestack append: vars]
-method: [pop-scope] does: [namestack pop]
-method: [scope has-var: (var: Symbol)] does: [
-    \ret [
-        scope each: \entry [
-            if: (entry at: 0) == var then: [ret call: t]
-        ]
-        f
-    ] call/rc
-]
-method: [scope get-var: (var: Symbol)] does: [
-    \ret [
-        scope each: \entry [
-            if: (entry at: 0) == var then: [ret call: (entry at: 1)]
-        ]
-    ] call/rc
-]
-method: [scope set: (var: Symbol) value: value] does: [
-    \ret [
-        scope each: \entry [
-            if: (entry at: 0) == var then: [
-                entry at: 1 =: value
-                ret call
-            ]
-        ]
-        scope append: {var; value}
-    ] call/rc
-    value
-]
-method: [(name: Symbol) get] does: [
-    \ret [
-        namestack each-reversed: \scope [
-            if: (scope has-var: name) then: [ret call: (scope get-var: name)]
-        ]
-    ] call/rc
-]
-method: [(name: Symbol) set: value] does: [(namestack at: (namestack length - 1)) set: name value: value ]
-method: [with-scope: (body: Quote)] does: [
-    push-scope: {}
-    body cleanup: [pop-scope]
-]
-
-###################################################################
-
-:x set: 1
-print: :x get
-with-scope: [
-    print: :x get
-    :x set: 2
-    print: :x get
-]
-print: :x get
-
 ###################################################################
 
 data: 'Optional has: {
@@ -388,58 +349,174 @@ method: [(opt: Optional) then: some-body else: none-body] does: [
     ]
 ]
 
+method: [(opt: Optional) value!] does: [
+    opt then: [it] else: [signal: (:none-no-value, "none has no value")]
+]
+
 (some: 5) then: [print] else: [print: "none"]
 none then: [print] else: [print: "none"]
 
-# TODO: use separate namestack
-method: [(body: Quote) with-handlers: handlers] does: [
-    with-scope: [
-        handlers each: \entry [
-            let: 'condition =: (entry at: 0)
-            let: 'handler =: (entry at: 1)
-            condition set: handler
+
+###################################################################
+
+
+# Define assocs. (For now, these are just vectors of key/value pairs.)
+
+data: 'AssocEntry has: { :key; :value }
+
+data: 'Assoc has: { :entries }
+method: [assoc: vector-entries] does: [
+    Assoc entries: (vector-entries map: \entry [ AssocEntry key: (entry at: 0) value: (entry at: 1) ])
+]
+
+method: [(assoc: Assoc) each-entry: (action: Quote)] does: [ assoc .entries each: action ]
+
+method: [(a: Assoc) if-has: key then*: then-fn else: else-fn] does: [
+    \ret [
+        a each-entry: [
+            if: it .key == key then: [ret call: (then-fn call: it)]
         ]
-        body call
+        else-fn call
+    ] call/rc
+]
+
+method: [(a: Assoc) if-has: key then: then-fn else: else-fn] does: [
+    a if-has: key then*: [then-fn call: it .value] else: else-fn
+]
+
+method: [(a: Assoc) at*: key] does: [
+    a if-has: key then: [some: it] else: [none]
+]
+
+method: [(a: Assoc) at: key] does: [ (a at*: key) value! ]
+
+method: [(a: Assoc) has: key] does: [ (a at*: key) .has-value?  ]
+
+method: [(a: Assoc) at: key put: value] does: [
+    a if-has: key then*: [ it set-value: value ] else: [
+        a .entries append: (AssocEntry key: key value: value)
     ]
 ]
 
-# TODO: use separate namestack
-method: [(body: Quote) with-restarts: restarts] does: [
-    with-scope: [
-        restarts each: \entry [
-            let: 'restart =: (entry at: 0)
-            let: 'handler =: (entry at: 1)
-            restart set: handler
+let: 'm =: (assoc: { { 1; "one" }; { 2; "two" } })
+m
+m has: 1
+m has: 2
+m has: 3
+m at*: 1
+m at*: 3
+m at: 1
+m at: 2 put: "duo"
+m at: 2
+m at: 3 put: "three"
+m
+
+
+###################################################################
+
+let: 'namestack =: { assoc: {} }
+method: [push-scope: (vars: Assoc)] does: [namestack append: vars]
+method: [pop-scope] does: [namestack pop]
+method: [scope has-var: (var: Symbol)] does: [ scope has: var ]
+method: [scope get-var: (var: Symbol)] does: [ scope get: var ]
+method: [scope set: (var: Symbol) value: value] does: [ scope at: var put: value ]
+method: [(name: Symbol) get] does: [
+    \ret [
+        namestack each-reversed: \scope [
+            scope if-has: name then: [ret call: it] else: none
         ]
-        body call
+    ] call/rc
+]
+method: [(name: Symbol) set: value] does: [(namestack at: (namestack length - 1)) at: name put: value ]
+method: [with-scope: (body: Quote)] does: [
+    push-scope: (assoc: {})
+    body cleanup: [pop-scope]
+]
+
+###################################################################
+
+:x set: 1
+print: :x get
+with-scope: [
+    print: :x get
+    :x set: 2
+    print: :x get
+]
+print: :x get
+
+###################################################################
+
+# Stack of list-of-pairs, where each pair holds a predicate quote
+# and a handler quote.
+let: 'handler-stack =: {}
+method: [(body: Quote) with-handlers: (handlers: Vector)] does: [
+    handler-stack append: handlers
+    body cleanup: [handler-stack pop]
+]
+
+method: [predicate matches-condition?: condition] does: [
+    if: (predicate Quote?) then: [
+        predicate call: condition
+    ] else: [
+        # TODO: once conditions are data structs instead, switch to is-instance check;
+        # predicate should be a Type
+        condition == predicate
     ]
 ]
 
-# TODO: use separate namestack
+method: [(handlers: Vector) call-handler*: condition-tuple] does: [
+    \condition message [
+        \ret [
+            handlers each: [
+                let: 'predicate =: (it at: 0)
+                let: 'handler =: (it at: 1)
+                if: (predicate matches-condition?: condition) then: [ret call: (handler call: message)]
+            ]
+            null
+        ] call/rc
+    ] call*: condition-tuple
+]
+
+# Stack of assocs (from symbol to restart quote).
+let: 'restart-stack =: {}
+method: [(body: Quote) with-restarts: (restarts: Assoc)] does: [
+    restart-stack append: restarts
+    body cleanup: [restart-stack pop]
+]
+
+method: [(restart: Symbol) get-restart] does: [
+    \ret [
+        restart-stack each-reversed: [
+            it if-has: restart then: \quote [ret call: quote] else: null
+        ]
+        signal: (:no-such-restart, "restart " ~ restart >string ~ " not found")
+    ] call/rc
+]
+
 method: [(restart: Symbol) invoke-restart] does: [
-    restart get call
+    restart get-restart call
 ]
 
 method: [handle-signal: condition-tuple] does: [
     print: "GOT A CONDITION: " ~ condition-tuple >string
-    let: 'handler-result =: (
-        \condition message [
-            let: 'handler =: condition get
-            handler call: message
-        ] call*: condition-tuple
-    )
-    if: handler-result Null? then: [
+    \ret [
+        handler-stack each-reversed: [
+            if: not (let: 'handler-result =: (it call-handler*: condition-tuple)) Null? then: [
+                ret call: handler-result
+            ]
+        ]
         panic!: condition-tuple
-    ] else: [ handler-result ]
+    ] call/rc
 ]
+method: [signal: condition] does: [handle-signal: condition]
 
 [
-    [ blah ] with-restarts: {
+    [ blah ] with-restarts: (assoc: {
         { :use-10; [ 10 ] }
-    }
+    })
 ] with-handlers: {
     {
-        :undefined-slot; \message [
+        [it == :undefined-slot]; \message [
             print: "got an :undefined-slot: " ~ message
             print: "invoking :use-10 restart!"
             :use-10 invoke-restart
@@ -448,15 +525,15 @@ method: [handle-signal: condition-tuple] does: [
 }
 
 [
-    [ 1 / 0 ] with-restarts: {
+    [ 1 / 0 ] with-restarts: (assoc: {
         { :use-10; [ 10 ] }
-    }
+    })
 ] with-handlers: {
     {
-        :undefined-slot; \message [
-            print: "got an :undefined-slot: " ~ message
+        :internal-error; \message [
+            print: "got an :internal-error: " ~ message
             print: "invoking :use-10 restart!"
-            :use-10 invoke-restart
+            :use-15 invoke-restart
         ]
     }
 }
