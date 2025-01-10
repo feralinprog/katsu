@@ -214,10 +214,6 @@ def type_of(value: Value) -> TypeValue:
         return value.type
 
 
-def handle__type(ctxt: "Context", receiver: Value) -> Value:
-    return type_of(receiver)
-
-
 def is_subtype(a: TypeValue, b: TypeValue) -> bool:
     # TODO: check for no recursion... either here or whenever creating new types
     # also make this waaaay more efficient (use cached linearizations?)
