@@ -589,7 +589,9 @@ method: [handle-signal: condition-tuple] does: [ signal: condition-tuple conditi
 
 [
     [ 1 / 0 ] with-restarts: (assoc: {
+        { :use-0; [ 0 ] }
         { :use-10; [ 10 ] }
+        { :signal-undefined-slot; [ this-is-an-undefined-slot ] }
     })
 ] with-handlers: {
     {
