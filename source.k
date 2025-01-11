@@ -416,10 +416,26 @@ method: [(a: Assoc) at: key] does: [ (a at*: key) value! ]
 
 method: [(a: Assoc) has: key] does: [ (a at*: key) .has-value?  ]
 
-method: [(a: Assoc) at: key put: value] does: [
-    a if-has: key then*: [ it set-value: value ] else: [
-        a .entries append: (AssocEntry key: key value: value)
+method: [(a: Assoc) put-entry: (entry: AssocEntry)] does: [
+    a if-has: entry .key then*: [ it set-value: entry .value ] else: [
+        a .entries append: entry
     ]
+]
+method: [(a: Assoc) at: key put: value] does: [
+    a put-entry: (AssocEntry key: key value: value)
+]
+
+# Add all pairs from :b into :a, keeping the value from :a if there is a conflict.
+method: [(a: Assoc) extend: (b: Assoc)] does: [
+    b each-entry: \entry [
+        a if-has: entry .key then: null else: [a put-entry: entry]
+    ]
+]
+
+method: [(a: Assoc) keys] does: [
+    let: 'keys-vec =: {}
+    a each-entry: \entry [ keys-vec append: entry .key ]
+    keys-vec
 ]
 
 let: 'm =: (assoc: { { 1; "one" }; { 2; "two" } })
@@ -518,6 +534,12 @@ data: 'Condition has: { :message }
 data: 'InternalError extends: { Condition } has: {}
 data: 'UndefinedSlot extends: { Condition } has: {}
 
+method: [all-active-restarts] does: [
+    let: 'restarts =: (assoc: {})
+    restart-stack each-reversed: [restarts extend: it]
+    restarts
+]
+
 method: [signal: condition] does: [
     \ret [
         handler-stack each-reversed: [
@@ -525,8 +547,15 @@ method: [signal: condition] does: [
                 ret call: handler-result
             ]
         ]
-        # No handlers resolved the condition. Let's try asking the user!
-        # TODO: get list of restarts, call builtin (... builtin for now) to get user input.
+        # No handlers resolved the condition. Ask the user if they want to select a restart instead.
+        let: 'restarts =: all-active-restarts
+        let: 'restart-keys =: restarts keys
+        let: 'idx =: (query-user-for-restart: restart-keys condition: condition)
+        if: idx Number? then: [
+            let: 'selected-restart =: (restart-keys at: idx)
+            ret call: (selected-restart invoke-restart)
+        ]
+        # User didn't select any of the restarts; fall back to a panic.
         panic!: condition
     ] call/rc
 ]

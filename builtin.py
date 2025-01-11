@@ -1,6 +1,8 @@
 from parser import NameExpr, NAryMessageExpr, ParenExpr, UnaryMessageExpr
 from typing import Callable, Tuple, Union
 
+from termcolor import colored
+
 from interpreter import (
     BoolType,
     BoolValue,
@@ -705,3 +707,35 @@ def handle__show_current_context(ctxt: Context, receiver: Value) -> Value:
 
 
 builtin_method("<show-current-context>", (None,), handle__show_current_context)
+
+
+def handle__query_user_for_restart_(
+    ctxt: Context, receiver: Value, restarts: VectorValue, condition: Value
+) -> Value:
+    print(colored("A condition occurred and was not handled!", "red"))
+    print(f"The condition is {colored(str(condition), 'red')}")
+    print(f"Restarts available:")
+    print(f"  [#{colored('0', 'blue')}] {colored('panic / abort', 'green')}")
+    for i, restart in enumerate(restarts.components):
+        print(f"  [#{colored(str(i + 1), 'blue')}] {colored(str(restart), 'green')}")
+    while True:
+        try:
+            in_str = input("Select a restart (or empty for default restart): ")
+        except EOFError:
+            return NullValue()
+        try:
+            index = int(in_str)
+        except ValueError:
+            print("not an integer")
+            continue
+        if index < 0 or index > len(restarts.components):
+            print(f"out of range: valid restarts are 0 - {len(restarts.components)}")
+            continue
+        if index == 0:
+            return NullValue()
+        return NumberValue(index - 1)
+
+
+builtin_method(
+    "query-user-for-restart:condition:", (None, VectorType, None), handle__query_user_for_restart_
+)
