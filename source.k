@@ -346,7 +346,7 @@ method: [(opt: Optional) then: some-body else: none-body] does: [
 ]
 
 method: [(opt: Optional) value!] does: [
-    opt then: [it] else: [signal: (:none-no-value, "none has no value")]
+    opt then: [it] else: [signal: (NoneValue message: "none has no value")]
 ]
 
 (some: 5) then: [print] else: [print: "none"]
@@ -371,7 +371,7 @@ method: [(opt: Optional) at: (i: Number)] does: [
     if: i == 0 then: [
         opt value!
     ] else: [
-        signal: (:out-of-range, "index " ~ i >string ~ " out of range for optional")
+        signal: (OutOfRange message: ("index " ~ i >string ~ " out of range for optional") collection: self index: i)
     ]
 ]
 mix-in: Sequence to: Optional
@@ -522,7 +522,7 @@ method: [(restart: Symbol) get-restart] does: [
         restart-stack each-reversed: [
             it if-has: restart then: \quote [ret call: quote] else: null
         ]
-        signal: (:no-such-restart, "restart " ~ restart >string ~ " not found")
+        signal: (NoSuchRestart message: ("restart " ~ restart >string ~ " not found") restart: restart)
     ] call/rc
 ]
 
@@ -533,6 +533,10 @@ method: [(restart: Symbol) invoke-restart] does: [
 data: 'Condition has: { :message }
 data: 'InternalError extends: { Condition } has: {}
 data: 'UndefinedSlot extends: { Condition } has: {}
+data: 'SwitchFallThrough extends: { Condition } has: {}
+data: 'NoneValue extends: { Condition } has: {}
+data: 'OutOfRange extends: { Condition } has: { :collection; :index }
+data: 'NoSuchRestart extends: { Condition } has: { :restart }
 
 method: [all-active-restarts] does: [
     let: 'restarts =: (assoc: {})
