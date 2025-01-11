@@ -568,7 +568,7 @@ method: [tup condition-tuple>object] does: [
             { [it == :internal-error]; [InternalError message: message] }
             { [it == :undefined-slot]; [UndefinedSlot message: message] }
             { t;                       [Condition message: message] }
-        } pr
+        }
     ] call*: tup
 ]
 method: [handle-signal: condition-tuple] does: [ signal: condition-tuple condition-tuple>object ]
