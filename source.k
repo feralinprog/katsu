@@ -248,20 +248,16 @@ method: [assert: condition] does: [
     ]
 ]
 
-method: [switch: options] does: [
-    assert: [options Vector?]
-    let: 'i =: 0
-    while-with-break: [i < options length] do: \break [
-        let: 'option =: (options at: i)
-        assert: [option length == 2]
-        let: 'condition =: (option at: 0)
-        let: 'response =: (option at: 1)
-        if: condition call then: [break call: response call]
-        'i = i + 1
-    ]
-    if: i == options length then: [
-        switch-fall-through
-    ]
+method: [receiver switch: (options: Vector)] does: [
+    \ret [
+        options each: \option [
+            assert: [option length == 2]
+            let: 'condition =: (option at: 0)
+            let: 'response =: (option at: 1)
+            if: (condition call: receiver) then: [ret call: (response call: receiver)]
+        ]
+        signal: (SwitchFallThrough message: "no switch conditions matched; fell through")
+    ] call/rc
 ]
 
 'i = 5
@@ -482,27 +478,20 @@ method: [(body: Quote) with-handlers: (handlers: Vector)] does: [
     body cleanup: [handler-stack pop]
 ]
 
-method: [predicate matches-condition?: condition] does: [
-    if: (predicate Quote?) then: [
-        predicate call: condition
-    ] else: [
-        # TODO: once conditions are data structs instead, switch to is-instance check;
-        # predicate should be a Type
-        condition == predicate
-    ]
-]
+method: [(predicate: Quote) matches-condition?: condition] does: [ predicate call: condition ]
+method: [(type: Type) matches-condition?: condition] does: [ condition is-instance: type ]
+method: [value matches-condition?: condition] does: [ condition == value ]
 
-method: [(handlers: Vector) call-handler*: condition-tuple] does: [
-    \condition message [
-        \ret [
-            handlers each: [
-                let: 'predicate =: (it at: 0)
-                let: 'handler =: (it at: 1)
-                if: (predicate matches-condition?: condition) then: [ret call: (handler call: message)]
-            ]
-            null
-        ] call/rc
-    ] call*: condition-tuple
+# Call a handler if one matches; else return null.
+method: [(handlers: Vector) call-handler*: condition] does: [
+    \ret [
+        handlers each: [
+            let: 'predicate =: (it at: 0)
+            let: 'handler =: (it at: 1)
+            if: (predicate matches-condition?: condition) then: [ret call: (handler call: condition)]
+        ]
+        null
+    ] call/rc
 ]
 
 # Stack of assocs (from symbol to restart quote).
@@ -525,18 +514,35 @@ method: [(restart: Symbol) invoke-restart] does: [
     restart get-restart call
 ]
 
-method: [handle-signal: condition-tuple] does: [
-    #print: "GOT A CONDITION: " ~ condition-tuple >string
+data: 'Condition has: { :message }
+data: 'InternalError extends: { Condition } has: {}
+data: 'UndefinedSlot extends: { Condition } has: {}
+
+method: [signal: condition] does: [
     \ret [
         handler-stack each-reversed: [
-            if: not (let: 'handler-result =: (it call-handler*: condition-tuple)) Null? then: [
+            if: not (let: 'handler-result =: (it call-handler*: condition)) Null? then: [
                 ret call: handler-result
             ]
         ]
-        panic!: condition-tuple
+        # No handlers resolved the condition. Let's try asking the user!
+        # TODO: get list of restarts, call builtin (... builtin for now) to get user input.
+        panic!: condition
     ] call/rc
 ]
-method: [signal: condition] does: [handle-signal: condition]
+
+# Handle a signal from the VM.
+# TODO: have VM just produce actual Condition (or subtype thereof) objects.
+method: [tup condition-tuple>object] does: [
+    \condition message [
+        condition switch: {
+            { [it == :internal-error]; [InternalError message: message] }
+            { [it == :undefined-slot]; [UndefinedSlot message: message] }
+            { t;                       [Condition message: message] }
+        } pr
+    ] call*: tup
+]
+method: [handle-signal: condition-tuple] does: [ signal: condition-tuple condition-tuple>object ]
 
 [
     [ blah ] with-restarts: (assoc: {
@@ -544,8 +550,8 @@ method: [signal: condition] does: [handle-signal: condition]
     })
 ] with-handlers: {
     {
-        [it == :undefined-slot]; \message [
-            print: "got an :undefined-slot: " ~ message
+        UndefinedSlot; \condition [
+            print: "got an UndefinedSlot:: " ~ condition >string
             print: "invoking :use-10 restart!"
             :use-10 invoke-restart
         ]
@@ -558,8 +564,8 @@ method: [signal: condition] does: [handle-signal: condition]
     })
 ] with-handlers: {
     {
-        :internal-error; \message [
-            print: "got an :internal-error: " ~ message
+        InternalError; \condition [
+            print: "got an InternalError:: " ~ condition >string
             print: "invoking :use-15 restart, which does not exist!"
             :use-15 invoke-restart
         ]
