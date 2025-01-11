@@ -214,6 +214,13 @@ def handle__type(ctxt: Context, receiver: Value) -> Value:
 builtin_method("type", (None,), handle__type)
 
 
+def handle__is_instance_(ctxt: Context, receiver: Value, type: TypeValue) -> Value:
+    return BoolValue(is_subtype(type_of(receiver), type))
+
+
+builtin_method("is-instance:", (None, TypeType), handle__is_instance_)
+
+
 def handle_is_type(_type: TypeValue):
     def handler(ctxt: Context, receiver: Value) -> Value:
         return BoolValue(is_subtype(type_of(receiver), _type))
@@ -595,6 +602,14 @@ def handle__print(ctxt: Context, receiver: Value) -> Value:
 
 
 builtin_method("print", (None,), handle__print)
+
+
+def handle__pr(ctxt: Context, receiver: Value) -> Value:
+    print(receiver)
+    return receiver
+
+
+builtin_method("pr", (None,), handle__pr)
 
 
 def handle__print_(ctxt: Context, receiver: Value, value: Value) -> Value:

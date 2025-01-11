@@ -18,7 +18,7 @@ from termcolor import colored
 
 from builtin import global_context
 from error import ParseError, RunError
-from interpreter import NullValue, eval_toplevel, pprint_stacktrace
+from interpreter import NullValue, eval_toplevel, pprint_stacktrace, show_error
 from lexer import Token, TokenStream, TokenType, get_all_tokens
 from span import SourceFile
 

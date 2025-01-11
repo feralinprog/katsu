@@ -1129,51 +1129,50 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
         return frame.data_stack[0]
 
 
-def pprint_stacktrace(state: RuntimeState):
-    def show_error(header_prefix: str, span: SourceSpan):
-        start, end = span.start, span.end
-        print(f"{header_prefix} (at {span}):")
+def show_error(header_prefix: str, span: SourceSpan):
+    start, end = span.start, span.end
+    print(f"{header_prefix} (at {span}):")
 
-        context_lines = 2  # excluding error line itself
-        color_output = True
+    context_lines = 2  # excluding error line itself
+    color_output = True
 
-        text_lines = span.file.source.split("\n")
-        for line, text in enumerate(text_lines):
-            if color_output:
-                if not (start.line - context_lines <= line <= end.line + context_lines):
-                    continue
-                if line == start.line:
-                    end_col = end.column if end.line == start.line else len(text)
-                    print(
-                        colored("! ", "blue")
-                        + text[: start.column]
-                        + colored(text[start.column : end_col], "red")
-                        + text[end_col:]
-                    )
-                elif start.line < line < end.line:
-                    print(colored("! ", "blue") + colored(text, "red"))
-                elif line == end.line:
-                    print(
-                        colored("! ", "blue")
-                        + colored(text[: end.column], "red")
-                        + text[end.column :]
-                    )
-                else:
-                    # Just context line.
-                    print(colored("| ", "green") + text)
+    text_lines = span.file.source.split("\n")
+    for line, text in enumerate(text_lines):
+        if color_output:
+            if not (start.line - context_lines <= line <= end.line + context_lines):
+                continue
+            if line == start.line:
+                end_col = end.column if end.line == start.line else len(text)
+                print(
+                    colored("! ", "blue")
+                    + text[: start.column]
+                    + colored(text[start.column : end_col], "red")
+                    + text[end_col:]
+                )
+            elif start.line < line < end.line:
+                print(colored("! ", "blue") + colored(text, "red"))
+            elif line == end.line:
+                print(
+                    colored("! ", "blue") + colored(text[: end.column], "red") + text[end.column :]
+                )
             else:
-                if start.line - context_lines <= line <= end.line + context_lines:
-                    print(f"| {text}")
-                if line == start.line:
-                    end_col = end.column if end.line == start.line else len(text)
-                    print("! " + " " * start.column + "^" * (end_col - start.column))
-                elif start.line < line < end.line:
-                    ws = len(text) - len(text.lstrip(" "))
-                    print("! " + " " * ws + "^" * (len(text) - ws))
-                elif line == end.line:
-                    ws = len(text) - len(text.lstrip(" "))
-                    print("! " + " " * ws + "^" * (end.column - ws))
+                # Just context line.
+                print(colored("| ", "green") + text)
+        else:
+            if start.line - context_lines <= line <= end.line + context_lines:
+                print(f"| {text}")
+            if line == start.line:
+                end_col = end.column if end.line == start.line else len(text)
+                print("! " + " " * start.column + "^" * (end_col - start.column))
+            elif start.line < line < end.line:
+                ws = len(text) - len(text.lstrip(" "))
+                print("! " + " " * ws + "^" * (len(text) - ws))
+            elif line == end.line:
+                ws = len(text) - len(text.lstrip(" "))
+                print("! " + " " * ws + "^" * (end.column - ws))
 
+
+def pprint_stacktrace(state: RuntimeState):
     for i in range(len(state.call_stack)):
         depth = len(state.call_stack) - 1 - i
         frame = state.call_stack[depth]
