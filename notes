@@ -126,3 +126,7 @@ TODO:
 * explicit tail-calls?
 * method:does: should allow marking arguments optional (-> just generate all combos)
 * allow for docs everywhere!
+* macros / annotations / hook in to parser for custom syntax?
+  * tail-call
+  * 'let' syntax
+  * replace @ret [...] with [...] call/rc w/ slot added so return: uses the return-continuation

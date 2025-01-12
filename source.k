@@ -19,7 +19,7 @@ print: ("abc" str~: 2)
 # (really, figure out how this can work. maybe something like:
 # >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
 # where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
-method: [if: (cond: Bool) then: body] does: [ if: cond then: body else: null ]
+method: [if: (cond: Bool) then: body] does: [ TAIL-CALL: (if: cond then: body else: null) ]
 if: 2 > 1 then: [ print: "good: 2 > 1" ]
 if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 
@@ -31,7 +31,7 @@ print: a
 method: [while: (cond: Quote) do: (body: Quote)] does: [
     if: cond call then: [
         body call
-        while: cond do: body
+        TAIL-CALL: (while: cond do: body)
     ]
 ]
 

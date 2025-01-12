@@ -595,17 +595,40 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
     def add(op: str, *args, span: SourceSpan):
         sequence.code.append(BytecodeOp(op=op, args=args, span=span))
 
+    # TODO: make this less hacky -- should be part of macro / AST rewrite system.
+    tail_call = False
+    if isinstance(expr, NAryMessageExpr) and [message.value for message in expr.messages] == [
+        "TAIL-CALL"
+    ]:
+        if expr.target is not None:
+            raise ValueError("TAIL-CALL: requires no receiver")
+        call = expr.args[0]
+        while isinstance(call, ParenExpr):
+            call = call.inner
+        if not (
+            isinstance(call, UnaryOpExpr)
+            or isinstance(call, BinaryOpExpr)
+            or isinstance(call, NameExpr)
+            or isinstance(call, UnaryMessageExpr)
+            or isinstance(call, NAryMessageExpr)
+        ):
+            raise ValueError(
+                "TAIL-CALL: must be applied to a unary/binary op or a unary/n-ary message"
+            )
+        tail_call = True
+        expr = call
+
     if isinstance(expr, UnaryOpExpr):
         compile_into(expr.arg, sequence)
-        add("invoke", expr.op.value, 1, span=expr.span)
+        add("tail-invoke" if tail_call else "invoke", expr.op.value, 1, span=expr.span)
     elif isinstance(expr, BinaryOpExpr):
         add("push-default-receiver", span=expr.op.span)
         compile_into(expr.left, sequence)
         compile_into(expr.right, sequence)
-        add("invoke", expr.op.value + ":_:", 3, span=expr.span)
+        add("tail-invoke" if tail_call else "invoke", expr.op.value + ":_:", 3, span=expr.span)
     elif isinstance(expr, NameExpr):
         add("push-default-receiver", span=expr.name.span)
-        add("invoke", expr.name.value, 1, span=expr.span)
+        add("tail-invoke" if tail_call else "invoke", expr.name.value, 1, span=expr.span)
     elif isinstance(expr, LiteralExpr):
         literal = expr.literal
         if literal._type == TokenType.SYMBOL:
@@ -618,7 +641,7 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
             raise AssertionError(f"Forgot a literal token type! {literal._type} ({literal})")
     elif isinstance(expr, UnaryMessageExpr):
         compile_into(expr.target, sequence)
-        add("invoke", expr.message.value, 1, span=expr.span)
+        add("tail-invoke" if tail_call else "invoke", expr.message.value, 1, span=expr.span)
     elif isinstance(expr, NAryMessageExpr):
         if expr.target is None:
             # TODO: use smaller span?
@@ -629,7 +652,7 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
             compile_into(arg, sequence)
         assert len(expr.messages) == len(expr.args)
         message = "".join(message.value + ":" for message in expr.messages)
-        add("invoke", message, 1 + len(expr.args), span=expr.span)
+        add("tail-invoke" if tail_call else "invoke", message, 1 + len(expr.args), span=expr.span)
     elif isinstance(expr, ParenExpr):
         compile_into(expr.inner, sequence)
     elif isinstance(expr, QuoteExpr):
@@ -831,12 +854,14 @@ def eval_one_op(state: RuntimeState) -> None:
         assert isinstance(ctxt, Context)
         frame.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
         frame.spot += 1
-    elif op == "invoke":
+    elif op == "invoke" or op == "tail-invoke":
         message, nargs = bytecode.args
         assert isinstance(message, str)
         assert isinstance(nargs, int)
         assert nargs > 0
         assert len(frame.data_stack) >= nargs
+
+        tail_call = op == "tail-invoke"
 
         def signal_error(
             condition_name: str,
@@ -925,6 +950,7 @@ def eval_one_op(state: RuntimeState) -> None:
                             cleanup=None,
                             is_cleanup=False,
                             cleanup_retain=None,
+                            tail_call=tail_call,
                         )
                     elif isinstance(method_body, IntrinsicMethodBody):
                         try:
@@ -1012,9 +1038,6 @@ def eval_one_op(state: RuntimeState) -> None:
         raise AssertionError(f"Forgot a bytecode op! {op}")
 
 
-optimize_tail_calls = True
-
-
 def invoke_compiled(
     state: RuntimeState,
     name: str,
@@ -1024,6 +1047,7 @@ def invoke_compiled(
     cleanup: Optional[Value],
     is_cleanup: bool,
     cleanup_retain: Optional[Value],
+    tail_call: bool,
 ) -> None:
     if not is_cleanup:
         assert not cleanup_retain
@@ -1046,11 +1070,16 @@ def invoke_compiled(
         # current frame _is_ a cleanup action, though, to keep things simpler.
         # TODO: support tail-call if current frame and even next frame both have cleanup
         # actions required.
-        if (
-            optimize_tail_calls
-            and frame.spot == len(frame.sequence.code) - 1
-            and not (frame.is_cleanup or frame.cleanup or frame.num_nonlocal_returns > 0)
-        ):
+        if tail_call:
+            if frame.spot != len(frame.sequence.code) - 1 or (
+                frame.is_cleanup or frame.cleanup or frame.num_nonlocal_returns > 0
+            ):
+                print("WARNING: not performing tail-call even though requested")
+                print(
+                    f"details: spot={frame.spot}, codelen={frame.sequence.code}, is_cleanup={frame.is_cleanup}, cleanup={frame.cleanup}, num_nonlocal_returns={frame.num_nonlocal_returns}"
+                )
+                tail_call = False
+        if tail_call:
             # Unwind the frame. It hasn't yet produced a return value; that's what
             # we are about to calculate with a new frame.
             state.call_stack.pop()
@@ -1221,6 +1250,7 @@ def intrinsic__if_then_else(
             cleanup=None,
             is_cleanup=False,
             cleanup_retain=None,
+            tail_call=False,
         )
     else:
         state.call_stack[-1].data_stack.append(body)
@@ -1264,6 +1294,7 @@ def call_impl(
             cleanup=cleanup,
             is_cleanup=is_cleanup,
             cleanup_retain=cleanup_retain,
+            tail_call=False,
         )
     elif isinstance(receiver, ContinuationValue):
         if cleanup or is_cleanup:
