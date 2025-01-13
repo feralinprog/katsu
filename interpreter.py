@@ -305,16 +305,16 @@ def is_subtype(a: TypeValue, b: TypeValue) -> bool:
 @dataclass
 class IntrinsicHandler:
     # Doesn't have to immediately produce a result; the handler is provided
-    # the current runtime state, a receiver, and arguments, and may update
-    # the runtime state arbitrarily. This handler must also update the state's
-    # top of stack frame position as necessary; the interpreter gives up this
-    # responsibility. On entry, the data stack has the receiver and arguments
-    # already removed. If the handler raises an exception, it must ensure that
-    # the data stack is left in a state where pushing one more value to the
-    # stack allows that value to be treated as the result of the handler
-    # invocation. (For instance, not modifying the data stack at all meets
-    # this criterion.)
-    handler: Callable[["RuntimeState", Value, list[Value]], None]
+    # the current runtime state, whether this should be a tail call or not,
+    # a receiver, and arguments, and may update the runtime state arbitrarily.
+    # This handler must also update the state's top of stack frame position as
+    # necessary; the interpreter gives up this responsibility. On entry, the
+    # data stack has the receiver and arguments already removed. If the handler
+    # raises an exception, it must ensure that the data stack is left in a state
+    # where pushing one more value to the stack allows that value to be treated
+    # as the result of the handler invocation. (For instance, not modifying the
+    # data stack at all meets this criterion.)
+    handler: Callable[["RuntimeState", bool, Value, list[Value]], None]
 
 
 @dataclass
@@ -805,6 +805,7 @@ def eval_one_op(state: RuntimeState) -> None:
                 cleanup=None,
                 is_cleanup=True,
                 cleanup_retain=return_value,
+                tail_call=False,
             )
         else:
             next_frame = state.call_stack[-1]
@@ -957,7 +958,7 @@ def eval_one_op(state: RuntimeState) -> None:
                             handler = method_body.handler
                             # Allow the intrinsic handler to take arbitrary control of the runtime. It also takes
                             # responsibility for updating the frame as necessary.
-                            handler.handler(state, *args)
+                            handler.handler(state, tail_call, *args)
                         except Exception as e:
                             # TODO: allow handlers to raise more targeted exceptions that already include a condition name
                             signal_error(
@@ -969,6 +970,10 @@ def eval_one_op(state: RuntimeState) -> None:
                             )
                             return
                     elif isinstance(method_body, NativeMethodBody):
+                        if tail_call:
+                            print(
+                                "WARNING: tail call requested, but could not be applied to native method body"
+                            )
                         try:
                             handler = method_body.handler
                             # handler is something which can be called with a context, receiver, and arguments.
@@ -1235,7 +1240,7 @@ def pprint_stacktrace(state: RuntimeState):
 
 
 def intrinsic__if_then_else(
-    state: RuntimeState, receiver: Value, cond: Value, tbody: Value, fbody: Value
+    state: RuntimeState, tail_call: bool, receiver: Value, cond: Value, tbody: Value, fbody: Value
 ) -> None:
     body = tbody if isinstance(cond, BoolValue) and cond.value else fbody
     if isinstance(body, QuoteValue):
@@ -1265,6 +1270,7 @@ def call_impl(
     cleanup: Optional[Value],
     is_cleanup: bool,
     cleanup_retain: Optional[Value],
+    tail_call: bool,
 ):
     if not is_cleanup:
         assert not cleanup_retain
@@ -1294,7 +1300,7 @@ def call_impl(
             cleanup=cleanup,
             is_cleanup=is_cleanup,
             cleanup_retain=cleanup_retain,
-            tail_call=False,
+            tail_call=tail_call,
         )
     elif isinstance(receiver, ContinuationValue):
         if cleanup or is_cleanup:
@@ -1355,6 +1361,10 @@ def call_impl(
                 cleanup=None,
                 is_cleanup=True,
                 cleanup_retain=receiver,
+                # Don't tail-call the cleanup action; presumably this is not what was requested
+                # as a tail-call by the user when they indicated tail-call for the entire `cleanup:`
+                # invocation.
+                tail_call=False,
             )
             # This is a bit hacky. call_impl() -> invoke_compiled() doesn't realize that the
             # cleanup body has no call frame and that the _previous_ frame therefore needs
@@ -1365,17 +1375,35 @@ def call_impl(
             shift_top_frame(state)
 
 
-def intrinsic__call(state: RuntimeState, receiver: Value) -> None:
-    call_impl("call", state, receiver, args=[], cleanup=None, is_cleanup=False, cleanup_retain=None)
-
-
-def intrinsic__call_(state: RuntimeState, receiver: Value, value: Value) -> None:
+def intrinsic__call(state: RuntimeState, tail_call: bool, receiver: Value) -> None:
     call_impl(
-        "call:", state, receiver, args=[value], cleanup=None, is_cleanup=False, cleanup_retain=None
+        "call",
+        state,
+        receiver,
+        args=[],
+        cleanup=None,
+        is_cleanup=False,
+        cleanup_retain=None,
+        tail_call=tail_call,
     )
 
 
-def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) -> None:
+def intrinsic__call_(state: RuntimeState, tail_call: bool, receiver: Value, value: Value) -> None:
+    call_impl(
+        "call:",
+        state,
+        receiver,
+        args=[value],
+        cleanup=None,
+        is_cleanup=False,
+        cleanup_retain=None,
+        tail_call=tail_call,
+    )
+
+
+def intrinsic__call_star_(
+    state: RuntimeState, tail_call: bool, receiver: Value, value: Value
+) -> None:
     assert isinstance(value, TupleValue)
     call_impl(
         "call*:",
@@ -1385,10 +1413,11 @@ def intrinsic__call_star_(state: RuntimeState, receiver: Value, value: Value) ->
         cleanup=None,
         is_cleanup=False,
         cleanup_retain=None,
+        tail_call=tail_call,
     )
 
 
-def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
+def intrinsic__call_cc(state: RuntimeState, tail_call: bool, receiver: Value) -> None:
     current_continuation = ContinuationValue(
         state=RuntimeState(
             call_stack=[frame.copy() for frame in state.call_stack],
@@ -1403,16 +1432,26 @@ def intrinsic__call_cc(state: RuntimeState, receiver: Value) -> None:
         cleanup=None,
         is_cleanup=False,
         cleanup_retain=None,
+        tail_call=tail_call,
     )
 
 
-def intrinsic__cleanup_(state: RuntimeState, receiver: Value, cleanup: Value) -> None:
+def intrinsic__cleanup_(
+    state: RuntimeState, tail_call: bool, receiver: Value, cleanup: Value
+) -> None:
     call_impl(
-        "cleanup:", state, receiver, args=[], cleanup=cleanup, is_cleanup=False, cleanup_retain=None
+        "cleanup:",
+        state,
+        receiver,
+        args=[],
+        cleanup=cleanup,
+        is_cleanup=False,
+        cleanup_retain=None,
+        tail_call=tail_call,
     )
 
 
-def intrinsic__call_rc(state: RuntimeState, receiver: Value) -> None:
+def intrinsic__call_rc(state: RuntimeState, tail_call: bool, receiver: Value) -> None:
     return_continuation = ReturnContinuationValue(return_to=state.call_stack[-1])
     # Reference-count the return continuations.
     return_continuation.return_to.num_nonlocal_returns += 1
@@ -1424,10 +1463,11 @@ def intrinsic__call_rc(state: RuntimeState, receiver: Value) -> None:
         cleanup=None,
         is_cleanup=False,
         cleanup_retain=None,
+        tail_call=tail_call,
     )
 
 
-def intrinsic__panic_(state: RuntimeState, receiver: Value, value: Value) -> None:
+def intrinsic__panic_(state: RuntimeState, tail_call: bool, receiver: Value, value: Value) -> None:
     pprint_stacktrace(state)
     # Force all frames to unwind except for frames actively cleaning up.
     for frame in reversed(state.call_stack):

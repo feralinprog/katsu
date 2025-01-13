@@ -723,6 +723,8 @@ def handle__query_user_for_restart_(
             in_str = input("Select a restart (or empty for default restart): ")
         except EOFError:
             return NullValue()
+        if in_str == "":
+            return NullValue()
         try:
             index = int(in_str)
         except ValueError:
