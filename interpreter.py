@@ -1081,7 +1081,7 @@ def invoke_compiled(
             ):
                 print("WARNING: not performing tail-call even though requested")
                 print(
-                    f"details: spot={frame.spot}, codelen={frame.sequence.code}, is_cleanup={frame.is_cleanup}, cleanup={frame.cleanup}, num_nonlocal_returns={frame.num_nonlocal_returns}"
+                    f"details: spot={frame.spot}, codelen={len(frame.sequence.code)}, is_cleanup={frame.is_cleanup}, cleanup={frame.cleanup}, num_nonlocal_returns={frame.num_nonlocal_returns}"
                 )
                 tail_call = False
         if tail_call:
