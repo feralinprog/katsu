@@ -624,10 +624,9 @@ def compile_into(expr: Expr, sequence: BytecodeSequence):
         compile_into(expr.arg, sequence)
         add("tail-invoke" if tail_call else "invoke", expr.op.value, 1, span=expr.span)
     elif isinstance(expr, BinaryOpExpr):
-        add("push-default-receiver", span=expr.op.span)
         compile_into(expr.left, sequence)
         compile_into(expr.right, sequence)
-        add("tail-invoke" if tail_call else "invoke", expr.op.value + ":_:", 3, span=expr.span)
+        add("tail-invoke" if tail_call else "invoke", expr.op.value + ":", 2, span=expr.span)
     elif isinstance(expr, NameExpr):
         add("push-default-receiver", span=expr.name.span)
         add("tail-invoke" if tail_call else "invoke", expr.name.value, 1, span=expr.span)

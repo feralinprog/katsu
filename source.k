@@ -189,7 +189,7 @@ t type == Bool
 
 data: 'Point3D extends: { Point } has: { :z }
 
-method: [+: (p: Point) _: (q: Point)] does: [
+method: [(p: Point) +: (q: Point)] does: [
     Point x: (p .x + q .x) y: (p .y + q .y)
 ]
 
@@ -201,7 +201,7 @@ p + q3
 p3 + q
 p3 + q3
 
-method: [+: (p: Point3D) _: (q: Point3D)] does: [
+method: [(p: Point3D) +: (q: Point3D)] does: [
     Point3D x: (p .x + q .x) y: (p .y + q .y) z: (p .z + q .z)
 ]
 p + q

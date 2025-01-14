@@ -433,15 +433,15 @@ def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -
 builtin_method("let:=:", (None, QuoteType, None), handle__let_eq_)
 
 
-def handle__set(ctxt: Context, receiver: Value, slot: Value, value: Value) -> Value:
+def handle__set(ctxt: Context, slot: Value, value: Value) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(slot, QuoteValue):
         if isinstance(slot.body, NameExpr):
             slot = slot.body.name.value
         else:
-            raise ValueError(f"=:_: 'slot' argument should be a quoted name; got {slot}")
+            raise ValueError(f"=: 'slot' argument should be a quoted name; got {slot}")
     else:
-        raise ValueError("=:_: receiver should be a quoted name")
+        raise ValueError("=: receiver should be a quoted name")
 
     while ctxt and slot not in ctxt.slots:
         ctxt = ctxt.base
@@ -451,7 +451,7 @@ def handle__set(ctxt: Context, receiver: Value, slot: Value, value: Value) -> Va
     return value
 
 
-builtin_method("=:_:", (None, QuoteType, None), handle__set)
+builtin_method("=:", (QuoteType, None), handle__set)
 
 
 # Each handler is a function from value -> value, where the input value satisfies the provided receiver matcher.
@@ -479,9 +479,9 @@ def builtin_binary_op(
 ):
     for left_matcher, right_matcher, handler in methods:
         builtin_method(
-            op + ":_:",
-            param_matchers=[None, left_matcher, right_matcher],
-            handler=(lambda ctxt, receiver, left, right: handler(left, right)),
+            op + ":",
+            param_matchers=[left_matcher, right_matcher],
+            handler=(lambda ctxt, left, right: handler(left, right)),
         )
 
 
