@@ -606,3 +606,9 @@ method: [handle-signal: condition-tuple] does: [ signal: condition-tuple conditi
         ]
     }
 }
+
+# This is a bit unfortunate. Delete `it`? Or just provide `it` to _every_ no-arg quote?
+[it print] call: "a string"
+[[it print] call] with-restarts: (assoc: {
+    { :use-null; [ null ] }
+})
