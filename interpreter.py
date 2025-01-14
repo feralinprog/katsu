@@ -88,6 +88,8 @@ class VectorValue(Value):
 class QuoteValue(Value):
     parameters: list[str]
     body: Expr
+    # Cached when first compiled.
+    bytecode: Optional["BytecodeSequence"]
     context: "Context"
     # Source span, to allow for useful error messages.
     span: Optional[SourceSpan]
@@ -461,8 +463,8 @@ class QuoteMethodBody(MethodBody):
     context: Context
     # This includes the receiver name.
     param_names: list[str]
-    body_expr: Expr
-    body: BytecodeSequence
+    body: Expr
+    bytecode: BytecodeSequence
 
 
 @dataclass
@@ -853,7 +855,15 @@ def eval_one_op(state: RuntimeState) -> None:
         assert isinstance(block, Block)
         ctxt = frame.data_stack.pop()
         assert isinstance(ctxt, Context)
-        frame.data_stack.append(QuoteValue(block.parameters, block.body, ctxt, span=block.span))
+        frame.data_stack.append(
+            QuoteValue(
+                parameters=block.parameters,
+                body=block.body,
+                bytecode=None,
+                context=ctxt,
+                span=block.span,
+            )
+        )
         frame.spot += 1
     elif op == "invoke" or op == "tail-invoke":
         message, nargs = bytecode.args
@@ -930,10 +940,7 @@ def eval_one_op(state: RuntimeState) -> None:
 
                     method_body = method.body
                     if isinstance(method_body, QuoteMethodBody):
-                        if not method_body.body:
-                            # TODO: do this earlier, within method:does:.
-                            method_body.body = compile(method_body.body_expr)
-
+                        assert method_body.bytecode
                         body_ctxt = Context(slots={}, base=method_body.context)
                         assert len(args) == len(
                             method_body.param_names
@@ -945,7 +952,7 @@ def eval_one_op(state: RuntimeState) -> None:
                         invoke_compiled(
                             state,
                             message,
-                            method_body.body,
+                            method_body.bytecode,
                             body_ctxt,
                             default_receiver=NullValue(),
                             cleanup=None,
@@ -1245,11 +1252,13 @@ def intrinsic__if_then_else(
     body = tbody if isinstance(cond, BoolValue) and cond.value else fbody
     if isinstance(body, QuoteValue):
         # TODO: use reified context as default receiver?
-        # TODO: compile ahead of time somehow...
+        if not body.bytecode:
+            # JIT compilation!
+            body.bytecode = compile(body.body)
         invoke_compiled(
             state,
             "<a quote>",
-            compile(body.body),
+            body.bytecode,
             body.context,
             default_receiver=NullValue(),
             cleanup=None,
@@ -1290,11 +1299,13 @@ def call_impl(
             # TODO: use reified context as default receiver?
             default_receiver = NullValue()
         new_slots = {name: value for name, value in zip(param_names, args)}
-        # TODO: compile ahead of time somehow...
+        if not receiver.bytecode:
+            # JIT compilation!
+            receiver.bytecode = compile(receiver.body)
         invoke_compiled(
             state,
             message,
-            compile(receiver.body),
+            receiver.bytecode,
             Context(slots=new_slots, base=receiver.context),
             default_receiver=default_receiver,
             cleanup=cleanup,

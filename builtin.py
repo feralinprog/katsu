@@ -39,6 +39,7 @@ from interpreter import (
     Value,
     VectorType,
     VectorValue,
+    compile,
     eval_toplevel,
     intrinsic_handlers,
     is_subtype,
@@ -189,14 +190,13 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
     if body.parameters:
         raise ValueError("method:does: 'body' argument should not specify any parameters")
 
-    # TODO: compile here instead of on-demand in the 'invoke' bytecode evaluator.
     method = Method(
         param_matchers=param_matchers,
         body=QuoteMethodBody(
             context=body.context,
             param_names=param_names,
-            body_expr=body.body,
-            body=None,
+            body=body.body,
+            bytecode=compile(body.body),
         ),
     )
 
