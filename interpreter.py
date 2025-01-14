@@ -329,6 +329,16 @@ class NativeHandler:
 
 
 @dataclass
+class CompileTimeHandler:
+    # Not called during evaluation, but rather while compiling a block.
+    # This is provided the current block compiler (which includes the compilation
+    # context), the source span of the originating message expression, a receiver
+    # expression (or None if there was no receiver specified), and a list of
+    # argument expressions.
+    handler: Callable[["Compiler", SourceSpan, Optional[Expr], list[Expr]], None]
+
+
+@dataclass
 class Context:
     # TODO: add back IntrinsicHandler / NativeHandler? Maybe multimethods should just
     # be implemented in-language instead of being so intrinsic...
@@ -347,14 +357,13 @@ class BytecodeOp:
 
 
 # List of bytecode operations:
+# get-slot <str>
+# create-slot <str>
 # push-default-receiver
-# push-number <number>
-# push-string <str>
-# push-symbol <str>
-# push-block <Block>
-# push-current-context
-# context+block>quote
-# invoke <message: str> <nargs: int>      (nargs includes the receiver)
+# push-value <Value>
+# push-closure <QuoteValue>
+# invoke <message: str> <nargs: int>        (nargs includes the receiver)
+# tail-invoke <message: str> <nargs: int>   (nargs includes the receiver)
 # components>vector <length: int>
 # components>tuple <length: int>
 # drop
@@ -591,99 +600,212 @@ class MultiMethod:
 #################################################
 
 
-def compile_into(expr: Expr, sequence: BytecodeSequence):
-    assert expr is not None
+@dataclass
+class UndeterminedValue:
+    # For debug only.
+    name: str
 
-    def add(op: str, *args, span: SourceSpan):
-        sequence.code.append(BytecodeOp(op=op, args=args, span=span))
 
-    # TODO: make this less hacky -- should be part of macro / AST rewrite system.
-    tail_call = False
-    if isinstance(expr, NAryMessageExpr) and [message.value for message in expr.messages] == [
-        "TAIL-CALL"
-    ]:
-        if expr.target is not None:
-            raise ValueError("TAIL-CALL: requires no receiver")
-        call = expr.args[0]
-        while isinstance(call, ParenExpr):
-            call = call.inner
-        if not (
-            isinstance(call, UnaryOpExpr)
-            or isinstance(call, BinaryOpExpr)
-            or isinstance(call, NameExpr)
-            or isinstance(call, UnaryMessageExpr)
-            or isinstance(call, NAryMessageExpr)
-        ):
-            raise ValueError(
-                "TAIL-CALL: must be applied to a unary/binary op or a unary/n-ary message"
+@dataclass
+class UndeterminedMethod:
+    # For debug only.
+    name: str
+
+
+@dataclass
+class CompilationContext:
+    slots: dict[str, Union[Value, MultiMethod, UndeterminedValue, UndeterminedMethod]]
+    base: Optional[Union[Context, "CompilationContext"]]
+
+    def lookup(
+        self, slot: str
+    ) -> Optional[Union[Value, MultiMethod, UndeterminedValue, UndeterminedMethod]]:
+        ctxt = self
+        while ctxt:
+            if slot in ctxt.slots:
+                return ctxt.slots[slot]
+            ctxt = ctxt.base
+        return None
+
+
+# Compiler for a specific method / quote body in a particular CompilationContext.
+class Compiler:
+    ctxt: CompilationContext
+    sequence: BytecodeSequence
+
+    def __init__(self, context: CompilationContext):
+        self.ctxt = context
+        self.sequence = BytecodeSequence(code=[])
+
+    def add_bytecode(self, op: str, args: Tuple, span: SourceSpan):
+        self.sequence.code.append(BytecodeOp(op=op, args=args, span=span))
+
+    def compile_expr(self, expr: Expr):
+        assert expr is not None
+
+        def add(op: str, *args, span: SourceSpan):
+            self.add_bytecode(op, args, span)
+
+        # TODO: make this less hacky -- should be part of macro / AST rewrite system.
+        tail_call = False
+        if isinstance(expr, NAryMessageExpr) and [message.value for message in expr.messages] == [
+            "TAIL-CALL"
+        ]:
+            if expr.target is not None:
+                raise ValueError("TAIL-CALL: requires no receiver")
+            call = expr.args[0]
+            while isinstance(call, ParenExpr):
+                call = call.inner
+            if not (
+                isinstance(call, UnaryOpExpr)
+                or isinstance(call, BinaryOpExpr)
+                or isinstance(call, NameExpr)
+                or isinstance(call, UnaryMessageExpr)
+                or isinstance(call, NAryMessageExpr)
+            ):
+                raise ValueError(
+                    "TAIL-CALL: must be applied to a unary/binary op or a unary/n-ary message"
+                )
+            tail_call = True
+            expr = call
+
+        # Only the first of the args is actually optional.
+        def compile_invocation(
+            message: str, args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
+        ) -> None:
+            assert len(args) > 0
+            assert all(arg is not None for arg in args[1:])
+
+            slot = self.ctxt.lookup(message)
+            if not slot:
+                raise ValueError(f"Could not compile: unknown slot '{message}'.")
+
+            if isinstance(slot, CompileTimeHandler):
+                slot.handler(self, span, *args)
+                return
+            elif isinstance(slot, UndeterminedValue):
+                receiver, args = args[0], args[1:]
+                if receiver or args:
+                    raise ValueError(
+                        f"Could not compile: local slot is an undetermined-value, so does not need receiver or arguments: {message}."
+                    )
+                add("get-slot", message, span=span)
+                return
+            elif isinstance(slot, UndeterminedMethod) or isinstance(slot, MultiMethod):
+                for arg in args:
+                    if arg is None:
+                        add("push-default-receiver", span=span)
+                    else:
+                        self.compile_expr(arg)
+                if isinstance(slot, MultiMethod):
+                    # TODO: inline the dispatch and bodies if the multimethod requests inlining (or maybe by heuristics
+                    # otherwise)
+                    pass
+                add("tail-invoke" if tail_call else "invoke", message, len(args), span=span)
+            elif isinstance(slot, Value):
+                receiver, args = args[0], args[1:]
+                if receiver or args:
+                    raise ValueError(
+                        f"Could not compile: slot is not a method, so does not need receiver or arguments: {message}."
+                    )
+                # Don't use the value directly. Look it up at runtime later (it could very well be a local variable).
+                # add("push-value", slot, span=span)
+                add("get-slot", message, span=span)
+            else:
+                raise AssertionError(f"forgot a slot type? {type(slot)}: {slot}")
+
+        if isinstance(expr, UnaryOpExpr):
+            compile_invocation(expr.op.value, [expr.arg], tail_call=tail_call, span=expr.span)
+        elif isinstance(expr, BinaryOpExpr):
+            compile_invocation(
+                expr.op.value + ":", [expr.left, expr.right], tail_call=tail_call, span=expr.span
             )
-        tail_call = True
-        expr = call
-
-    if isinstance(expr, UnaryOpExpr):
-        compile_into(expr.arg, sequence)
-        add("tail-invoke" if tail_call else "invoke", expr.op.value, 1, span=expr.span)
-    elif isinstance(expr, BinaryOpExpr):
-        compile_into(expr.left, sequence)
-        compile_into(expr.right, sequence)
-        add("tail-invoke" if tail_call else "invoke", expr.op.value + ":", 2, span=expr.span)
-    elif isinstance(expr, NameExpr):
-        add("push-default-receiver", span=expr.name.span)
-        add("tail-invoke" if tail_call else "invoke", expr.name.value, 1, span=expr.span)
-    elif isinstance(expr, LiteralExpr):
-        literal = expr.literal
-        if literal._type == TokenType.SYMBOL:
-            add("push-symbol", literal.value, span=literal.span)
-        elif literal._type == TokenType.NUMBER:
-            add("push-number", literal.value, span=literal.span)
-        elif literal._type == TokenType.STRING:
-            add("push-string", literal.value, span=literal.span)
+        elif isinstance(expr, NameExpr):
+            compile_invocation(expr.name.value, [None], tail_call=tail_call, span=expr.span)
+        elif isinstance(expr, LiteralExpr):
+            literal = expr.literal
+            if literal._type == TokenType.SYMBOL:
+                add("push-value", SymbolValue(literal.value), span=literal.span)
+            elif literal._type == TokenType.NUMBER:
+                add("push-value", NumberValue(literal.value), span=literal.span)
+            elif literal._type == TokenType.STRING:
+                add("push-value", StringValue(literal.value), span=literal.span)
+            else:
+                raise AssertionError(f"Forgot a literal token type! {literal._type} ({literal})")
+        elif isinstance(expr, UnaryMessageExpr):
+            compile_invocation(
+                expr.message.value, [expr.target], tail_call=tail_call, span=expr.span
+            )
+        elif isinstance(expr, NAryMessageExpr):
+            assert len(expr.messages) == len(expr.args)
+            message = "".join(message.value + ":" for message in expr.messages)
+            compile_invocation(
+                message, [expr.target] + expr.args, tail_call=tail_call, span=expr.span
+            )
+        elif isinstance(expr, ParenExpr):
+            self.compile_expr(expr.inner)
+        elif isinstance(expr, QuoteExpr):
+            # TODO: this is where `it` default param needs to be added (or not).
+            if not expr.parameters:
+                param_names = ["it"]
+            else:
+                param_names = expr.parameters
+            body_comp_ctxt = CompilationContext(
+                slots={param: UndeterminedValue(param) for param in param_names}, base=self.ctxt
+            )
+            quote = QuoteValue(
+                parameters=expr.parameters,
+                body=expr.body,
+                bytecode=compile(expr.body, body_comp_ctxt),
+                context=None,  # will be filled in later during evaluation
+                span=expr.span,
+            )
+            add("push-closure", quote, span=expr.span)
+        elif isinstance(expr, DataExpr):
+            for component in expr.components:
+                self.compile_expr(component)
+            add("components>vector", len(expr.components), span=expr.span)
+        elif isinstance(expr, SequenceExpr):
+            assert expr.sequence != []
+            for i, part in enumerate(expr.sequence):
+                self.compile_expr(part)
+                is_last = i == len(expr.sequence) - 1
+                if not is_last:
+                    add("drop", span=part.span)
+        elif isinstance(expr, TupleExpr):
+            for component in expr.components:
+                self.compile_expr(component)
+            add("components>tuple", len(expr.components), span=expr.span)
         else:
-            raise AssertionError(f"Forgot a literal token type! {literal._type} ({literal})")
-    elif isinstance(expr, UnaryMessageExpr):
-        compile_into(expr.target, sequence)
-        add("tail-invoke" if tail_call else "invoke", expr.message.value, 1, span=expr.span)
-    elif isinstance(expr, NAryMessageExpr):
-        if expr.target is None:
-            # TODO: use smaller span?
-            add("push-default-receiver", span=expr.span)
-        else:
-            compile_into(expr.target, sequence)
-        for arg in expr.args:
-            compile_into(arg, sequence)
-        assert len(expr.messages) == len(expr.args)
-        message = "".join(message.value + ":" for message in expr.messages)
-        add("tail-invoke" if tail_call else "invoke", message, 1 + len(expr.args), span=expr.span)
-    elif isinstance(expr, ParenExpr):
-        compile_into(expr.inner, sequence)
-    elif isinstance(expr, QuoteExpr):
-        add("push-current-context", span=expr.span)
-        add("push-block", Block(expr.parameters, expr.body, span=expr.span), span=expr.span)
-        add("context+block>quote", span=expr.span)
-    elif isinstance(expr, DataExpr):
-        for component in expr.components:
-            compile_into(component, sequence)
-        add("components>vector", len(expr.components), span=expr.span)
-    elif isinstance(expr, SequenceExpr):
-        assert expr.sequence != []
-        for i, part in enumerate(expr.sequence):
-            compile_into(part, sequence)
-            is_last = i == len(expr.sequence) - 1
-            if not is_last:
-                add("drop", span=part.span)
-    elif isinstance(expr, TupleExpr):
-        for component in expr.components:
-            compile_into(component, sequence)
-        add("components>tuple", len(expr.components), span=expr.span)
-    else:
-        raise AssertionError(f"Forgot an expression type! {type(expr)}")
+            raise AssertionError(f"Forgot an expression type! {type(expr)}")
 
 
-def compile(expr: Expr) -> BytecodeSequence:
+def compile(expr: Expr, ctxt: CompilationContext) -> BytecodeSequence:
     assert expr is not None
-    sequence = BytecodeSequence(code=[])
-    compile_into(expr, sequence)
-    return sequence
+    compiler = Compiler(context=ctxt)
+    compiler.compile_expr(expr)
+    return compiler.sequence
+
+
+should_show_compiler_output = False
+
+
+def show_compiler_output(sequence: BytecodeSequence):
+    if not should_show_compiler_output:
+        return
+
+    print("===== COMPILER OUTPUT =====")
+
+    def print_op(bytecode, depth):
+        print("  " * depth + f"{bytecode.op}{''.join(' ' + str(arg) for arg in bytecode.args)}")
+        if bytecode.op == "push-closure":
+            quote: QuoteValue = bytecode.args[0]
+            for c in quote.bytecode.code:
+                print_op(c, depth + 1)
+
+    for c in sequence.code:
+        print_op(c, depth=0)
+    print("=========== END ===========")
 
 
 #################################################
@@ -820,49 +942,49 @@ def eval_one_op(state: RuntimeState) -> None:
     bytecode = frame.sequence.code[frame.spot]
     op = bytecode.op
 
-    if op == "push-default-receiver":
+    if op == "get-slot":
+        (slot,) = bytecode.args
+        assert isinstance(slot, str)
+        # Find the slot value:
+        ctxt = frame.context
+        value = None
+        while ctxt is not None:
+            if slot in ctxt.slots:
+                value = ctxt.slots[slot]
+                break
+            ctxt = ctxt.base
+        assert value, "compilation issue?"
+        frame.data_stack.append(value)
+        frame.spot += 1
+    elif op == "create-slot":
+        (slot,) = bytecode.args
+        assert isinstance(slot, str)
+        assert slot not in frame.context.slots, "compilation issue?"
+        assert frame.data_stack
+        # TODO: often this will be followed by a 'drop'; peephole optimize?
+        frame.context.slots[slot] = frame.data_stack[-1]
+        frame.spot += 1
+    elif op == "push-default-receiver":
         assert not bytecode.args
         frame.data_stack.append(frame.default_receiver)
         frame.spot += 1
-    elif op == "push-number":
+    elif op == "push-value":
         (v,) = bytecode.args
-        assert isinstance(v, int)
-        frame.data_stack.append(NumberValue(v))
-        frame.spot += 1
-    elif op == "push-string":
-        (v,) = bytecode.args
-        assert isinstance(v, str)
-        frame.data_stack.append(StringValue(v))
-        frame.spot += 1
-    elif op == "push-symbol":
-        (v,) = bytecode.args
-        assert isinstance(v, str)
-        frame.data_stack.append(SymbolValue(v))
-        frame.spot += 1
-    elif op == "push-block":
-        (v,) = bytecode.args
-        assert isinstance(v, Block)
+        assert isinstance(v, Value)
         frame.data_stack.append(v)
         frame.spot += 1
-    elif op == "push-current-context":
-        assert not bytecode.args
-        frame.data_stack.append(frame.context)
-        frame.spot += 1
-    elif op == "context+block>quote":
-        assert not bytecode.args
-        block = frame.data_stack.pop()
-        assert isinstance(block, Block)
-        ctxt = frame.data_stack.pop()
-        assert isinstance(ctxt, Context)
-        frame.data_stack.append(
-            QuoteValue(
-                parameters=block.parameters,
-                body=block.body,
-                bytecode=None,
-                context=ctxt,
-                span=block.span,
-            )
+    elif op == "push-closure":
+        (quote,) = bytecode.args
+        assert isinstance(quote, QuoteValue)
+        assert quote.context is None
+        closure = QuoteValue(
+            parameters=quote.parameters,
+            body=quote.body,
+            bytecode=quote.bytecode,
+            context=frame.context,
+            span=quote.span,
         )
+        frame.data_stack.append(closure)
         frame.spot += 1
     elif op == "invoke" or op == "tail-invoke":
         message, nargs = bytecode.args
@@ -1003,6 +1125,10 @@ def eval_one_op(state: RuntimeState) -> None:
                         frame.spot += 1
                     else:
                         raise AssertionError(f"Unexpected method body '{method_body}'")
+                elif isinstance(slot, CompileTimeHandler):
+                    raise AssertionError(
+                        f"Shouldn't have gotten here: calling compile time handler '{slot}'"
+                    )
                 else:
                     raise AssertionError(f"Unexpected slot value '{slot}'")
 
@@ -1131,7 +1257,13 @@ def shift_top_frame(state: RuntimeState) -> None:
 
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
-    bytecode = compile(expr)
+    bytecode = compile(expr, ctxt=CompilationContext(slots={}, base=context))
+    show_compiler_output(bytecode)
+
+    if not bytecode.code:
+        # Must have been all compile-time evaluation.
+        return NullValue()
+
     state = RuntimeState(
         # TODO: maybe default_receiver should be a reified global context instead?
         call_stack=[
@@ -1251,9 +1383,7 @@ def intrinsic__if_then_else(
     body = tbody if isinstance(cond, BoolValue) and cond.value else fbody
     if isinstance(body, QuoteValue):
         # TODO: use reified context as default receiver?
-        if not body.bytecode:
-            # JIT compilation!
-            body.bytecode = compile(body.body)
+        assert body.bytecode
         invoke_compiled(
             state,
             "<a quote>",
@@ -1285,10 +1415,11 @@ def call_impl(
     assert not (cleanup and is_cleanup)
 
     if isinstance(receiver, QuoteValue):
-        # Special-case no parameters with one argument.
-        if not receiver.parameters and len(args) == 1:
+        # Special-case no parameters: use parameter name "it", and accept 0 or 1 arguments.
+        if not receiver.parameters and len(args) <= 1:
             param_names = ["it"]
-            default_receiver = args[0]
+            default_receiver = args[0] if args else NullValue()
+            args = [default_receiver]
         elif len(receiver.parameters) != len(args):
             raise ValueError(
                 f"{message} receiver (a quote) has {len(receiver.parameters)} parameter(s), but is being provided {len(args)} argument(s)"
@@ -1298,9 +1429,7 @@ def call_impl(
             # TODO: use reified context as default receiver?
             default_receiver = NullValue()
         new_slots = {name: value for name, value in zip(param_names, args)}
-        if not receiver.bytecode:
-            # JIT compilation!
-            receiver.bytecode = compile(receiver.body)
+        assert receiver.bytecode
         invoke_compiled(
             state,
             message,

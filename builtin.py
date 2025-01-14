@@ -1,16 +1,20 @@
 from parser import NameExpr, NAryMessageExpr, ParenExpr, UnaryMessageExpr
-from typing import Callable, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
 from interpreter import (
     BoolType,
     BoolValue,
+    CompilationContext,
+    Compiler,
+    CompileTimeHandler,
     Context,
     ContinuationType,
     DataclassTypeType,
     DataclassTypeValue,
     DataclassValue,
+    Expr,
     IntrinsicMethodBody,
     Method,
     MixinTypeValue,
@@ -25,6 +29,7 @@ from interpreter import (
     ParameterMatcher,
     ParameterTypeMatcher,
     ParameterValueMatcher,
+    QuoteExpr,
     QuoteMethodBody,
     QuoteType,
     QuoteValue,
@@ -36,6 +41,8 @@ from interpreter import (
     TupleType,
     TypeType,
     TypeValue,
+    UndeterminedMethod,
+    UndeterminedValue,
     Value,
     VectorType,
     VectorValue,
@@ -43,8 +50,10 @@ from interpreter import (
     eval_toplevel,
     intrinsic_handlers,
     is_subtype,
+    show_compiler_output,
     type_of,
 )
+from span import SourceSpan
 
 # TODO: go through all handlers, delete unnecessary type checks (since multimethod dispatch guarantees correct types)
 
@@ -72,6 +81,11 @@ for slot, (param_matchers, handler) in intrinsic_handlers.items():
 def builtin_value(name: str, value: Value) -> None:
     assert name not in global_context.slots, f"{name} already is defined as a builtin."
     global_context.slots[name] = value
+
+
+def builtin_compile_time(name: str, handler) -> None:
+    assert name not in global_context.slots, f"{name} already is defined as a builtin."
+    global_context.slots[name] = CompileTimeHandler(handler)
 
 
 # Add a method to a multimethod.
@@ -112,11 +126,13 @@ builtin_value("Type", TypeType)
 builtin_value("DataclassType", DataclassTypeType)
 
 
-def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Value) -> Value:
-    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
+def handle__method_does_(
+    compiler: Compiler, span: SourceSpan, receiver: Optional[Expr], decl: Expr, body: Expr
+) -> None:
+    if receiver:
+        raise ValueError("method:does: does not need a receiver")
+
     # TODO: support return type declaration? (how can we enforce that...?)
-    if not isinstance(decl, QuoteValue):
-        raise ValueError("method:does: 'declaration' argument should be a quoted name or message")
 
     def param_name_and_matcher(expr, error_msg):
         # TODO: parse value matchers as well.
@@ -132,81 +148,114 @@ def handle__method_does_(ctxt: Context, receiver: Value, decl: Value, body: Valu
         ):
             name = expr.inner.messages[0].value
             # TODO: don't use eval_toplevel.
-            _type = eval_toplevel(expr.inner.args[0], ctxt)
+            # TODO: this is so wrong, don't directly use the CompilationContext
+            _type = eval_toplevel(expr.inner.args[0], compiler.ctxt)
             matcher = ParameterTypeMatcher(_type)
             return (name, matcher)
         else:
             raise ValueError(error_msg)
 
-    if isinstance(decl.body, NameExpr):
-        message = decl.body.name.value
+    # TODO: maybe we need some preprocessing step to just get rid of ParenExpr...
+    while isinstance(decl, ParenExpr):
+        decl = decl.inner
+
+    if isinstance(decl, QuoteExpr):
+        if decl.parameters:
+            raise ValueError(
+                "method:does: 'declaration' argument should not specify any parameters"
+            )
+        decl = decl.body
+    else:
+        # TODO: implement non-quote decls for method:does:.
+        raise NotImplementedError("non-quote decls for method:does:")
+
+    if isinstance(decl, NameExpr):
+        message = decl.name.value
         param_names = ["self"]
         param_matchers = [ParameterAnyMatcher()]
-    elif isinstance(decl.body, UnaryMessageExpr):
+    elif isinstance(decl, UnaryMessageExpr):
         format_msg = (
             "When the method:does: 'declaration' argument is a unary message, "
             "it must be a simple unary message of the form [target-name message-name] "
             "or else a unary message of the form [(target-name: matcher) message-name]"
         )
-        message = decl.body.message.value
-        param_name, param_matcher = param_name_and_matcher(decl.body.target, format_msg)
+        message = decl.message.value
+        param_name, param_matcher = param_name_and_matcher(decl.target, format_msg)
         param_names = [param_name]
         param_matchers = [param_matcher]
-    elif isinstance(decl.body, NAryMessageExpr):
+    elif isinstance(decl, NAryMessageExpr):
         format_msg = (
             "When the method:does: 'declaration' argument is an n-ary message, "
             "it must be a simple n-ary message of the form [target-name message: param-name ...] "
             "or else an n-ary message of the form [(target-name: matcher) message: (param-name: matcher) ...] "
             "(the target-name is optional, as is each parameter matcher declaration)"
         )
-        message = "".join(message.value + ":" for message in decl.body.messages)
+        message = "".join(message.value + ":" for message in decl.messages)
         param_names = []
         param_matchers = []
 
-        if decl.body.target:
-            param_name, param_matcher = param_name_and_matcher(decl.body.target, format_msg)
+        if decl.target:
+            param_name, param_matcher = param_name_and_matcher(decl.target, format_msg)
             param_names.append(param_name)
             param_matchers.append(param_matcher)
         else:
             param_names.append("self")
             param_matchers.append(ParameterAnyMatcher())
 
-        for arg in decl.body.args:
+        for arg in decl.args:
             param_name, param_matcher = param_name_and_matcher(arg, format_msg)
             param_names.append(param_name)
             param_matchers.append(param_matcher)
     else:
         # TODO: allow unary / binary ops too
         raise ValueError(
-            f"method:does: 'declaration' argument should be a quoted name or message; got {decl.body}"
+            f"method:does: 'declaration' argument should be a name or message; got {decl}"
         )
 
-    if decl.parameters:
-        raise ValueError("method:does: 'declaration' argument should not specify any parameters")
-
     # Fill in the body and context, then define the method.
-    if not isinstance(body, QuoteValue):
+    if not isinstance(body, QuoteExpr):
         raise ValueError("method:does: 'body' argument should be a quote")
     if body.parameters:
         raise ValueError("method:does: 'body' argument should not specify any parameters")
 
+    body_comp_ctxt = CompilationContext(slots={}, base=compiler.ctxt)
+    # TODO: this is a bit hacky, only works for direct recursion.
+    body_comp_ctxt.slots[message] = UndeterminedMethod(message)
+    for name in param_names:
+        body_comp_ctxt.slots[name] = UndeterminedValue(name)
+
     method = Method(
         param_matchers=param_matchers,
         body=QuoteMethodBody(
-            context=body.context,
+            context=compiler.ctxt,  # TODO: this seems a bit funky, not a real context...
             param_names=param_names,
             body=body.body,
-            bytecode=compile(body.body),
+            bytecode=compile(
+                body.body,
+                ctxt=body_comp_ctxt,
+            ),
         ),
     )
 
-    # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
-    create_or_add_method(ctxt, message, method)
+    show_compiler_output(method.body.bytecode)
 
+    # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
+    assert isinstance(compiler.ctxt.base, Context)
+    create_or_add_method(compiler.ctxt.base, message, method)
+
+
+builtin_compile_time("method:does:", handle__method_does_)
+
+
+def handle__defer_method_(ctxt: Context, receiver: Value, method: SymbolValue) -> Value:
+    slot = method.symbol
+    if slot in ctxt.slots:
+        raise ValueError(f"Slot '{slot}' is already defined.")
+    ctxt.slots[slot] = MultiMethod(name=slot, methods=[])
     return NullValue()
 
 
-builtin_method("method:does:", (None, QuoteType, QuoteType), handle__method_does_)
+builtin_method("defer-method:", (None, SymbolType), handle__defer_method_)
 
 
 def handle__type(ctxt: Context, receiver: Value) -> Value:
@@ -245,12 +294,9 @@ builtin_method("DataclassType?", (None,), handle_is_type(DataclassTypeType))
 
 
 def define_dataclass(
-    message: str, ctxt: Context, decl: QuoteValue, extends: VectorValue, slots: VectorValue
+    message: str, ctxt: Context, decl: SymbolValue, extends: VectorValue, slots: VectorValue
 ) -> None:
-    if isinstance(decl.body, NameExpr):
-        class_name = decl.body.name.value
-    else:
-        raise ValueError(f"{message} 'declaration' argument should be a quoted name; got {decl}")
+    class_name = decl.symbol
 
     for base in extends.components:
         if not isinstance(base, TypeValue):
@@ -330,7 +376,7 @@ def define_dataclass(
 
 
 def handle__data_extends_has_(
-    ctxt: Context, receiver: Value, decl: QuoteValue, extends: VectorValue, slots: VectorValue
+    ctxt: Context, receiver: Value, decl: SymbolValue, extends: VectorValue, slots: VectorValue
 ) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     define_dataclass("data:extends:has:", ctxt, decl, extends, slots)
@@ -338,7 +384,7 @@ def handle__data_extends_has_(
 
 
 def handle__data_has_(
-    ctxt: Context, receiver: Value, decl: QuoteValue, slots: VectorValue
+    ctxt: Context, receiver: Value, decl: SymbolValue, slots: VectorValue
 ) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     extends = VectorValue(components=[])
@@ -382,17 +428,15 @@ def handle_generic_dataclass_set(message: str, slot: str) -> NativeHandler:
     return NativeHandler(handler)
 
 
+# TODO: should probably make these compile-time, since they add slot definitions
 builtin_method(
-    "data:extends:has:", (None, QuoteType, VectorType, VectorType), handle__data_extends_has_
+    "data:extends:has:", (None, SymbolType, VectorType, VectorType), handle__data_extends_has_
 )
-builtin_method("data:has:", (None, QuoteType, VectorType), handle__data_has_)
+builtin_method("data:has:", (None, SymbolType, VectorType), handle__data_has_)
 
 
-def handle__mixin_(ctxt: Context, receiver: Value, name: QuoteValue) -> Value:
-    if isinstance(name.body, NameExpr):
-        mixin_name = name.body.name.value
-    else:
-        raise ValueError(f"mixin: 'name' argument should be a quoted name; got {name}")
+def handle__mixin_(ctxt: Context, receiver: Value, name: SymbolValue) -> Value:
+    mixin_name = name.symbol
     if mixin_name in ctxt.slots:
         raise ValueError(f"mixin: slot {mixin_name} already exists")
     # TODO: allow inheritance?
@@ -401,7 +445,8 @@ def handle__mixin_(ctxt: Context, receiver: Value, name: QuoteValue) -> Value:
     return NullValue()
 
 
-builtin_method("mixin:", (None, QuoteType), handle__mixin_)
+# TODO: should probably make this compile-time, since they add slot definitions
+builtin_method("mixin:", (None, SymbolType), handle__mixin_)
 
 
 def handle__mix_in_to_(ctxt: Context, receiver: Value, mixin: TypeValue, type: TypeValue) -> Value:
@@ -414,23 +459,27 @@ def handle__mix_in_to_(ctxt: Context, receiver: Value, mixin: TypeValue, type: T
 builtin_method("mix-in:to:", (None, TypeType, TypeType), handle__mix_in_to_)
 
 
-def handle__let_eq_(ctxt: Context, receiver: Value, decl: Value, value: Value) -> Value:
-    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
-    if isinstance(decl, QuoteValue):
-        if isinstance(decl.body, NameExpr):
-            local_name = decl.body.name.value
-        else:
-            raise ValueError(f"let:=: 'declaration' argument should be a quoted name; got {decl}")
+def handle__let_eq_(
+    compiler: Compiler, span: SourceSpan, receiver: Optional[Expr], decl: Expr, value: Expr
+) -> None:
+    if receiver:
+        raise ValueError("let:=: does not need a receiver")
+
+    if isinstance(decl, NameExpr):
+        local_name = decl.name.value
     else:
-        raise ValueError("let:=: 'declaration' argument should be a quoted name")
+        raise ValueError(f"let:=: 'declaration' argument should be a name; got {decl}")
 
-    if local_name in ctxt.slots:
-        raise ValueError(f"Message '{local_name}' is already defined.")
-    ctxt.slots[local_name] = value
-    return value
+    if local_name in compiler.ctxt.slots:
+        raise ValueError(f"Slot '{local_name}' is already defined.")
+    # Compile the value-expression before adding to the context, so that the value-expression cannot
+    # use the local.
+    compiler.compile_expr(value)
+    compiler.ctxt.slots[local_name] = UndeterminedValue(local_name)
+    compiler.add_bytecode("create-slot", (local_name,), span=span)
 
 
-builtin_method("let:=:", (None, QuoteType, None), handle__let_eq_)
+builtin_compile_time("let:=:", handle__let_eq_)
 
 
 def handle__set(ctxt: Context, slot: Value, value: Value) -> Value:
