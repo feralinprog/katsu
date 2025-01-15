@@ -584,6 +584,9 @@ method: [tup condition-tuple>object] does: [
 ]
 method: [handle-signal: condition-tuple] does: [ signal: condition-tuple condition-tuple>object ]
 
+# Catches eval_toplevel issue with exit condition.
+#print: ("a" plus: "b")
+
 #[
 #    [ blah ] with-restarts: (assoc: {
 #        { :use-10; [ 10 ] }

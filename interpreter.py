@@ -1348,7 +1348,7 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
     while True:
         if len(state.call_stack) == 1:
             frame = state.call_stack[0]
-            if frame.spot == len(frame.sequence.code) and not frame.cleanup:
+            if (frame.spot == len(frame.sequence.code) or frame.force_unwind) and not frame.cleanup:
                 break
         eval_one_op(state)
     debug_log_state(state)
