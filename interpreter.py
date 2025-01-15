@@ -943,6 +943,9 @@ def debug_log_state(state: RuntimeState) -> None:
                 value_str = str(value)
             print(f"  >> {value_str}")
 
+    if state.panic_value:
+        print("panic value:", state.panic_value)
+
     print("================ END =====================")
 
 
