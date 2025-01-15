@@ -7,6 +7,7 @@ from interpreter import (
     BoolType,
     BoolValue,
     CompilationContext,
+    CompiledBody,
     Compiler,
     CompileTimeHandler,
     Context,
@@ -46,11 +47,9 @@ from interpreter import (
     Value,
     VectorType,
     VectorValue,
-    compile,
     eval_toplevel,
     intrinsic_handlers,
     is_subtype,
-    show_compiler_output,
     type_of,
 )
 from span import SourceSpan
@@ -64,7 +63,7 @@ def create_or_add_method(ctxt: Context, slot: str, method: Method):
         if not isinstance(multimethod, MultiMethod):
             raise ValueError(f"Slot '{slot}' is already defined and is not a multi-method.")
     else:
-        multimethod = MultiMethod(name=slot, methods=[])
+        multimethod = MultiMethod(name=slot, methods=[], compilations_to_invalidate=[])
         ctxt.slots[slot] = multimethod
     multimethod.add_method(method)
 
@@ -229,15 +228,9 @@ def handle__method_does_(
         body=QuoteMethodBody(
             context=compiler.ctxt,  # TODO: this seems a bit funky, not a real context...
             param_names=param_names,
-            body=body.body,
-            bytecode=compile(
-                body.body,
-                ctxt=body_comp_ctxt,
-            ),
+            compiled_body=CompiledBody(body.body, bytecode=None, comp_ctxt=body_comp_ctxt),
         ),
     )
-
-    show_compiler_output(method.body.bytecode)
 
     # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
     assert isinstance(compiler.ctxt.base, Context)
@@ -251,7 +244,7 @@ def handle__defer_method_(ctxt: Context, receiver: Value, method: SymbolValue) -
     slot = method.symbol
     if slot in ctxt.slots:
         raise ValueError(f"Slot '{slot}' is already defined.")
-    ctxt.slots[slot] = MultiMethod(name=slot, methods=[])
+    ctxt.slots[slot] = MultiMethod(name=slot, methods=[], compilations_to_invalidate=[])
     return NullValue()
 
 
@@ -485,8 +478,8 @@ builtin_compile_time("let:=:", handle__let_eq_)
 def handle__set(ctxt: Context, slot: Value, value: Value) -> Value:
     # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
     if isinstance(slot, QuoteValue):
-        if isinstance(slot.body, NameExpr):
-            slot = slot.body.name.value
+        if isinstance(slot.compiled_body.body, NameExpr):
+            slot = slot.compiled_body.body.name.value
         else:
             raise ValueError(f"=: 'slot' argument should be a quoted name; got {slot}")
     else:
@@ -500,6 +493,7 @@ def handle__set(ctxt: Context, slot: Value, value: Value) -> Value:
     return value
 
 
+# TODO: maybe should be compile time so LHS isn't a quote.
 builtin_method("=:", (QuoteType, None), handle__set)
 
 

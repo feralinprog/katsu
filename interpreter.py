@@ -87,9 +87,7 @@ class VectorValue(Value):
 @dataclass
 class QuoteValue(Value):
     parameters: list[str]
-    body: Expr
-    # Cached when first compiled.
-    bytecode: Optional["BytecodeSequence"]
+    compiled_body: "CompiledBody"
     context: "Context"
     # Source span, to allow for useful error messages.
     span: Optional[SourceSpan]
@@ -99,7 +97,7 @@ class QuoteValue(Value):
         return (
             ("\\" + " ".join(self.parameters) + " " if self.parameters else "")
             + "[ "
-            + str(self.body)
+            + str(self.compiled_body.body)
             + " ]"
         )
 
@@ -472,8 +470,7 @@ class QuoteMethodBody(MethodBody):
     context: Context
     # This includes the receiver name.
     param_names: list[str]
-    body: Expr
-    bytecode: BytecodeSequence
+    compiled_body: "CompiledBody"
 
 
 @dataclass
@@ -537,6 +534,9 @@ class MultiMethod:
     # Just for debug / error messages.
     name: str
     methods: list[Method]
+    # Compiled bodies to invalidate when adding a method.
+    # TODO: make this more fine-grained by param types?
+    compilations_to_invalidate: list["CompiledBody"]
 
     def add_method(self, method: Method) -> None:
         assert isinstance(method, Method)
@@ -564,6 +564,9 @@ class MultiMethod:
             self.methods.insert(i, method)
         else:
             self.methods.append(method)
+
+        for body in self.compilations_to_invalidate:
+            body.invalidate()
 
     def select_method(self, args: list[Value]) -> Method:
         options = []
@@ -628,19 +631,64 @@ class CompilationContext:
         return None
 
 
+@dataclass
+class CompiledBody:
+    body: Expr
+    # Only None if this compiled body has been invalidated.
+    bytecode: Optional[BytecodeSequence]
+    comp_ctxt: "CompilationContext"
+
+    def __post_init__(self):
+        self.maybe_recompile(_initial=True)
+
+    def invalidate(self) -> None:
+        self.bytecode = None
+        if should_show_compiler_output:
+            print("~~~~~~~~ INVALIDATING COMPILED BODY ~~~~~~~~~~~")
+            print("COMPILED BODY:", self.body)
+
+    def maybe_recompile(self, _initial: bool = False) -> BytecodeSequence:
+        if not self.bytecode:
+            # TODO: make a copy of comp_ctxt? but not the .base?
+            compiler = Compiler(self.comp_ctxt)
+            compiler.compile_expr(self.body)
+            self.bytecode = compiler.sequence
+            show_compiler_output(
+                self.body, self.bytecode, compiler.multimethod_deps, is_recompilation=(not _initial)
+            )
+            for multimethod in compiler.multimethod_deps:
+                if self not in multimethod.compilations_to_invalidate:
+                    multimethod.compilations_to_invalidate.append(self)
+        return self.bytecode
+
+
 # Compiler for a specific method / quote body in a particular CompilationContext.
 class Compiler:
     ctxt: CompilationContext
     sequence: BytecodeSequence
+    # List of multimethods which, if changed, invalidate the compilation.
+    multimethod_deps: list[MultiMethod]
 
     def __init__(self, context: CompilationContext):
-        self.ctxt = context
+        # Make a shallow copy so that re-compilation doesn't end up reusing the same
+        # already-added (say) local variables.
+        # TODO: deep copy..?
+        self.ctxt = CompilationContext(slots=dict(context.slots), base=context.base)
         self.sequence = BytecodeSequence(code=[])
+        self.multimethod_deps = []
 
     def add_bytecode(self, op: str, args: Tuple, span: SourceSpan):
         self.sequence.code.append(BytecodeOp(op=op, args=args, span=span))
 
     def compile_expr(self, expr: Expr):
+        try:
+            self._compile_expr(expr)
+        except Exception as e:
+            print(f"Compilation error while compiling expression: {expr}")
+            print(f"Error: {e}")
+            raise e
+
+    def _compile_expr(self, expr: Expr):
         assert expr is not None
 
         def add(op: str, *args, span: SourceSpan):
@@ -698,9 +746,10 @@ class Compiler:
                     else:
                         self.compile_expr(arg)
                 if isinstance(slot, MultiMethod):
+                    if slot not in self.multimethod_deps:
+                        self.multimethod_deps.append(slot)
                     # TODO: inline the dispatch and bodies if the multimethod requests inlining (or maybe by heuristics
                     # otherwise)
-                    pass
                 add("tail-invoke" if tail_call else "invoke", message, len(args), span=span)
             elif isinstance(slot, Value):
                 receiver, args = args[0], args[1:]
@@ -755,8 +804,7 @@ class Compiler:
             )
             quote = QuoteValue(
                 parameters=expr.parameters,
-                body=expr.body,
-                bytecode=compile(expr.body, body_comp_ctxt),
+                compiled_body=CompiledBody(expr.body, bytecode=None, comp_ctxt=body_comp_ctxt),
                 context=None,  # will be filled in later during evaluation
                 span=expr.span,
             )
@@ -780,31 +828,39 @@ class Compiler:
             raise AssertionError(f"Forgot an expression type! {type(expr)}")
 
 
-def compile(expr: Expr, ctxt: CompilationContext) -> BytecodeSequence:
-    assert expr is not None
-    compiler = Compiler(context=ctxt)
-    compiler.compile_expr(expr)
-    return compiler.sequence
-
-
 should_show_compiler_output = False
 
 
-def show_compiler_output(sequence: BytecodeSequence):
+def show_compiler_output(
+    expr: Expr,
+    sequence: BytecodeSequence,
+    multimethod_deps: list[MultiMethod],
+    is_recompilation: bool,
+):
     if not should_show_compiler_output:
         return
 
     print("===== COMPILER OUTPUT =====")
+    if is_recompilation:
+        print("(RECOMPILATION)")
+    print("INPUT EXPRESSION:", expr)
 
     def print_op(bytecode, depth):
         print("  " * depth + f"{bytecode.op}{''.join(' ' + str(arg) for arg in bytecode.args)}")
         if bytecode.op == "push-closure":
             quote: QuoteValue = bytecode.args[0]
-            for c in quote.bytecode.code:
-                print_op(c, depth + 1)
+            if quote.compiled_body.bytecode:
+                for c in quote.compiled_body.bytecode.code:
+                    print_op(c, depth + 1)
+            else:
+                print("  " * depth + "  <invalidated, needs recompilation>")
 
+    print("BYTECODE:")
     for c in sequence.code:
-        print_op(c, depth=0)
+        print_op(c, depth=1)
+    print("MULTIMETHOD DEPS:")
+    for multimethod in multimethod_deps:
+        print("  " + multimethod.name)
     print("=========== END ===========")
 
 
@@ -979,8 +1035,7 @@ def eval_one_op(state: RuntimeState) -> None:
         assert quote.context is None
         closure = QuoteValue(
             parameters=quote.parameters,
-            body=quote.body,
-            bytecode=quote.bytecode,
+            compiled_body=quote.compiled_body,
             context=frame.context,
             span=quote.span,
         )
@@ -1061,7 +1116,9 @@ def eval_one_op(state: RuntimeState) -> None:
 
                     method_body = method.body
                     if isinstance(method_body, QuoteMethodBody):
-                        assert method_body.bytecode
+                        # TODO: is there an earlier chance to recompile? Maybe this is fine since this only recompiles
+                        # if already compiled and then later invalidated...
+                        method_body.compiled_body.maybe_recompile()
                         body_ctxt = Context(slots={}, base=method_body.context)
                         assert len(args) == len(
                             method_body.param_names
@@ -1073,7 +1130,7 @@ def eval_one_op(state: RuntimeState) -> None:
                         invoke_compiled(
                             state,
                             message,
-                            method_body.bytecode,
+                            method_body.compiled_body.bytecode,
                             body_ctxt,
                             default_receiver=NullValue(),
                             cleanup=None,
@@ -1257,8 +1314,10 @@ def shift_top_frame(state: RuntimeState) -> None:
 
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
-    bytecode = compile(expr, ctxt=CompilationContext(slots={}, base=context))
-    show_compiler_output(bytecode)
+    compiler = Compiler(context=CompilationContext(slots={}, base=context))
+    compiler.compile_expr(expr)
+    bytecode = compiler.sequence
+    show_compiler_output(expr, bytecode, compiler.multimethod_deps, is_recompilation=False)
 
     if not bytecode.code:
         # Must have been all compile-time evaluation.
@@ -1383,11 +1442,10 @@ def intrinsic__if_then_else(
     body = tbody if isinstance(cond, BoolValue) and cond.value else fbody
     if isinstance(body, QuoteValue):
         # TODO: use reified context as default receiver?
-        assert body.bytecode
         invoke_compiled(
             state,
             "<a quote>",
-            body.bytecode,
+            body.compiled_body.maybe_recompile(),
             body.context,
             default_receiver=NullValue(),
             cleanup=None,
@@ -1429,11 +1487,10 @@ def call_impl(
             # TODO: use reified context as default receiver?
             default_receiver = NullValue()
         new_slots = {name: value for name, value in zip(param_names, args)}
-        assert receiver.bytecode
         invoke_compiled(
             state,
             message,
-            receiver.bytecode,
+            receiver.compiled_body.maybe_recompile(),
             Context(slots=new_slots, base=receiver.context),
             default_receiver=default_receiver,
             cleanup=cleanup,
