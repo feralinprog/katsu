@@ -672,6 +672,8 @@ def should_inline_multimethod_dispatch(multimethod: MultiMethod) -> bool:
 
 def should_inline_quote_method(parent: MultiMethod, method: Method) -> bool:
     # TODO: Also inline if heuristics suggest it should be inlined.
+    # TODO: support inlining after figuring out how to handle recursive methods.
+    return False
     return method.inline
 
 
@@ -783,25 +785,16 @@ class Compiler:
                 # expression arguments; e.g. if:then: is implemented in terms of if:then:else:, but then we need to
                 # inline an invocation of `if: ... then: [...]`, and also apply some optimizations to move the quote
                 # closer to the call site in the implementation of if:then:, and _then_ inline the quote...
+                for arg in args:
+                    if arg is None:
+                        add("push-default-receiver", span=span)
+                    else:
+                        self._compile_expr(arg)
+
                 if isinstance(slot, MultiMethod):
                     if slot not in self.multimethod_deps:
                         self.multimethod_deps.append(slot)
                     if should_inline_multimethod_dispatch(slot):
-                        args_already_evaluated = False
-                        if not any(
-                            (
-                                isinstance(method.body, IntrinsicMethodBody)
-                                and method.body.compile_inline
-                            )
-                            for method in slot.methods
-                        ):
-                            for arg in args:
-                                if arg is None:
-                                    add("push-default-receiver", span=span)
-                                else:
-                                    self._compile_expr(arg)
-                            args_already_evaluated = True
-
                         method_args = [
                             (list(method.param_matchers), JumpIndex(None))
                             for method in slot.methods
@@ -821,14 +814,12 @@ class Compiler:
                             entry_jump.index = len(self.sequence.code)
                             if isinstance(method.body, QuoteMethodBody):
                                 if should_inline_quote_method(slot, method):
-                                    if not args_already_evaluated:
-                                        for arg in args:
-                                            if arg is None:
-                                                add("push-default-receiver", span=span)
-                                            else:
-                                                self._compile_expr(arg)
                                     # If already in the inlining stack, then we can handle this as a tail call
                                     # to where we already inlined this method body.
+                                    # EDIT: need to get fancier here, since this only works if directly recursively
+                                    # calling without any quotes getting in the way (i.e. not even if:then:else:).
+                                    # We need to inline quotes at their call sites (including if:then:else:) before
+                                    # a check like this would help much.
                                     if any(
                                         method.body == inlined_method
                                         for inlined_method, _ in self.inlining_stack
@@ -879,18 +870,11 @@ class Compiler:
                                         span=span,
                                     )
                             elif isinstance(method.body, IntrinsicMethodBody):
-                                if method.body.compile_inline is not None:
-                                    assert not args_already_evaluated
+                                if method.body.compile_inline is not None and False:
                                     # Ask the intrinsic to compile inline!
-                                    method.body.compile_inline(self, args, tail_call, span)
+                                    method.body.compile_inline(self, tail_call, span)
                                 else:
                                     # Just invoke the instrinsic.
-                                    if not args_already_evaluated:
-                                        for arg in args:
-                                            if arg is None:
-                                                add("push-default-receiver", span=span)
-                                            else:
-                                                self._compile_expr(arg)
                                     add(
                                         maybe_tail + "invoke-intrinsic",
                                         message,
@@ -900,12 +884,6 @@ class Compiler:
                                     )
                             elif isinstance(method.body, NativeMethodBody):
                                 # TODO: inline compile natives?
-                                if not args_already_evaluated:
-                                    for arg in args:
-                                        if arg is None:
-                                            add("push-default-receiver", span=span)
-                                        else:
-                                            self._compile_expr(arg)
                                 add(
                                     maybe_tail + "invoke-native",
                                     message,
@@ -929,11 +907,6 @@ class Compiler:
                             return_jump.index = return_index
                         return
                 # Default: just add an invocation.
-                for arg in args:
-                    if arg is None:
-                        add("push-default-receiver", span=span)
-                    else:
-                        self._compile_expr(arg)
                 add(maybe_tail + "invoke", message, len(args), span=span)
             elif isinstance(slot, Value):
                 receiver, args = args[0], args[1:]
@@ -1572,7 +1545,7 @@ def eval_one_op(state: RuntimeState) -> None:
             state,
             frame,
             message,
-            IntrinsicMethodBody(intrinsic_handler),
+            IntrinsicMethodBody(intrinsic_handler, compile_inline=None),
             args,
             tail_call,
             already_signaled=False,
