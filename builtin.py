@@ -15,6 +15,7 @@ from interpreter import (
     DataclassTypeType,
     DataclassTypeValue,
     DataclassValue,
+    DataExpr,
     Expr,
     IntrinsicMethodBody,
     Method,
@@ -63,17 +64,23 @@ def create_or_add_method(ctxt: Context, slot: str, method: Method):
         if not isinstance(multimethod, MultiMethod):
             raise ValueError(f"Slot '{slot}' is already defined and is not a multi-method.")
     else:
-        multimethod = MultiMethod(name=slot, methods=[], compilations_to_invalidate=[])
+        multimethod = MultiMethod(
+            name=slot, methods=[], inline_dispatch=False, compilations_to_invalidate=[]
+        )
         ctxt.slots[slot] = multimethod
     multimethod.add_method(method)
 
 
 global_context = Context(slots={}, base=None)
-for slot, (param_matchers, handler) in intrinsic_handlers.items():
+for slot, (param_matchers, handler, compile_inline, inline) in intrinsic_handlers.items():
     create_or_add_method(
         global_context,
         slot,
-        Method(param_matchers=param_matchers, body=IntrinsicMethodBody(handler)),
+        Method(
+            param_matchers=param_matchers,
+            body=IntrinsicMethodBody(handler, compile_inline),
+            inline=inline,
+        ),
     )
 
 
@@ -93,7 +100,10 @@ def builtin_compile_time(name: str, handler) -> None:
 # * TypeValue -> a type matcher
 # * otherwise, must be a full ParameterMatcher
 def builtin_method(
-    name: str, param_matchers: list[Union[ParameterMatcher, TypeValue, None]], handler
+    name: str,
+    param_matchers: list[Union[ParameterMatcher, TypeValue, None]],
+    handler,
+    inline: bool = False,
 ) -> None:
     matchers = []
     for matcher in param_matchers:
@@ -107,7 +117,9 @@ def builtin_method(
             raise AssertionError(f"Unexpected param matcher '{matcher}'.")
 
     create_or_add_method(
-        global_context, name, Method(matchers, body=NativeMethodBody(NativeHandler(handler)))
+        global_context,
+        name,
+        Method(matchers, body=NativeMethodBody(NativeHandler(handler)), inline=inline),
     )
 
 
@@ -125,11 +137,17 @@ builtin_value("Type", TypeType)
 builtin_value("DataclassType", DataclassTypeType)
 
 
-def handle__method_does_(
-    compiler: Compiler, span: SourceSpan, receiver: Optional[Expr], decl: Expr, body: Expr
+def declare_method(
+    message: str,
+    compiler: Compiler,
+    span: SourceSpan,
+    receiver: Optional[Expr],
+    decl: Expr,
+    body: Expr,
+    attrs: Optional[Expr],
 ) -> None:
     if receiver:
-        raise ValueError("method:does: does not need a receiver")
+        raise ValueError(f"{message} does not need a receiver")
 
     # TODO: support return type declaration? (how can we enforce that...?)
 
@@ -160,9 +178,7 @@ def handle__method_does_(
 
     if isinstance(decl, QuoteExpr):
         if decl.parameters:
-            raise ValueError(
-                "method:does: 'declaration' argument should not specify any parameters"
-            )
+            raise ValueError(f"{message} 'declaration' argument should not specify any parameters")
         decl = decl.body
     else:
         # TODO: implement non-quote decls for method:does:.
@@ -174,7 +190,7 @@ def handle__method_does_(
         param_matchers = [ParameterAnyMatcher()]
     elif isinstance(decl, UnaryMessageExpr):
         format_msg = (
-            "When the method:does: 'declaration' argument is a unary message, "
+            f"When the {message} 'declaration' argument is a unary message, "
             "it must be a simple unary message of the form [target-name message-name] "
             "or else a unary message of the form [(target-name: matcher) message-name]"
         )
@@ -184,7 +200,7 @@ def handle__method_does_(
         param_matchers = [param_matcher]
     elif isinstance(decl, NAryMessageExpr):
         format_msg = (
-            "When the method:does: 'declaration' argument is an n-ary message, "
+            f"When the {message} 'declaration' argument is an n-ary message, "
             "it must be a simple n-ary message of the form [target-name message: param-name ...] "
             "or else an n-ary message of the form [(target-name: matcher) message: (param-name: matcher) ...] "
             "(the target-name is optional, as is each parameter matcher declaration)"
@@ -208,14 +224,24 @@ def handle__method_does_(
     else:
         # TODO: allow unary / binary ops too
         raise ValueError(
-            f"method:does: 'declaration' argument should be a name or message; got {decl}"
+            f"{message} 'declaration' argument should be a name or message; got {decl}"
         )
 
     # Fill in the body and context, then define the method.
     if not isinstance(body, QuoteExpr):
-        raise ValueError("method:does: 'body' argument should be a quote")
+        raise ValueError(f"{message} 'body' argument should be a quote")
     if body.parameters:
-        raise ValueError("method:does: 'body' argument should not specify any parameters")
+        raise ValueError(f"{message} 'body' argument should not specify any parameters")
+
+    inline = False
+    if attrs:
+        if not isinstance(attrs, DataExpr):
+            raise ValueError(f"{message} 'attrs' argument should be a vector")
+        for attr in attrs.components:
+            if isinstance(attr, NameExpr) and attr.name.value == "+inline":
+                inline = True
+            else:
+                raise ValueError(f"Unknown method attribute: '{attr}'.")
 
     body_comp_ctxt = CompilationContext(slots={}, base=compiler.ctxt)
     # TODO: this is a bit hacky, only works for direct recursion.
@@ -230,6 +256,7 @@ def handle__method_does_(
             param_names=param_names,
             compiled_body=CompiledBody(body.body, bytecode=None, comp_ctxt=body_comp_ctxt),
         ),
+        inline=inline,
     )
 
     # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
@@ -237,14 +264,36 @@ def handle__method_does_(
     create_or_add_method(compiler.ctxt.base, message, method)
 
 
+def handle__method_does_(
+    compiler: Compiler, span: SourceSpan, receiver: Optional[Expr], decl: Expr, body: Expr
+) -> None:
+    declare_method("method:does:", compiler, span, receiver, decl, body, attrs=None)
+
+
 builtin_compile_time("method:does:", handle__method_does_)
+
+
+def handle__method_does_attrs_(
+    compiler: Compiler,
+    span: SourceSpan,
+    receiver: Optional[Expr],
+    decl: Expr,
+    body: Expr,
+    attrs: Expr,
+) -> None:
+    declare_method("method:does:", compiler, span, receiver, decl, body, attrs)
+
+
+builtin_compile_time("method:does:attrs:", handle__method_does_attrs_)
 
 
 def handle__defer_method_(ctxt: Context, receiver: Value, method: SymbolValue) -> Value:
     slot = method.symbol
     if slot in ctxt.slots:
         raise ValueError(f"Slot '{slot}' is already defined.")
-    ctxt.slots[slot] = MultiMethod(name=slot, methods=[], compilations_to_invalidate=[])
+    ctxt.slots[slot] = MultiMethod(
+        name=slot, methods=[], inline_dispatch=False, compilations_to_invalidate=[]
+    )
     return NullValue()
 
 
@@ -255,7 +304,7 @@ def handle__type(ctxt: Context, receiver: Value) -> Value:
     return type_of(receiver)
 
 
-builtin_method("type", (None,), handle__type)
+builtin_method("type", (None,), handle__type, inline=True)
 
 
 def handle__is_instance_(ctxt: Context, receiver: Value, type: TypeValue) -> Value:
@@ -272,18 +321,18 @@ def handle_is_type(_type: TypeValue):
     return handler
 
 
-builtin_method("Number?", (None,), handle_is_type(NumberType))
-builtin_method("String?", (None,), handle_is_type(StringType))
-builtin_method("Bool?", (None,), handle_is_type(BoolType))
-builtin_method("Null?", (None,), handle_is_type(NullType))
-builtin_method("Symbol?", (None,), handle_is_type(SymbolType))
-builtin_method("Tuple?", (None,), handle_is_type(TupleType))
-builtin_method("Vector?", (None,), handle_is_type(VectorType))
-builtin_method("Quote?", (None,), handle_is_type(QuoteType))
-builtin_method("Continuation?", (None,), handle_is_type(ContinuationType))
-builtin_method("ReturnContinuation?", (None,), handle_is_type(ReturnContinuationType))
-builtin_method("Type?", (None,), handle_is_type(TypeType))
-builtin_method("DataclassType?", (None,), handle_is_type(DataclassTypeType))
+builtin_method("Number?", (None,), handle_is_type(NumberType), inline=True)
+builtin_method("String?", (None,), handle_is_type(StringType), inline=True)
+builtin_method("Bool?", (None,), handle_is_type(BoolType), inline=True)
+builtin_method("Null?", (None,), handle_is_type(NullType), inline=True)
+builtin_method("Symbol?", (None,), handle_is_type(SymbolType), inline=True)
+builtin_method("Tuple?", (None,), handle_is_type(TupleType), inline=True)
+builtin_method("Vector?", (None,), handle_is_type(VectorType), inline=True)
+builtin_method("Quote?", (None,), handle_is_type(QuoteType), inline=True)
+builtin_method("Continuation?", (None,), handle_is_type(ContinuationType), inline=True)
+builtin_method("ReturnContinuation?", (None,), handle_is_type(ReturnContinuationType), inline=True)
+builtin_method("Type?", (None,), handle_is_type(TypeType), inline=True)
+builtin_method("DataclassType?", (None,), handle_is_type(DataclassTypeType), inline=True)
 
 
 def define_dataclass(
@@ -331,6 +380,7 @@ def define_dataclass(
         Method(
             param_matchers=[ParameterAnyMatcher()],
             body=NativeMethodBody(NativeHandler(handle_is_type(_class))),
+            inline=False,
         ),
     )
 
@@ -342,6 +392,7 @@ def define_dataclass(
             # TODO: allow specifying types for slots
             param_matchers=[ParameterValueMatcher(_class)] + [ParameterAnyMatcher()] * len(slots),
             body=NativeMethodBody(handle_generic_dataclass_constructor(ctor_message)),
+            inline=True,
         ),
     )
 
@@ -353,6 +404,7 @@ def define_dataclass(
             Method(
                 param_matchers=[ParameterTypeMatcher(_class)],
                 body=NativeMethodBody(handle_generic_dataclass_get(get_msg, slot)),
+                inline=True,
             ),
         )
 
@@ -364,6 +416,7 @@ def define_dataclass(
             Method(
                 param_matchers=[ParameterTypeMatcher(_class), ParameterAnyMatcher()],
                 body=NativeMethodBody(handle_generic_dataclass_set(set_msg, slot)),
+                inline=True,
             ),
         )
 
@@ -494,7 +547,7 @@ def handle__set(ctxt: Context, slot: Value, value: Value) -> Value:
 
 
 # TODO: maybe should be compile time so LHS isn't a quote.
-builtin_method("=:", (QuoteType, None), handle__set)
+builtin_method("=:", (QuoteType, None), handle__set, inline=True)
 
 
 # Each handler is a function from value -> value, where the input value satisfies the provided receiver matcher.
@@ -506,6 +559,7 @@ def builtin_unary_op(
             op,
             param_matchers=[receiver_matcher],
             handler=(lambda ctxt, receiver: handler(receiver)),
+            inline=True,
         )
 
 
@@ -525,6 +579,7 @@ def builtin_binary_op(
             op + ":",
             param_matchers=[left_matcher, right_matcher],
             handler=(lambda ctxt, left, right: handler(left, right)),
+            inline=True,
         )
 
 
