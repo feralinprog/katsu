@@ -1,22 +1,19 @@
-from parser import NameExpr, NAryMessageExpr, ParenExpr, UnaryMessageExpr
+from parser import DataExpr, Expr, NameExpr, NAryMessageExpr, ParenExpr, QuoteExpr, UnaryMessageExpr
 from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
+from compiler import CompilationContext, Compiler, UndeterminedMethod, UndeterminedValue
 from interpreter import (
     BoolType,
     BoolValue,
-    CompilationContext,
     CompiledBody,
-    Compiler,
     CompileTimeHandler,
     Context,
     ContinuationType,
     DataclassTypeType,
     DataclassTypeValue,
     DataclassValue,
-    DataExpr,
-    Expr,
     IntrinsicMethodBody,
     Method,
     MixinTypeValue,
@@ -31,7 +28,6 @@ from interpreter import (
     ParameterMatcher,
     ParameterTypeMatcher,
     ParameterValueMatcher,
-    QuoteExpr,
     QuoteMethodBody,
     QuoteType,
     QuoteValue,
@@ -43,8 +39,6 @@ from interpreter import (
     TupleType,
     TypeType,
     TypeValue,
-    UndeterminedMethod,
-    UndeterminedValue,
     Value,
     VectorType,
     VectorValue,
