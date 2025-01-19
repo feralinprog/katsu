@@ -3,13 +3,7 @@ from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
-from compiler import (
-    CompilationContext,
-    Compiler,
-    UndeterminedMethod,
-    UndeterminedValue,
-    default_receiver,
-)
+from compiler import CompilationContext, Compiler, IRBlock, UndeterminedValue, default_receiver
 from interpreter import (
     BoolType,
     BoolValue,
@@ -140,6 +134,7 @@ builtin_value("DataclassType", DataclassTypeType)
 def declare_method(
     message: str,
     compiler: Compiler,
+    block: IRBlock,
     span: SourceSpan,
     receiver: Optional[Expr],
     decl: Expr,
@@ -167,7 +162,7 @@ def declare_method(
             # TODO: don't use eval_toplevel.
             # TODO: this is so wrong, don't directly use the CompilationContext
             # TODO: probably also don't just use the first Context in the stack...
-            eval_ctxt = compiler.ctxt
+            eval_ctxt = compiler.ir.ctxt
             while isinstance(eval_ctxt, CompilationContext):
                 eval_ctxt = eval_ctxt.base
             _type = eval_toplevel(expr.inner.args[0], eval_ctxt)
@@ -250,14 +245,14 @@ def declare_method(
     body_comp_ctxt = CompilationContext.stacked_compilation_context(
         slots=[(default_receiver, UndeterminedValue("<method-default-receiver>"))]
         + [(name, UndeterminedValue(name)) for name in param_names],
-        base=compiler.ctxt,
+        base=block.ctxt,
     )
 
     compiled_body = CompiledBody(body.body, bytecode=None, comp_ctxt=body_comp_ctxt)
     method = Method(
         param_matchers=param_matchers,
         body=QuoteMethodBody(
-            context=compiler.ctxt,  # TODO: this seems a bit funky, not a real context...
+            context=block.ctxt,  # TODO: this seems a bit funky, not a real Context...
             param_names=param_names,
             compiled_body=compiled_body,
         ),
@@ -265,8 +260,8 @@ def declare_method(
     )
 
     # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
-    assert isinstance(compiler.ctxt.base, Context)
-    create_or_add_method(compiler.ctxt.base, message, method)
+    assert isinstance(block.ctxt.base, Context)
+    create_or_add_method(block.ctxt.base, message, method)
 
     # Since we are compiling after adding the (multi)method, it should be able to access
     # itself for recursive invocations.
@@ -275,13 +270,14 @@ def declare_method(
 
 def handle__method_does_(
     compiler: Compiler,
+    block: IRBlock,
     span: SourceSpan,
     tail_call: bool,
     receiver: Optional[Expr],
     decl: Expr,
     body: Expr,
 ) -> None:
-    declare_method("method:does:", compiler, span, receiver, decl, body, attrs=None)
+    declare_method("method:does:", compiler, block, span, receiver, decl, body, attrs=None)
 
 
 builtin_compile_time("method:does:", handle__method_does_)
@@ -289,6 +285,7 @@ builtin_compile_time("method:does:", handle__method_does_)
 
 def handle__method_does_attrs_(
     compiler: Compiler,
+    block: IRBlock,
     span: SourceSpan,
     tail_call: bool,
     receiver: Optional[Expr],
@@ -296,7 +293,7 @@ def handle__method_does_attrs_(
     body: Expr,
     attrs: Expr,
 ) -> None:
-    declare_method("method:does:", compiler, span, receiver, decl, body, attrs)
+    declare_method("method:does:", compiler, block, span, receiver, decl, body, attrs)
 
 
 builtin_compile_time("method:does:attrs:", handle__method_does_attrs_)

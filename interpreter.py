@@ -1268,7 +1268,7 @@ def eval_toplevel(expr: Expr, context: Context) -> Value:
     compiler.compile_body(expr)
     # TODO: delete this special case. This just blindly assumes the expression was a simple name lookup.
     # just doing this for now in order to test out other compilation
-    assert len(compiler.ir.ops) <= 1
+    assert len(compiler.ir.ops) <= 2
     return context.slots[compiler.ir.ops[0].slot_name] if compiler.ir.ops else NullValue()
     bytecode = compiler.low_level_bytecode
     compilation.show_compiler_output(
@@ -1436,7 +1436,9 @@ def compile_intrinsic__if_then_else_(
             span=span,
         )
     )
-    true_block = compilation.IRBlock(ops=true_block_ops, result=true_block_result)
+    true_block = compilation.IRBlock(
+        ops=true_block_ops, ctxt=block.ctxt, inlining_stack=block.inlining_stack
+    )
 
     false_block_ops = []
     false_block_null = compiler.allocate_virtual_reg()
@@ -1453,7 +1455,9 @@ def compile_intrinsic__if_then_else_(
             span=span,
         )
     )
-    false_block = compilation.IRBlock(ops=false_block_ops, result=false_block_result)
+    false_block = compilation.IRBlock(
+        ops=false_block_ops, ctxt=block.ctxt, inlining_stack=block.inlining_stack
+    )
 
     compiler.add_ir_op(
         block,
@@ -1473,7 +1477,9 @@ def compile_intrinsic__if_then_else_(
         return compiler.add_ir_op(
             block,
             compilation.PhiOp(
-                dst=compiler.allocate_virtual_reg(), srcs=[true_block, false_block], span=span
+                dst=compiler.allocate_virtual_reg(),
+                srcs=[true_block_result, false_block_result],
+                span=span,
             ),
         )
 
