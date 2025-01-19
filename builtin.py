@@ -3,7 +3,13 @@ from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
-from compiler import CompilationContext, Compiler, UndeterminedMethod, UndeterminedValue
+from compiler import (
+    CompilationContext,
+    Compiler,
+    UndeterminedMethod,
+    UndeterminedValue,
+    default_receiver,
+)
 from interpreter import (
     BoolType,
     BoolValue,
@@ -160,7 +166,11 @@ def declare_method(
             name = expr.inner.messages[0].value
             # TODO: don't use eval_toplevel.
             # TODO: this is so wrong, don't directly use the CompilationContext
-            _type = eval_toplevel(expr.inner.args[0], compiler.ctxt)
+            # TODO: probably also don't just use the first Context in the stack...
+            eval_ctxt = compiler.ctxt
+            while isinstance(eval_ctxt, CompilationContext):
+                eval_ctxt = eval_ctxt.base
+            _type = eval_toplevel(expr.inner.args[0], eval_ctxt)
             matcher = ParameterTypeMatcher(_type)
             return (name, matcher)
         else:
@@ -237,18 +247,19 @@ def declare_method(
             else:
                 raise ValueError(f"Unknown method attribute: '{attr}'.")
 
-    body_comp_ctxt = CompilationContext(slots={}, base=compiler.ctxt)
-    # TODO: this is a bit hacky, only works for direct recursion.
-    body_comp_ctxt.slots[message] = UndeterminedMethod(message)
-    for name in param_names:
-        body_comp_ctxt.slots[name] = UndeterminedValue(name)
+    body_comp_ctxt = CompilationContext.stacked_compilation_context(
+        slots=[(default_receiver, UndeterminedValue("<method-default-receiver>"))]
+        + [(name, UndeterminedValue(name)) for name in param_names],
+        base=compiler.ctxt,
+    )
 
+    compiled_body = CompiledBody(body.body, bytecode=None, comp_ctxt=body_comp_ctxt)
     method = Method(
         param_matchers=param_matchers,
         body=QuoteMethodBody(
             context=compiler.ctxt,  # TODO: this seems a bit funky, not a real context...
             param_names=param_names,
-            compiled_body=CompiledBody(body.body, bytecode=None, comp_ctxt=body_comp_ctxt),
+            compiled_body=compiled_body,
         ),
         inline=inline,
     )
@@ -257,9 +268,18 @@ def declare_method(
     assert isinstance(compiler.ctxt.base, Context)
     create_or_add_method(compiler.ctxt.base, message, method)
 
+    # Since we are compiling after adding the (multi)method, it should be able to access
+    # itself for recursive invocations.
+    compiled_body.maybe_recompile()
+
 
 def handle__method_does_(
-    compiler: Compiler, span: SourceSpan, receiver: Optional[Expr], decl: Expr, body: Expr
+    compiler: Compiler,
+    span: SourceSpan,
+    tail_call: bool,
+    receiver: Optional[Expr],
+    decl: Expr,
+    body: Expr,
 ) -> None:
     declare_method("method:does:", compiler, span, receiver, decl, body, attrs=None)
 
@@ -270,6 +290,7 @@ builtin_compile_time("method:does:", handle__method_does_)
 def handle__method_does_attrs_(
     compiler: Compiler,
     span: SourceSpan,
+    tail_call: bool,
     receiver: Optional[Expr],
     decl: Expr,
     body: Expr,
@@ -515,6 +536,7 @@ def handle__let_eq_(
     # Compile the value-expression before adding to the context, so that the value-expression cannot
     # use the local.
     compiler.compile_expr(value)
+    # TODO: fix this up
     compiler.ctxt.slots[local_name] = UndeterminedValue(local_name)
     compiler.add_bytecode("create-slot", (local_name,), span=span)
 

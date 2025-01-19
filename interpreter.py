@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from parser import Expr, QuoteExpr
+from parser import Expr
 from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
@@ -460,7 +460,11 @@ class QuoteMethodBody(MethodBody):
 @dataclass
 class IntrinsicMethodBody(MethodBody):
     handler: IntrinsicHandler
-    # Optional function to call to inline-compile an invocation of this instrinsic method.
+    # TODO: update docs and the Callable args here.
+    #   result = method.body.compile_inline(
+    #       self, block, op.call_args, op.tail_call, op.span
+    #   )
+    # Optional function to call to inline-compile an invocation of this intrinsic method.
     # It takes the compiler being used to compile the expression which invoked the intrinsic,
     # the receiver and other arguments (only the receiver is optional), whether or not this
     # should be a tail call, and the source span for the invocation.
@@ -533,7 +537,7 @@ class MultiMethod:
 
     def add_method(self, method: Method) -> None:
         assert isinstance(method, Method)
-        assert isinstance(method.param_matchers, list) or isinstance(method.param_matchers, tuple)
+        assert isinstance(method.param_matchers, (list, tuple))
         for matcher in method.param_matchers:
             assert isinstance(matcher, ParameterMatcher)
 
@@ -598,27 +602,33 @@ class MultiMethod:
 @dataclass
 class CompiledBody:
     body: Expr
-    # Only None if this compiled body has been invalidated.
+    # Only None if this compiled body has been invalidated or has not even been invoked yet.
     bytecode: Optional[BytecodeSequence]
     comp_ctxt: "compilation.CompilationContext"
+    # Purely for debug logging.
+    was_invalidated: bool = False
 
-    def __post_init__(self):
-        self.maybe_recompile(_initial=True)
+    # def __post_init__(self):
+    #     self.maybe_recompile(_initial=True)
 
     def invalidate(self) -> None:
         self.bytecode = None
         if compilation.should_show_compiler_output:
             print("~~~~~~~~ INVALIDATING COMPILED BODY ~~~~~~~~~~~")
             print("COMPILED BODY:", self.body)
+        self.was_invalidated = True
 
-    def maybe_recompile(self, _initial: bool = False) -> BytecodeSequence:
+    def maybe_recompile(self) -> BytecodeSequence:
         if not self.bytecode:
             # TODO: make a copy of comp_ctxt? but not the .base?
             compiler = compilation.Compiler.for_context(self.comp_ctxt)
-            compiler.compile_expr(self.body)
-            self.bytecode = compiler.sequence
+            compiler.compile_body(self.body)
+            self.bytecode = compiler.low_level_bytecode
             compilation.show_compiler_output(
-                self.body, self.bytecode, compiler.multimethod_deps, is_recompilation=(not _initial)
+                self.body,
+                self.bytecode,
+                compiler.multimethod_deps,
+                is_recompilation=self.was_invalidated,
             )
             for multimethod in compiler.multimethod_deps:
                 if self not in multimethod.compilations_to_invalidate:
@@ -1251,11 +1261,16 @@ def shift_top_frame(state: RuntimeState) -> None:
 
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
+    # TODO: the context should have a default-receiver populated...
     compiler = compilation.Compiler.for_context(
-        context=compilation.CompilationContext(slots={}, base=context)
+        context=compilation.CompilationContext.from_context(context)
     )
-    compiler.compile_expr(expr)
-    bytecode = compiler.sequence
+    compiler.compile_body(expr)
+    # TODO: delete this special case. This just blindly assumes the expression was a simple name lookup.
+    # just doing this for now in order to test out other compilation
+    assert len(compiler.ir.ops) <= 1
+    return context.slots[compiler.ir.ops[0].slot_name] if compiler.ir.ops else NullValue()
+    bytecode = compiler.low_level_bytecode
     compilation.show_compiler_output(
         expr, bytecode, compiler.multimethod_deps, is_recompilation=False
     )
@@ -1400,32 +1415,67 @@ def intrinsic__if_then_else_(
 
 
 def compile_intrinsic__if_then_else_(
-    compiler: "compilation.Compiler", args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
-):
-    # This needs to emit some more basic bytecodes which evaluate args,
-    # check condition, then call the correct body. Other optimization passes will
-    # be required to actually migrate quotes to the call site so we can fully inline.
-    raise NotImplementedError()
-    receiver, cond, tbody, fbody = args
-    if receiver:
-        # Receiver is ignored, but evaluation may have side effects.
-        compiler.compile_expr(receiver)
-        compiler.add_bytecode("drop", (), span)
-    compiler.compile_expr(cond)
-    fbody_entry = JumpIndex(None)
-    compiler.add_bytecode("jump-if-not-true", (fbody_entry,), span)
-    if isinstance(tbody, QuoteExpr):
-        compiler.compile_quote_inline(tbody, tail_call)
+    compiler: "compilation.Compiler",
+    block: "compilation.IRBlock",
+    args: list["compilation.Register"],
+    tail_call: bool,
+    span: SourceSpan,
+) -> Optional["compilation.VirtualRegister"]:
+    receiver_reg, cond_reg, tbody_reg, fbody_reg = args
+
+    true_block_ops = []
+    true_block_null = compiler.allocate_virtual_reg()
+    true_block_ops.append(compilation.LiteralOp(dst=true_block_null, value=NullValue(), span=span))
+    true_block_result = None if tail_call else compiler.allocate_virtual_reg()
+    true_block_ops.append(
+        compilation.InvokeRegisterOp(
+            dst=true_block_result,
+            callable=tbody_reg,
+            call_args=[true_block_null],
+            tail_call=tail_call,
+            span=span,
+        )
+    )
+    true_block = compilation.IRBlock(ops=true_block_ops, result=true_block_result)
+
+    false_block_ops = []
+    false_block_null = compiler.allocate_virtual_reg()
+    false_block_ops.append(
+        compilation.LiteralOp(dst=false_block_null, value=NullValue(), span=span)
+    )
+    false_block_result = None if tail_call else compiler.allocate_virtual_reg()
+    false_block_ops.append(
+        compilation.InvokeRegisterOp(
+            dst=false_block_result,
+            callable=fbody_reg,
+            call_args=[false_block_null],
+            tail_call=tail_call,
+            span=span,
+        )
+    )
+    false_block = compilation.IRBlock(ops=false_block_ops, result=false_block_result)
+
+    compiler.add_ir_op(
+        block,
+        compilation.IfElseOp(
+            dst=None,
+            condition=cond_reg,
+            true_block=true_block,
+            false_block=false_block,
+            sub_blocks=[true_block, false_block],
+            span=span,
+        ),
+    )
+
+    if tail_call:
+        return None
     else:
-        compiler.compile_expr(tbody)
-    end = JumpIndex(None)
-    compiler.add_bytecode("jump", (end,), span)
-    fbody_entry.index = len(compiler.sequence.code)
-    if isinstance(fbody, QuoteExpr):
-        compiler.compile_quote_inline(fbody, tail_call)
-    else:
-        compiler.compile_expr(fbody)
-    end.index = len(compiler.sequence.code)
+        return compiler.add_ir_op(
+            block,
+            compilation.PhiOp(
+                dst=compiler.allocate_virtual_reg(), srcs=[true_block, false_block], span=span
+            ),
+        )
 
 
 def call_impl(
