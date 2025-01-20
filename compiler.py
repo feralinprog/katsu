@@ -709,7 +709,7 @@ class Compiler:
                     )
                 )
 
-                if method_results:
+                if op.dst and method_results:
                     # Re-use the old invoke op's destination register so that downstream consumers
                     # still get a value available in this register.
                     block.ops.append(
@@ -833,8 +833,9 @@ class Compiler:
                                 block, InlineBlockOp(sub_blocks=[inline_block], span=None)
                             )
 
-                            # Copy the result back to where the old invocation operation wrote the result.
-                            self.add_ir_op(block, CopyOp(dst=op.dst, src=result, span=op.span))
+                            if result:
+                                # Copy the result back to where the old invocation operation wrote the result.
+                                self.add_ir_op(block, CopyOp(dst=op.dst, src=result, span=op.span))
                     else:
                         # Just invoke the quote body. We can reuse most of the op fields; this is just replacing
                         # an InvokeMethodOp with a more specific InvokeQuoteOp.
@@ -1107,8 +1108,9 @@ class Compiler:
                         # Add the inline block!
                         self.add_ir_op(block, InlineBlockOp(sub_blocks=[inline_block], span=None))
 
-                        # Copy the result back to where the old invocation operation wrote the result.
-                        self.add_ir_op(block, CopyOp(dst=op.dst, src=result, span=op.span))
+                        if op.dst and result:
+                            # Copy the result back to where the old invocation operation wrote the result.
+                            self.add_ir_op(block, CopyOp(dst=op.dst, src=result, span=op.span))
 
                         any_change = True
                     else:
