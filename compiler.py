@@ -746,6 +746,7 @@ class Compiler:
                             method.body == inlined_method
                             for inlined_method, _ in block.inlining_stack
                         ):
+                            raise NotImplementedError()
                             # TODO: really need to fix up behavior here.
                             # * make sure that we are writing to the argument slots from the context
                             #   of the inlined method body, not the _current_ context. (may be different
