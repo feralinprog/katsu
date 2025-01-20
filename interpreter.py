@@ -1621,7 +1621,18 @@ def compile_intrinsic__call(
     tail_position: bool,
     span: SourceSpan,
 ) -> Optional["compilation.Register"]:
-    raise NotImplementedError()
+    (callable_reg,) = args
+    return compiler.add_ir_op(
+        block,
+        compilation.InvokeRegisterOp(
+            dst=None if tail_call else compiler.allocate_virtual_reg(),
+            callable=callable_reg,
+            call_args=[],
+            tail_call=tail_call,
+            tail_position=tail_position,
+            span=span,
+        ),
+    )
 
 
 def intrinsic__call_(state: RuntimeState, tail_call: bool, receiver: Value, value: Value) -> None:

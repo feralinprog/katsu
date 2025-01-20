@@ -1233,7 +1233,10 @@ def print_ir_block(block: IRBlock, depth: int = 0):
             else:
                 raise AssertionError(f"forgot an op type: {op}")
 
-            print(f" with {', '.join(str(arg) for arg in op.call_args)}", end="")
+            if op.call_args:
+                print(f" with {', '.join(str(arg) for arg in op.call_args)}", end="")
+            else:
+                print(" with <no args>", end="")
             if op.tail_position:
                 print(" (in tail position)")
             else:
