@@ -52,12 +52,6 @@ class UndeterminedValue:
     name: str
 
 
-@dataclass
-class UndeterminedMethod:
-    # For debug only.
-    name: str
-
-
 # Singleton.
 @dataclass
 class DefaultReceiver:
@@ -69,7 +63,7 @@ default_receiver = DefaultReceiver()
 
 @dataclass
 class CompilationContext:
-    slots: list[Tuple[Union[str, DefaultReceiver], Union[UndeterminedValue, UndeterminedMethod]]]
+    slots: list[Tuple[Union[str, DefaultReceiver], UndeterminedValue]]
     base: Union[Context, "CompilationContext"]
 
     @staticmethod
@@ -110,7 +104,7 @@ class CompilationContext:
     #       "nonexistent-var" -> None
     def lookup(self, name: Union[str, DefaultReceiver]) -> Optional[
         Union[
-            Tuple["SlotRegister", Union[UndeterminedValue, UndeterminedMethod]],
+            Tuple["SlotRegister", UndeterminedValue],
             Union[Value, MultiMethod, CompileTimeHandler],
         ]
     ]:
@@ -507,7 +501,7 @@ class Compiler:
             if isinstance(slot_lookup, Tuple):
                 slot_reg, slot = slot_lookup
                 assert isinstance(slot_reg, SlotRegister)
-                assert isinstance(slot, (UndeterminedValue, UndeterminedMethod))
+                assert isinstance(slot, UndeterminedValue)
             else:
                 slot_reg, slot = None, slot_lookup
                 assert isinstance(slot, (Value, MultiMethod, CompileTimeHandler))
@@ -537,7 +531,7 @@ class Compiler:
                         block,
                         SlotLookupOp(dst=self.allocate_virtual_reg(), slot_name=message, span=span),
                     )
-            elif isinstance(slot, (UndeterminedMethod, MultiMethod)):
+            elif isinstance(slot, MultiMethod):
                 arg_regs = []
                 for arg in args:
                     if arg is None:
@@ -555,18 +549,12 @@ class Compiler:
                         arg_reg = self.compile_expr(block, arg, tail_position=False)
                     arg_regs.append(arg_reg)
 
-                if isinstance(slot, MultiMethod):
-                    callable = slot
-                else:
-                    assert slot_reg
-                    callable = slot_reg
-
                 start_label = self.allocate_label()
                 self.add_ir_op(block, start_label)
                 if tail_call:
                     invocation = InvokeMultimethodOp(
                         dst=None,
-                        multimethod=callable,
+                        multimethod=slot,
                         call_args=arg_regs,
                         tail_call=True,
                         multimethod_start_label=start_label,
@@ -575,7 +563,7 @@ class Compiler:
                 else:
                     invocation = InvokeMultimethodOp(
                         dst=self.allocate_virtual_reg(),
-                        multimethod=callable,
+                        multimethod=slot,
                         call_args=arg_regs,
                         tail_call=False,
                         multimethod_start_label=start_label,
