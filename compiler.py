@@ -295,8 +295,15 @@ class MultimethodDispatchOp(IROp):
     slot_name: str
     dispatch_args: list[Register]
     dispatch: list[Tuple[Method, "IRBlock"]]
+    dispatch_failed: "IRBlock"
     # Start of the (inlined) multimethod which this dispatch is part of.
     multimethod_start_label: Label
+
+
+@dataclass(kw_only=True)
+class SignalOp(IROp):
+    condition_name: str
+    signal_args: list[Register]
 
 
 @dataclass(kw_only=True)
@@ -714,12 +721,28 @@ class Compiler:
                         )
                     )
 
+                # Add one more sub-block for the 'dispatch failed' case.
+                dispatch_failed = IRBlock(
+                    ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
+                )
+                signal_result = self.allocate_virtual_reg()
+                dispatch_failed.ops.append(
+                    SignalOp(
+                        dst=signal_result,
+                        condition_name="no-matching-method",
+                        signal_args=op.call_args,
+                        span=op.span,
+                    )
+                )
+                sub_blocks.append(dispatch_failed)
+
                 block.ops.append(
                     MultimethodDispatchOp(
                         dst=None,
                         slot_name=multimethod.name,
                         dispatch_args=op.call_args,
                         dispatch=dispatch,
+                        dispatch_failed=dispatch_failed,
                         sub_blocks=sub_blocks,
                         multimethod_start_label=op.multimethod_start_label,
                         span=op.span,
@@ -729,11 +752,9 @@ class Compiler:
                 if not op.tail_call:
                     # Re-use the old invoke op's destination register so that downstream consumers
                     # still get a value available in this register.
-                    if len(multimethod.methods) == 1:
-                        # No need for a phi node; we can just copy.
-                        block.ops.append(CopyOp(dst=op.dst, src=method_results[0], span=op.span))
-                    else:
-                        block.ops.append(PhiOp(dst=op.dst, srcs=method_results, span=op.span))
+                    block.ops.append(
+                        PhiOp(dst=op.dst, srcs=method_results + [signal_result], span=op.span)
+                    )
 
             return any_change
 
@@ -1012,6 +1033,8 @@ class Compiler:
                     op.components = [remap(comp) for comp in op.components]
                 elif isinstance(op, MultimethodDispatchOp):
                     op.dispatch_args = [remap(arg) for arg in op.dispatch_args]
+                elif isinstance(op, SignalOp):
+                    op.signal_args = [remap(arg) for arg in op.signal_args]
                 elif isinstance(op, IfElseOp):
                     op.condition = remap(op.condition)
                 else:
@@ -1178,6 +1201,8 @@ class Compiler:
                     block.ops.append(op)
                 elif isinstance(op, MultimethodDispatchOp):
                     block.ops.append(op)
+                elif isinstance(op, SignalOp):
+                    block.ops.append(op)
                 elif isinstance(op, IfElseOp):
                     block.ops.append(op)
                 else:
@@ -1307,6 +1332,14 @@ def print_ir_block(block: IRBlock, depth: int = 0):
                     + f"if ({', '.join(matcher_str(matcher) for matcher in method.param_matchers)}):"
                 )
                 print_ir_block(body_block, depth=(depth + 2))
+
+            print(indent + level + "else:")
+            print_ir_block(op.dispatch_failed, depth=(depth + 2))
+        elif isinstance(op, SignalOp):
+            prefix()
+            print(
+                f"{op.dst} = signal :{op.condition_name} with {', '.join(str(arg) for arg in op.signal_args)}"
+            )
         elif isinstance(op, IfElseOp):
             assert not op.dst
             prefix()
