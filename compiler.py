@@ -224,6 +224,12 @@ class InvokeMultimethodOp(BaseInvokeOp):
     # Start of the (inlined) multimethod invocation.
     multimethod_start_label: Label
 
+    def __post_init__(self):
+        # Kinda hacky. Multimethod invocations need a destination register in case
+        # of method dispatch failure (which signals, which produces a value), even
+        # if the actual dispatch branches all result in tail calls.
+        pass
+
 
 @dataclass(kw_only=True)
 class InvokeMethodOp(BaseInvokeOp):
@@ -476,82 +482,54 @@ class Compiler:
             assert len(args) > 0
             assert all(arg is not None for arg in args[1:])
 
-            slot_lookup = block.ctxt.lookup(message)
-            if not slot_lookup:
+            slot = block.ctxt.lookup(message)
+            if not slot:
                 raise ValueError(f"Could not compile: unknown slot '{message}'.")
+            assert isinstance(slot, (Register, Value, MultiMethod, CompileTimeHandler)), slot
 
-            slot_reg: Optional[SlotRegister]
-            if isinstance(slot_lookup, Tuple):
-                slot_reg, slot = slot_lookup
-                assert isinstance(slot_reg, SlotRegister)
-                assert isinstance(slot, UndeterminedValue)
-            else:
-                slot_reg, slot = None, slot_lookup
-                assert isinstance(slot, (Value, MultiMethod, CompileTimeHandler))
-
-            if isinstance(slot, CompileTimeHandler):
-                return slot.handler(self, block, span, tail_call, *args)
-            elif isinstance(slot, (UndeterminedValue, Value)):
+            if isinstance(slot, Register):
                 receiver, args = args[0], args[1:]
                 if receiver or args:
-                    if isinstance(slot, UndeterminedValue):
-                        raise ValueError(
-                            f"Could not compile: local slot is an undetermined-value, so does not need receiver or arguments: {message}."
-                        )
-                    else:
-                        raise ValueError(
-                            f"Could not compile: slot is not a method, so does not need receiver or arguments: {message}."
-                        )
-                if isinstance(slot, UndeterminedValue):
-                    assert slot_reg
-                    return self.add_ir_op(
-                        block, CopyOp(dst=self.allocate_virtual_reg(), src=slot_reg, span=span)
+                    raise ValueError(
+                        f"Could not compile: local slot does not need receiver or arguments: {message}."
                     )
-                else:
-                    # TODO: could do a similar thing to multimethods, where we add a lease to the slot and if it changes
-                    # it forces recompilation. Might cause too many invalidations though.
-                    return self.add_ir_op(
-                        block,
-                        SlotLookupOp(dst=self.allocate_virtual_reg(), slot_name=message, span=span),
+                return slot
+            if isinstance(slot, CompileTimeHandler):
+                return slot.handler(self, block, span, tail_call, *args)
+            elif isinstance(slot, Value):
+                receiver, args = args[0], args[1:]
+                if receiver or args:
+                    raise ValueError(
+                        f"Could not compile: slot is not a method, so does not need receiver or arguments: {message}."
                     )
+                # TODO: could do a similar thing to multimethods, where we add a lease to the slot and if it changes
+                # it forces recompilation. Might cause too many invalidations though.
+                return self.add_ir_op(
+                    block,
+                    SlotLookupOp(dst=self.allocate_virtual_reg(), slot_name=message, span=span),
+                )
             elif isinstance(slot, MultiMethod):
                 arg_regs = []
                 for arg in args:
                     if arg is None:
-                        default_receiver_lookup = block.ctxt.lookup(default_receiver)
-                        assert isinstance(default_receiver_lookup, Tuple)
-                        default_receiver_reg, _ = default_receiver_lookup
-                        assert isinstance(default_receiver_reg, SlotRegister)
-                        arg_reg = self.add_ir_op(
-                            block,
-                            CopyOp(
-                                dst=self.allocate_virtual_reg(), src=default_receiver_reg, span=span
-                            ),
-                        )
+                        default_receiver_reg = block.ctxt.lookup(default_receiver)
+                        assert isinstance(default_receiver_reg, Register)
+                        arg_reg = default_receiver_reg
                     else:
                         arg_reg = self.compile_expr(block, arg, tail_position=False)
                     arg_regs.append(arg_reg)
 
                 start_label = self.allocate_label()
                 self.add_ir_op(block, start_label)
-                if tail_call:
-                    invocation = InvokeMultimethodOp(
-                        dst=None,
-                        multimethod=slot,
-                        call_args=arg_regs,
-                        tail_call=True,
-                        multimethod_start_label=start_label,
-                        span=span,
-                    )
-                else:
-                    invocation = InvokeMultimethodOp(
-                        dst=self.allocate_virtual_reg(),
-                        multimethod=slot,
-                        call_args=arg_regs,
-                        tail_call=False,
-                        multimethod_start_label=start_label,
-                        span=span,
-                    )
+                # Even if a tail call, we must add a destination register to be used in case of dispatch failure.
+                invocation = InvokeMultimethodOp(
+                    dst=self.allocate_virtual_reg(),
+                    multimethod=slot,
+                    call_args=arg_regs,
+                    tail_call=tail_call,
+                    multimethod_start_label=start_label,
+                    span=span,
+                )
                 return self.add_ir_op(block, invocation)
             else:
                 raise AssertionError(f"forgot a slot type? {type(slot)}: {slot}")
@@ -684,7 +662,8 @@ class Compiler:
                     sub_blocks.append(method_block)
 
                     dst = None if op.tail_call else self.allocate_virtual_reg()
-                    method_results.append(dst)
+                    if dst:
+                        method_results.append(dst)
                     method_block.ops.append(
                         InvokeMethodOp(
                             dst=dst,
@@ -700,7 +679,10 @@ class Compiler:
                 dispatch_failed = IRBlock(
                     ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
                 )
-                signal_result = self.allocate_virtual_reg()
+                # If all methods have no results (due to tail-calling), then the signaling result
+                # is the only possible result of the multimethod dispatch, so just write it to
+                # the original invocation op's destination.
+                signal_result = self.allocate_virtual_reg() if method_results else op.dst
                 dispatch_failed.ops.append(
                     SignalOp(
                         dst=signal_result,
@@ -724,7 +706,7 @@ class Compiler:
                     )
                 )
 
-                if not op.tail_call:
+                if method_results:
                     # Re-use the old invoke op's destination register so that downstream consumers
                     # still get a value available in this register.
                     block.ops.append(
@@ -1208,10 +1190,10 @@ def print_ir_block(block: IRBlock, depth: int = 0):
         elif isinstance(op, BaseInvokeOp):
             prefix()
 
+            if op.dst:
+                print(f"{op.dst} = ", end="")
             if op.tail_call:
                 print("tail-", end="")
-            else:
-                print(f"{op.dst} = ", end="")
 
             if isinstance(op, InvokeRegisterOp):
                 print(f"invoke {op.callable}", end="")
