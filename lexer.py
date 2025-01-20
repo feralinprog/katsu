@@ -60,7 +60,9 @@ def next_token(loc: SourceLocation, file: SourceFile) -> Token:
         if ":" in word:
             if word == ":":
                 return (TokenType.ERROR, word)
-            if word.startswith(":"):
+            # Special case "::" as a message token with name ":".
+            # This is purely a convenience.
+            if word.startswith(":") and word != "::":
                 return (TokenType.SYMBOL, word[1:])
             elif word.endswith(":"):
                 return (TokenType.MESSAGE, word[:-1])

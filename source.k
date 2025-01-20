@@ -11,7 +11,7 @@
 
 method: [if: (cond: Bool) then: body] does: [
     TAIL-CALL: (if: cond then: body else: null)
-] attrs: { +inline }
+] :: { +inline }
 method: [(n: Number) recurse] does: [
     if: n > 0 then: [
         print: n
@@ -24,7 +24,7 @@ method: [(n: Number) recurse] does: [
 #    let: x =: a + b
 #    let: y =: x + c
 #    y
-#] attrs: { +inline }
+#] :: { +inline }
 #print: (sum: 1 and: 2 and: 3)
 #
 #method: [(a: Number) plus: (b: Number)] does: [
@@ -41,7 +41,7 @@ method: [(n: Number) recurse] does: [
 ## (really, figure out how this can work. maybe something like:
 ## >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
 ## where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
-#method: [if: (cond: Bool) then: body] does: [ TAIL-CALL: (if: cond then: body else: null) ] attrs: { +inline }
+#method: [if: (cond: Bool) then: body] does: [ TAIL-CALL: (if: cond then: body else: null) ] :: { +inline }
 #if: 2 > 1 then: [ print: "good: 2 > 1" ]
 #if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 #
@@ -55,7 +55,7 @@ method: [(n: Number) recurse] does: [
 #        body call
 #        TAIL-CALL: (while: cond do: body)
 #    ]
-#] attrs: { +inline }
+#] :: { +inline }
 #
 #method: [test-while] does: [
 #    let: i =: 10

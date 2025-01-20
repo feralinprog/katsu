@@ -293,10 +293,10 @@ def handle__method_does_attrs_(
     body: Expr,
     attrs: Expr,
 ) -> None:
-    declare_method("method:does:", compiler, block, span, receiver, decl, body, attrs)
+    declare_method("method:does:::", compiler, block, span, receiver, decl, body, attrs)
 
 
-builtin_compile_time("method:does:attrs:", handle__method_does_attrs_)
+builtin_compile_time("method:does:::", handle__method_does_attrs_)
 
 
 def handle__defer_method_(ctxt: Context, receiver: Value, method: SymbolValue) -> Value:
