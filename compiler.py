@@ -46,12 +46,6 @@ from lexer import TokenType
 from span import SourceSpan
 
 
-@dataclass
-class UndeterminedValue:
-    # For debug only.
-    name: str
-
-
 # Singleton.
 @dataclass
 class DefaultReceiver:
@@ -63,7 +57,8 @@ default_receiver = DefaultReceiver()
 
 @dataclass
 class CompilationContext:
-    slots: list[Tuple[Union[str, DefaultReceiver], UndeterminedValue]]
+    # Indicates where each slot value may be found.
+    slots: list[Tuple[Union[str, DefaultReceiver], "Register"]]
     base: Union[Context, "CompilationContext"]
 
     @staticmethod
@@ -81,44 +76,34 @@ class CompilationContext:
         # return CompilationContext(slots=list(ctxt.slots), base=ctxt)
         return CompilationContext(slots=list(slots), base=base)
 
-    # If the name is found within compilation-context slots, returns the slot register (where indices start at the lowest-in-stack compilation context
-    # and increase to slots at top of stack) and value.
-    # Otherwise, if the name is found within regular-context slots, returns the value.
+    # If the name is found within compilation-context slots, returns the register holding the slot value.
+    # Otherwise, if the name is found within regular-context slots, returns that value.
     # Otherwise, returns None.
     # Example:
     #   For the following compilation context:
     #       <top> CompilationContext
-    #           default_receiver: ...           [2]
-    #           "local-var": ...                [3]
+    #           default_receiver: [2]
+    #           "local-var":      [3]
     #       <base> CompilationContext
-    #           default_receiver: ...           [0]
-    #           "outer-var": ...                [1]
+    #           default_receiver: [0]
+    #           "outer-var":      [1]
     #       <base> Context
     #           "global-var": <some value>
     #           ...
     #   we have the following lookup results:
-    #       default_receiver -> [2], ...
-    #       "local-var" -> [3], ...
-    #       "outer-var" -> [1], ...
+    #       default_receiver -> [2]
+    #       "local-var" -> [3]
+    #       "outer-var" -> [1]
     #       "global-var" -> <some value>
     #       "nonexistent-var" -> None
-    def lookup(self, name: Union[str, DefaultReceiver]) -> Optional[
-        Union[
-            Tuple["SlotRegister", UndeterminedValue],
-            Union[Value, MultiMethod, CompileTimeHandler],
-        ]
-    ]:
+    def lookup(
+        self, name: Union[str, DefaultReceiver]
+    ) -> Optional[Union["Register", Value, MultiMethod, CompileTimeHandler]]:
         ctxt = self
         while isinstance(ctxt, CompilationContext):
-            for i, slot_and_value in enumerate(ctxt.slots):
-                slot, value = slot_and_value
+            for slot, value in ctxt.slots:
                 if name == slot:
-                    slot_index = i
-                    ctxt = ctxt.base
-                    while isinstance(ctxt, CompilationContext):
-                        slot_index += len(ctxt.slots)
-                        ctxt = ctxt.base
-                    return SlotRegister(slot_index), value
+                    return value
             ctxt = ctxt.base
         # Just look up in the regular Context.
         assert isinstance(ctxt, Context)
@@ -410,12 +395,10 @@ class Compiler:
                 stack_from_top.append(ctxt)
                 ctxt = ctxt.base
 
-            slot_index = 0
             for ctxt in reversed(stack_from_top):
                 print("  context:")
                 for slot, value in ctxt.slots:
-                    print(f"    [{slot_index}]: {slot} -> {value}")
-                    slot_index += 1
+                    print(f"    {slot} -> {value}")
 
             print(colored("initial compilation to tree IR:", "red"))
             result_reg = self.compile_expr(self.ir, expr, tail_position=True)
@@ -614,11 +597,15 @@ class Compiler:
                 param_names = ["it"]
             else:
                 param_names = expr.parameters
+            # TODO: what's right here?
             body_comp_ctxt = CompilationContext.stacked_compilation_context(
-                slots=[(default_receiver, UndeterminedValue("<default-receiver>"))]
-                + [(param, UndeterminedValue(param)) for param in param_names],
-                base=block.ctxt,
+                slots=[], base=block.ctxt
             )
+            # body_comp_ctxt = CompilationContext.stacked_compilation_context(
+            #    slots=[(default_receiver, SlotRegister(0))]
+            #    + [(param, SlotRegister(i + 1)) for i, param in enumerate(param_names)],
+            #    base=block.ctxt,
+            # )
             quote = QuoteValue(
                 parameters=expr.parameters,
                 compiled_body=CompiledBody(expr.body, bytecode=None, comp_ctxt=body_comp_ctxt),
@@ -815,46 +802,31 @@ class Compiler:
                             )
                             self.add_ir_op(block, JumpOp(target=inlined_start, span=op.span))
                         else:
-                            # "Push" the inline context.
-                            inline_ctxt = CompilationContext.stacked_compilation_context(
-                                slots=[(default_receiver, DefaultReceiver())]
-                                + [
-                                    (param, UndeterminedValue(param))
-                                    for param in method.body.param_names
-                                ],
-                                base=block.ctxt,
-                            )
-
-                            def find_slot(name):
-                                slot_result = inline_ctxt.lookup(name)
-                                assert isinstance(slot_result, Tuple)
-                                slot_reg, _ = slot_result
-                                assert isinstance(slot_reg, SlotRegister)
-                                return slot_reg
-
-                            # Copy call arguments into the new inline-local slots.
+                            # Set up arguments.
                             # The default receiver is just <null>.
-                            # TODO: does it matter whether this is in block or inline_block? I don't think so, since these are all
-                            # just basic literals / copies -- nothing context dependent...
-                            self.add_ir_op(
+                            default_receiver_reg = self.add_ir_op(
                                 block,
                                 LiteralOp(
-                                    dst=find_slot(default_receiver),
+                                    dst=self.allocate_virtual_reg(),
                                     value=NullValue(),
                                     span=op.span,
                                 ),
                             )
+
                             assert len(op.call_args) == len(method.body.param_names)
-                            for i, param_name in enumerate(method.body.param_names):
-                                self.add_ir_op(
-                                    block,
-                                    CopyOp(
-                                        dst=find_slot(param_name), src=op.call_args[i], span=op.span
-                                    ),
-                                )
 
-                            self.inlining_depth += 1
+                            # "Push" the inline context.
+                            inline_ctxt = CompilationContext.stacked_compilation_context(
+                                slots=[(default_receiver, default_receiver_reg)]
+                                + [
+                                    (param, op.call_args[i])
+                                    for i, param in enumerate(method.body.param_names)
+                                ],
+                                base=block.ctxt,
+                            )
 
+                            # Indicate that we are currently inlining the method, so if we find recursive evaluation
+                            # we know we can just jump back to the starting point of the multimethod.
                             inline_block = IRBlock(
                                 ops=[],
                                 ctxt=inline_ctxt,
@@ -864,14 +836,12 @@ class Compiler:
 
                             # Finally we are ready to inline the body.
                             # TODO: calculate tail position?
-                            # Indicate that we are currently inlining the method, so if we find recursive evaluation
-                            # we know we can just jump back to the starting point of the multimethod.
+                            self.inlining_depth += 1
                             result = self.compile_expr(
                                 inline_block,
                                 method.body.compiled_body.body,
                                 tail_position=False,
                             )
-
                             self.inlining_depth -= 1
 
                             # Add the inline block!
@@ -1088,14 +1058,41 @@ class Compiler:
                                 f"quote has {len(quote.parameters)} parameter(s), but is being provided {len(op.call_args)} argument(s)"
                             )
 
+                        # Set up arguments.
+                        if len(op.call_args) == 1:
+                            default_receiver_reg = op.call_args[0]
+                        else:
+                            default_receiver_reg = self.add_ir_op(
+                                block,
+                                LiteralOp(
+                                    dst=self.allocate_virtual_reg(),
+                                    value=NullValue(),
+                                    span=op.span,
+                                ),
+                            )
+
+                        if not quote.parameters and not op.call_args:
+                            arg_reg = self.add_ir_op(
+                                block,
+                                LiteralOp(
+                                    dst=self.allocate_virtual_reg(),
+                                    value=NullValue(),
+                                    span=op.span,
+                                ),
+                            )
+                            arg_regs = [arg_reg]
+                        else:
+                            arg_regs = op.call_args
+
                         # "Push" the inline context.
                         inline_ctxt = CompilationContext.stacked_compilation_context(
-                            slots=[(default_receiver, DefaultReceiver())]
+                            slots=[(default_receiver, default_receiver_reg)]
                             + [
-                                (param, UndeterminedValue(param))
-                                for param in (quote.parameters or ["it"])
+                                (param, arg_regs[i])
+                                for i, param in enumerate(quote.parameters or ["it"])
                             ],
-                            base=block.ctxt,
+                            # TODO: block.ctxt or quote.ctxt?
+                            base=quote.compiled_body.comp_ctxt,
                         )
 
                         def find_slot(name):
@@ -1105,45 +1102,6 @@ class Compiler:
                             assert isinstance(slot_reg, SlotRegister)
                             return slot_reg
 
-                        # Copy call arguments into the new inline-local slots.
-                        if len(op.call_args) == 1:
-                            self.add_ir_op(
-                                block,
-                                CopyOp(
-                                    dst=find_slot(default_receiver),
-                                    src=op.call_args[0],
-                                    span=op.span,
-                                ),
-                            )
-                        else:
-                            self.add_ir_op(
-                                block,
-                                LiteralOp(
-                                    dst=find_slot(default_receiver),
-                                    value=NullValue(),
-                                    span=op.span,
-                                ),
-                            )
-                        if not quote.parameters and not op.call_args:
-                            self.add_ir_op(
-                                block,
-                                LiteralOp(
-                                    dst=find_slot("it"),
-                                    value=NullValue(),
-                                    span=op.span,
-                                ),
-                            )
-                        else:
-                            for i, param_name in enumerate(quote.parameters or ["it"]):
-                                self.add_ir_op(
-                                    block,
-                                    CopyOp(
-                                        dst=find_slot(param_name), src=op.call_args[i], span=op.span
-                                    ),
-                                )
-
-                        self.inlining_depth += 1
-
                         # No new quote-method-bodies inlined, just a closure quote. Not tracked on the inlining stack,
                         # since these are first class values (unlike multimethods / multimethod invocation).
                         inline_block = IRBlock(
@@ -1152,10 +1110,10 @@ class Compiler:
 
                         # Finally we are ready to inline the body.
                         # TODO: calculate tail position?
+                        self.inlining_depth += 1
                         result = self.compile_expr(
                             inline_block, quote.compiled_body.body, tail_position=False
                         )
-
                         self.inlining_depth -= 1
 
                         # Add the inline block!
@@ -1225,9 +1183,8 @@ def print_ir_block(block: IRBlock, depth: int = 0):
             print("<inline block>:")
             (inline_block,) = op.sub_blocks
             print(indent + level + colored("slots:", "grey"))
-            for name, _ in inline_block.ctxt.slots:
-                slot_reg, value = inline_block.ctxt.lookup(name)
-                print(indent + level + level + colored(f"{slot_reg} {name} -> {value}", "grey"))
+            for name, value in inline_block.ctxt.slots:
+                print(indent + level + level + colored(f"{name} -> {value}", "grey"))
             print_ir_block(inline_block, depth=(depth + 1))
         elif isinstance(op, Label):
             prefix()

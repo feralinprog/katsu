@@ -1,22 +1,24 @@
 
+#method: [(n: Number) recurse] does: [
+#    if: n > 0 then: [
+#        print: n
+#        TAIL-CALL: (n - 1) recurse
+#    ] else: [
+#        print: "done!"
+#    ]
+#]
+#2 recurse
+
 method: [if: (cond: Bool) then: body] does: [
-    if: cond then: body else: null
+    TAIL-CALL: (if: cond then: body else: null)
 ] attrs: { +inline }
 method: [(n: Number) recurse] does: [
     if: n > 0 then: [
         print: n
         TAIL-CALL: (n - 1) recurse
     ]
-] attrs: { +inline }
+]
 2 recurse
-
-<context: [0]=default-receiver, [1]=n>
-@0 = [0]
-@1 = [1]
-@2 = literal 1
-@3 = invoke > with @1,@2
-@4 = closure [ print: n; TAIL-CALL: (n - 1) recurse ]
-@5 = invoke if:then: with @0,@3,@4
 
 #method: [sum: a and: b and: c] does: [
 #    let: x =: a + b

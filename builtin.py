@@ -3,7 +3,7 @@ from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
-from compiler import CompilationContext, Compiler, IRBlock, UndeterminedValue, default_receiver
+from compiler import CompilationContext, Compiler, IRBlock, SlotRegister, default_receiver
 from interpreter import (
     BoolType,
     BoolValue,
@@ -243,8 +243,8 @@ def declare_method(
                 raise ValueError(f"Unknown method attribute: '{attr}'.")
 
     body_comp_ctxt = CompilationContext.stacked_compilation_context(
-        slots=[(default_receiver, UndeterminedValue("<method-default-receiver>"))]
-        + [(name, UndeterminedValue(name)) for name in param_names],
+        slots=[(default_receiver, SlotRegister(0))]
+        + [(name, SlotRegister(i + 1)) for i, name in enumerate(param_names)],
         base=block.ctxt,
     )
 
@@ -534,7 +534,7 @@ def handle__let_eq_(
     # use the local.
     compiler.compile_expr(value)
     # TODO: fix this up
-    compiler.ctxt.slots[local_name] = UndeterminedValue(local_name)
+    compiler.ctxt.slots[local_name] = compiler.allocate_virtual_reg()
     compiler.add_bytecode("create-slot", (local_name,), span=span)
 
 
