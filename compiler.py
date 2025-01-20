@@ -208,6 +208,7 @@ class LiteralOp(IROp):
 class BaseInvokeOp(IROp):
     call_args: list[Register]
     tail_call: bool
+    tail_position: bool
 
     def __post_init__(self):
         assert self.tail_call == (self.dst == None)
@@ -456,8 +457,8 @@ class Compiler:
             tail_call = True
             if not tail_position:
                 if self.inlining_depth > 0:
-                    # TODO: something to do about this?
-                    print("WARNING: TAIL-CALL: got inlined and is no longer in tail position.")
+                    # This is ok -- the tail-call got inlined somewhere where it is no longer in
+                    # tail position. Inlining is stronger than tail-calling, anyway.
                     tail_call = False
                 else:
                     raise ValueError("TAIL-CALL: must be invoked in tail position")
@@ -527,6 +528,7 @@ class Compiler:
                     multimethod=slot,
                     call_args=arg_regs,
                     tail_call=tail_call,
+                    tail_position=tail_position,
                     multimethod_start_label=start_label,
                     span=span,
                 )
@@ -670,6 +672,7 @@ class Compiler:
                             method=method,
                             call_args=op.call_args,
                             tail_call=op.tail_call,
+                            tail_position=op.tail_position,
                             multimethod_start_label=op.multimethod_start_label,
                             span=op.span,
                         )
@@ -817,12 +820,11 @@ class Compiler:
                             )
 
                             # Finally we are ready to inline the body.
-                            # TODO: calculate tail position?
                             self.inlining_depth += 1
                             result = self.compile_expr(
                                 inline_block,
                                 method.body.compiled_body.body,
-                                tail_position=False,
+                                tail_position=op.tail_position,
                             )
                             self.inlining_depth -= 1
 
@@ -843,6 +845,7 @@ class Compiler:
                                 quote=method.body,
                                 call_args=op.call_args,
                                 tail_call=op.tail_call,
+                                tail_position=op.tail_position,
                                 span=op.span,
                             ),
                         )
@@ -850,13 +853,14 @@ class Compiler:
                     if method.body.compile_inline is not None:
                         # Ask the intrinsic to compile inline!
                         result = method.body.compile_inline(
-                            self, block, op.call_args, op.tail_call, op.span
+                            self, block, op.call_args, op.tail_call, op.tail_position, op.span
                         )
-                        assert result is None or isinstance(result, VirtualRegister)
+                        assert result is None or isinstance(result, Register)
                         if op.dst and result:
                             # Make sure to write to the old-invocation output register.
                             self.add_ir_op(block, CopyOp(dst=op.dst, src=result, span=op.span))
                         # TODO: what if op.dst but not result? delete the old output register somehow?
+                        # should just be handled by dead code elimination later on, I s'pose...
                     else:
                         # Just invoke the intrinsic. We can reuse most of the op fields; this is just replacing
                         # an InvokeMethodOp with a more specific InvokeIntrinsicOp.
@@ -867,6 +871,7 @@ class Compiler:
                                 intrinsic=method.body.handler,
                                 call_args=op.call_args,
                                 tail_call=op.tail_call,
+                                tail_position=op.tail_position,
                                 span=op.span,
                             ),
                         )
@@ -881,6 +886,7 @@ class Compiler:
                             native=method.body.handler,
                             call_args=op.call_args,
                             tail_call=op.tail_call,
+                            tail_position=op.tail_position,
                             span=op.span,
                         ),
                     )
@@ -1090,10 +1096,11 @@ class Compiler:
                         )
 
                         # Finally we are ready to inline the body.
-                        # TODO: calculate tail position?
                         self.inlining_depth += 1
                         result = self.compile_expr(
-                            inline_block, quote.compiled_body.body, tail_position=False
+                            inline_block,
+                            quote.compiled_body.body,
+                            tail_position=op.tail_position,
                         )
                         self.inlining_depth -= 1
 
@@ -1224,7 +1231,11 @@ def print_ir_block(block: IRBlock, depth: int = 0):
             else:
                 raise AssertionError(f"forgot an op type: {op}")
 
-            print(f" with {', '.join(str(arg) for arg in op.call_args)}")
+            print(f" with {', '.join(str(arg) for arg in op.call_args)}", end="")
+            if op.tail_position:
+                print(" (in tail position)")
+            else:
+                print()
         elif isinstance(op, ClosureOp):
             prefix()
             print(f"{op.dst} = closure {op.quote}")

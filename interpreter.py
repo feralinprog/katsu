@@ -462,7 +462,7 @@ class IntrinsicMethodBody(MethodBody):
     handler: IntrinsicHandler
     # TODO: update docs and the Callable args here.
     #   result = method.body.compile_inline(
-    #       self, block, op.call_args, op.tail_call, op.span
+    #       self, block, op.call_args, op.tail_call, op.tail_position, op.span
     #   )
     # Optional function to call to inline-compile an invocation of this intrinsic method.
     # It takes the compiler being used to compile the expression which invoked the intrinsic,
@@ -1419,8 +1419,9 @@ def compile_intrinsic__if_then_else_(
     block: "compilation.IRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
+    tail_position: bool,
     span: SourceSpan,
-) -> Optional["compilation.VirtualRegister"]:
+) -> Optional["compilation.Register"]:
     receiver_reg, cond_reg, tbody_reg, fbody_reg = args
 
     true_block_ops = []
@@ -1433,6 +1434,7 @@ def compile_intrinsic__if_then_else_(
             callable=tbody_reg,
             call_args=[true_block_null],
             tail_call=tail_call,
+            tail_position=tail_position,
             span=span,
         )
     )
@@ -1452,6 +1454,7 @@ def compile_intrinsic__if_then_else_(
             callable=fbody_reg,
             call_args=[false_block_null],
             tail_call=tail_call,
+            tail_position=tail_position,
             span=span,
         )
     )
@@ -1611,8 +1614,13 @@ def intrinsic__call(state: RuntimeState, tail_call: bool, receiver: Value) -> No
 
 
 def compile_intrinsic__call(
-    compiler: "compilation.Compiler", args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
-):
+    compiler: "compilation.Compiler",
+    block: "compilation.IRBlock",
+    args: list["compilation.Register"],
+    tail_call: bool,
+    tail_position: bool,
+    span: SourceSpan,
+) -> Optional["compilation.Register"]:
     raise NotImplementedError()
 
 
@@ -1630,8 +1638,13 @@ def intrinsic__call_(state: RuntimeState, tail_call: bool, receiver: Value, valu
 
 
 def compile_intrinsic__call_(
-    compiler: "compilation.Compiler", args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
-):
+    compiler: "compilation.Compiler",
+    block: "compilation.IRBlock",
+    args: list["compilation.Register"],
+    tail_call: bool,
+    tail_position: bool,
+    span: SourceSpan,
+) -> Optional["compilation.Register"]:
     raise NotImplementedError()
 
 
@@ -1652,8 +1665,13 @@ def intrinsic__call_star_(
 
 
 def compile_intrinsic__call_star_(
-    compiler: "compilation.Compiler", args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
-):
+    compiler: "compilation.Compiler",
+    block: "compilation.IRBlock",
+    args: list["compilation.Register"],
+    tail_call: bool,
+    tail_position: bool,
+    span: SourceSpan,
+) -> Optional["compilation.Register"]:
     raise NotImplementedError()
 
 
@@ -1692,8 +1710,13 @@ def intrinsic__cleanup_(
 
 
 def compile_intrinsic__cleanup_(
-    compiler: "compilation.Compiler", args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
-):
+    compiler: "compilation.Compiler",
+    block: "compilation.IRBlock",
+    args: list["compilation.Register"],
+    tail_call: bool,
+    tail_position: bool,
+    span: SourceSpan,
+) -> Optional["compilation.Register"]:
     raise NotImplementedError()
 
 
@@ -1714,8 +1737,13 @@ def intrinsic__call_rc(state: RuntimeState, tail_call: bool, receiver: Value) ->
 
 
 def compile_intrinsic__call_rc(
-    compiler: "compilation.Compiler", args: list[Optional[Expr]], tail_call: bool, span: SourceSpan
-):
+    compiler: "compilation.Compiler",
+    block: "compilation.IRBlock",
+    args: list["compilation.Register"],
+    tail_call: bool,
+    tail_position: bool,
+    span: SourceSpan,
+) -> Optional["compilation.Register"]:
     raise NotImplementedError()
 
 
