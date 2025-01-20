@@ -934,11 +934,10 @@ class Compiler:
                 # If there were any branches in the first place, then merge them and use that as
                 # our new remapping.
                 if remapping_per_subblock:
-                    remapping = remapping_per_subblock[0]
-                    for merger in remapping_per_subblock[1:]:
+                    for merger in remapping_per_subblock:
                         for k, v in merger.items():
                             if k not in remapping:
-                                continue
+                                remapping[k] = v
                             if remapping[k] != v:
                                 del remapping[k]
 
@@ -965,7 +964,7 @@ class Compiler:
                     if op.dst not in remapping:
                         remapping[op.dst] = op.src
                 elif isinstance(op, PhiOp):
-                    pass
+                    op.srcs = [remap(src) for src in op.srcs]
                 elif isinstance(op, LiteralOp):
                     pass
                 elif isinstance(op, InvokeRegisterOp):
