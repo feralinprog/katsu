@@ -453,7 +453,7 @@ class Compiler:
             for i, name in enumerate(method.param_names):
                 compiler.ir.ctxt.slots.append((name, SlotRegister(i + 1)))
 
-        compiler._compile_expr(method.compiled_body.body)
+        compiler.compile_body(method.compiled_body.body)
 
         return compiler
 
@@ -483,11 +483,11 @@ class Compiler:
             )
         )
 
-        compiler._compile_expr(expr)
+        compiler.compile_body(expr)
 
         return compiler
 
-    def _compile_expr(self, expr: Expr) -> "Compiler":
+    def compile_body(self, expr: Expr) -> "Compiler":
         try:
             print(colored("~~~~~~~~~ COMPILATION PROCESS ~~~~~~~~~~~~", "cyan"))
 
