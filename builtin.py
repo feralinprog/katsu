@@ -3,7 +3,7 @@ from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
-from compiler import CompilationContext, Compiler, IRBlock, SlotRegister, default_receiver
+from compiler import CompilationContext, Compiler, SlotRegister, TreeIRBlock, default_receiver
 from interpreter import (
     BoolType,
     BoolValue,
@@ -134,7 +134,7 @@ builtin_value("DataclassType", DataclassTypeType)
 def declare_method(
     message: str,
     compiler: Compiler,
-    block: IRBlock,
+    block: TreeIRBlock,
     span: SourceSpan,
     receiver: Optional[Expr],
     decl: Expr,
@@ -269,7 +269,7 @@ def declare_method(
 
 def handle__method_does_(
     compiler: Compiler,
-    block: IRBlock,
+    block: TreeIRBlock,
     span: SourceSpan,
     tail_call: bool,
     receiver: Optional[Expr],
@@ -284,7 +284,7 @@ builtin_compile_time("method:does:", handle__method_does_)
 
 def handle__method_does_attrs_(
     compiler: Compiler,
-    block: IRBlock,
+    block: TreeIRBlock,
     span: SourceSpan,
     tail_call: bool,
     receiver: Optional[Expr],

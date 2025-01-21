@@ -148,7 +148,7 @@ class IROp:
     # Example: method blocks for a multimethod dispatch, or an inlined if/then/else.
     # The `args` may hold references to these blocks; this is just a standard form
     # for other analyses to be able to use.
-    sub_blocks: list["IRBlock"] = field(default_factory=list)
+    sub_blocks: list["TreeIRBlock"] = field(default_factory=list)
 
 
 # Not really an operation on its own, just hosts a sub-block.
@@ -282,8 +282,8 @@ class TupleOp(IROp):
 class MultimethodDispatchOp(IROp):
     slot_name: str
     dispatch_args: list[Register]
-    dispatch: list[Tuple[Method, "IRBlock"]]
-    dispatch_failed: "IRBlock"
+    dispatch: list[Tuple[Method, "TreeIRBlock"]]
+    dispatch_failed: "TreeIRBlock"
 
 
 @dataclass(kw_only=True)
@@ -295,8 +295,8 @@ class SignalOp(IROp):
 @dataclass(kw_only=True)
 class IfElseOp(IROp):
     condition: Register
-    true_block: "IRBlock"
-    false_block: "IRBlock"
+    true_block: "TreeIRBlock"
+    false_block: "TreeIRBlock"
 
 
 @dataclass
@@ -312,7 +312,7 @@ class InliningInfo:
 
 
 @dataclass
-class IRBlock:
+class TreeIRBlock:
     ops: list[IROp]
     # Context to use when compiling / optimizing anything in the body of this block.
     ctxt: CompilationContext
@@ -340,7 +340,7 @@ def should_inline_quote_method(method: Method) -> bool:
 
 # Compiler for a specific method / quote body in a particular CompilationContext.
 class Compiler:
-    ir: IRBlock
+    ir: TreeIRBlock
     # List of multimethods which, if changed, invalidate the compilation.
     multimethod_deps: list[MultiMethod]
     # How many quote-method-bodies or just quote-closures deep we are into inlining.
@@ -372,7 +372,7 @@ class Compiler:
         # already-added (say) local variables.
         # TODO: deep copy..?
         return cls(
-            ir=IRBlock(
+            ir=TreeIRBlock(
                 ops=[],
                 ctxt=CompilationContext.stacked_compilation_context(
                     slots=list(context.slots), base=context.base
@@ -386,7 +386,7 @@ class Compiler:
         )
 
     # Add an IR operation, and return the destination register (for convenience).
-    def add_ir_op(self, block: IRBlock, op: IROp) -> Optional[Register]:
+    def add_ir_op(self, block: TreeIRBlock, op: IROp) -> Optional[Register]:
         block.ops.append(op)
         return op.dst
 
@@ -405,7 +405,7 @@ class Compiler:
     @staticmethod
     def compile_quote_method_body(method: QuoteMethodBody) -> "Compiler":
         compiler = Compiler(
-            ir=IRBlock(
+            ir=TreeIRBlock(
                 ops=[],
                 ctxt=CompilationContext.stacked_compilation_context(
                     slots=[], base=method.compiled_body.comp_ctxt
@@ -460,7 +460,7 @@ class Compiler:
     @staticmethod
     def compile_toplevel_expr(ctxt: Context, expr: Expr) -> "Compiler":
         compiler = Compiler(
-            ir=IRBlock(
+            ir=TreeIRBlock(
                 ops=[],
                 ctxt=CompilationContext.stacked_compilation_context(slots=[], base=ctxt),
                 inlining_stack=[],
@@ -565,7 +565,9 @@ class Compiler:
             raise e
 
     # Add IROps which evaluate the given expression.
-    def compile_expr(self, block: IRBlock, expr: Expr, tail_position: bool) -> Optional[Register]:
+    def compile_expr(
+        self, block: TreeIRBlock, expr: Expr, tail_position: bool
+    ) -> Optional[Register]:
         assert expr is not None
 
         # TODO: make this less hacky -- should be part of macro / AST rewrite system.
@@ -747,7 +749,7 @@ class Compiler:
             raise AssertionError(f"Forgot an expression type! {type(expr)}")
 
     def tree_inline_multimethod_dispatches(self) -> bool:
-        def process_block(block: IRBlock) -> bool:
+        def process_block(block: TreeIRBlock) -> bool:
             old_ops = list(block.ops)
             block.ops = []
 
@@ -775,7 +777,7 @@ class Compiler:
                 method_results = []
                 sub_blocks = []
                 for method in multimethod.methods:
-                    method_block = IRBlock(
+                    method_block = TreeIRBlock(
                         ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
                     )
                     dispatch.append((method, method_block))
@@ -798,7 +800,7 @@ class Compiler:
                     )
 
                 # Add one more sub-block for the 'dispatch failed' case.
-                dispatch_failed = IRBlock(
+                dispatch_failed = TreeIRBlock(
                     ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
                 )
                 signal_result = self.allocate_virtual_reg()
@@ -836,7 +838,7 @@ class Compiler:
         return process_block(self.ir)
 
     def tree_inline_methods(self):
-        def process_block(block: IRBlock) -> bool:
+        def process_block(block: TreeIRBlock) -> bool:
             old_ops = list(block.ops)
             block.ops = []
 
@@ -955,7 +957,7 @@ class Compiler:
 
                             # Indicate that we are currently inlining the method, so if we find recursive evaluation
                             # we know we can just jump back to the starting point of the multimethod.
-                            inline_block = IRBlock(
+                            inline_block = TreeIRBlock(
                                 ops=list(argument_phi_ops) if method.body.tail_recursive else [],
                                 ctxt=inline_ctxt,
                                 inlining_stack=block.inlining_stack
@@ -1067,7 +1069,9 @@ class Compiler:
 
         # Remapping is from destination to source in various assignments.
         # Returns a new remapping, and a flag saying if any ops were modified.
-        def process_block(block: IRBlock, remapping: dict[Register, Register]) -> Tuple[dict, bool]:
+        def process_block(
+            block: TreeIRBlock, remapping: dict[Register, Register]
+        ) -> Tuple[dict, bool]:
             remapping = dict(remapping)
 
             any_change = False
@@ -1157,7 +1161,7 @@ class Compiler:
         # Propagates ClosureOp assignments directly forward to InvokeRegisterOp calls,
         # and inlines these closures at their call sites.
 
-        def process_block(block: IRBlock, closures: dict[Register, QuoteValue]) -> bool:
+        def process_block(block: TreeIRBlock, closures: dict[Register, QuoteValue]) -> bool:
             closures = dict(closures)
             old_ops = block.ops
             block.ops = []
@@ -1256,7 +1260,7 @@ class Compiler:
 
                         # No new quote-method-bodies inlined, just a closure quote. Not tracked on the inlining stack,
                         # since these are first class values (unlike multimethods / multimethod invocation).
-                        inline_block = IRBlock(
+                        inline_block = TreeIRBlock(
                             ops=[], ctxt=inline_ctxt, inlining_stack=block.inlining_stack
                         )
 
@@ -1313,7 +1317,7 @@ class Compiler:
         return process_block(self.ir, closures={})
 
     def tree_simplify_phi_nodes(self) -> bool:
-        def process_block(block: IRBlock) -> bool:
+        def process_block(block: TreeIRBlock) -> bool:
             old_ops = block.ops
             block.ops = []
 
@@ -1354,7 +1358,7 @@ class Compiler:
 should_show_compiler_output = False
 
 
-def print_ir_block(block: IRBlock, depth: int = 0):
+def print_ir_block(block: TreeIRBlock, depth: int = 0):
     level = "    "
 
     def print_op(index: int, op: IROp, depth: int):

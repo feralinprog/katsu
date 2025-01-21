@@ -1418,7 +1418,7 @@ def intrinsic__if_then_else_(
 
 def compile_intrinsic__if_then_else_(
     compiler: "compilation.Compiler",
-    block: "compilation.IRBlock",
+    block: "compilation.TreeIRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
     tail_position: bool,
@@ -1444,7 +1444,7 @@ def compile_intrinsic__if_then_else_(
             span=span,
         )
     )
-    true_block = compilation.IRBlock(
+    true_block = compilation.TreeIRBlock(
         ops=true_block_ops, ctxt=block.ctxt, inlining_stack=block.inlining_stack
     )
 
@@ -1464,7 +1464,7 @@ def compile_intrinsic__if_then_else_(
             span=span,
         )
     )
-    false_block = compilation.IRBlock(
+    false_block = compilation.TreeIRBlock(
         ops=false_block_ops, ctxt=block.ctxt, inlining_stack=block.inlining_stack
     )
 
@@ -1618,7 +1618,7 @@ def intrinsic__call(state: RuntimeState, tail_call: bool, receiver: Value) -> No
 
 def compile_intrinsic__call(
     compiler: "compilation.Compiler",
-    block: "compilation.IRBlock",
+    block: "compilation.TreeIRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
     tail_position: bool,
@@ -1653,7 +1653,7 @@ def intrinsic__call_(state: RuntimeState, tail_call: bool, receiver: Value, valu
 
 def compile_intrinsic__call_(
     compiler: "compilation.Compiler",
-    block: "compilation.IRBlock",
+    block: "compilation.TreeIRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
     tail_position: bool,
@@ -1680,7 +1680,7 @@ def intrinsic__call_star_(
 
 def compile_intrinsic__call_star_(
     compiler: "compilation.Compiler",
-    block: "compilation.IRBlock",
+    block: "compilation.TreeIRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
     tail_position: bool,
@@ -1725,7 +1725,7 @@ def intrinsic__cleanup_(
 
 def compile_intrinsic__cleanup_(
     compiler: "compilation.Compiler",
-    block: "compilation.IRBlock",
+    block: "compilation.TreeIRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
     tail_position: bool,
@@ -1752,7 +1752,7 @@ def intrinsic__call_rc(state: RuntimeState, tail_call: bool, receiver: Value) ->
 
 def compile_intrinsic__call_rc(
     compiler: "compilation.Compiler",
-    block: "compilation.IRBlock",
+    block: "compilation.TreeIRBlock",
     args: list["compilation.Register"],
     tail_call: bool,
     tail_position: bool,
