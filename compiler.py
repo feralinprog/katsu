@@ -746,7 +746,7 @@ class Compiler:
         else:
             raise AssertionError(f"Forgot an expression type! {type(expr)}")
 
-    def inline_multimethod_dispatches(self) -> bool:
+    def tree_inline_multimethod_dispatches(self) -> bool:
         def process_block(block: IRBlock) -> bool:
             old_ops = list(block.ops)
             block.ops = []
@@ -835,7 +835,7 @@ class Compiler:
 
         return process_block(self.ir)
 
-    def inline_methods(self):
+    def tree_inline_methods(self):
         def process_block(block: IRBlock) -> bool:
             old_ops = list(block.ops)
             block.ops = []
@@ -1057,7 +1057,7 @@ class Compiler:
 
         return process_block(self.ir)
 
-    def propagate_copies(self) -> bool:
+    def tree_propagate_copies(self) -> bool:
         # Propagate CopyOp assignments forward, even into sub-blocks, until we run into any
         # walls: any JumpOp.
         # We can also merge remappings modified variously by different branches (sub-blocks)
@@ -1152,7 +1152,7 @@ class Compiler:
         _, any_change = process_block(self.ir, remapping={})
         return any_change
 
-    def inline_closures(self) -> bool:
+    def tree_inline_closures(self) -> bool:
         # Propagates ClosureOp assignments directly forward to InvokeRegisterOp calls,
         # and inlines these closures at their call sites.
 
@@ -1310,9 +1310,6 @@ class Compiler:
             return any_change
 
         return process_block(self.ir, closures={})
-
-    def delete_dead_code(self) -> bool:
-        raise NotImplementedError()
 
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
