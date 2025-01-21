@@ -964,7 +964,8 @@ class Compiler:
                                         InliningInfo(
                                             body=method.body,
                                             allows_tail_recursion=True,
-                                            argument_phi_ops=argument_phi_ops,
+                                            argument_phi_ops=[default_receiver_phi_op]
+                                            + argument_phi_ops,
                                             entry_point=op.method_start_label,
                                         )
                                         if method.body.tail_recursive
