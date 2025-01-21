@@ -1,5 +1,13 @@
 # TODO: try the Y combinator with quotes... does this break the compiler?
 
+# TODO: need to fix the inlining argument re-binding.
+# phi nodes need to know which basic block argument comes from, not just which argument it is...
+#method: [a swap: b] does: [
+#    print: a
+#    TAIL-CALL: (b swap: a)
+#] :: { +inline; +tail-recursive }
+#"a" swap: "b"
+
 #method: [(n: Number) recurse] does: [
 #    if: n > 0 then: [
 #        print: n
@@ -10,16 +18,16 @@
 #]
 #2 recurse
 
-method: [if: (cond: Bool) then: body] does: [
-    TAIL-CALL: (if: cond then: body else: null)
-] :: { +inline }
-method: [(n: Number) recurse] does: [
-    if: n > 0 then: [
-        print: n
-        TAIL-CALL: (n - 1) recurse
-    ]
-]
-2 recurse
+#method: [if: (cond: Bool) then: body] does: [
+#    TAIL-CALL: (if: cond then: body else: null)
+#] :: { +inline }
+#method: [(n: Number) recurse] does: [
+#    if: n > 0 then: [
+#        print: n
+#        TAIL-CALL: (n - 1) recurse
+#    ]
+#]
+#2 recurse
 
 #method: [sum: a and: b and: c] does: [
 #    let: x =: a + b
@@ -42,7 +50,7 @@ method: [(n: Number) recurse] does: [
 ## (really, figure out how this can work. maybe something like:
 ## >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
 ## where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
-#method: [if: (cond: Bool) then: body] does: [ TAIL-CALL: (if: cond then: body else: null) ] :: { +inline }
+method: [if: (cond: Bool) then: body] does: [ TAIL-CALL: (if: cond then: body else: null) ] :: { +inline }
 #if: 2 > 1 then: [ print: "good: 2 > 1" ]
 #if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 #
@@ -50,23 +58,30 @@ method: [(n: Number) recurse] does: [
 #print: a
 #'a = 10
 #print: a
-#
-#method: [while: (cond: Quote) do: (body: Quote)] does: [
-#    if: cond call then: [
-#        body call
-#        TAIL-CALL: (while: cond do: body)
-#    ]
-#] :: { +inline }
-#
-#method: [test-while] does: [
-#    let: i =: 10
-#    while: [i > 0] do: [
-#        print: i
-#        'i = i - 1
-#    ]
-#]
-#test-while
-#
+
+# +inline tells the compiler that this should be strictly inlined at every call site
+# +tail-recursive is more of an optimization hint; it tells the compiler to expect this method body
+#   to be called recursively in tail position, so it can be converted from recursion into iteration.
+#   Without this annotation, tail call optimization will still apply (so call stack size is bounded),
+#   but this would _not_ be directly compiled into a while loop.
+#   NOTE: this hint is pessimistic if the body is not actually tail-recursive, and prohibits various
+#       other optimizations.
+method: [while: (cond: Quote) do: (body: Quote)] does: [
+    if: cond call then: [
+        body call
+        TAIL-CALL: (while: cond do: body)
+    ]
+] :: { +inline; +tail-recursive }
+
+method: [test-while] does: [
+    let: i =: 10
+    while: [i > 0] do: [
+        print: i
+        'i = i - 1
+    ]
+]
+test-while
+
 #method: [from: low to<: high do: (body: Quote)] does: [
 #    let: i =: low
 #    while: [i < high] do: [

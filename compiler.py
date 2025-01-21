@@ -538,7 +538,7 @@ class Compiler:
                 optimize("inlining closures", self.tree_inline_closures)
 
             # Tail recursion could have produced unnecessary phi nodes; now we can clean those up.
-            # TODO: optimize("simplifying phi nodes post-inlining", self.simplify_phi_nodes)
+            optimize("simplifying phi nodes post-inlining", self.tree_simplify_phi_nodes)
             # !! From this point on, no more inlining methods. !!
 
             optimize("propagating copies", self.tree_propagate_copies)
@@ -1311,6 +1311,41 @@ class Compiler:
             return any_change
 
         return process_block(self.ir, closures={})
+
+    def tree_simplify_phi_nodes(self) -> bool:
+        def process_block(block: IRBlock) -> bool:
+            old_ops = block.ops
+            block.ops = []
+
+            any_change = False
+
+            for op in old_ops:
+                for sub_block in op.sub_blocks:
+                    if process_block(sub_block):
+                        any_change = True
+
+                if not isinstance(op, PhiOp):
+                    block.ops.append(op)
+                    continue
+
+                op.force_keep = False
+                # TODO: this seems a bit smelly, and `swap:` example shows this isn't necessarily
+                # the right approach to take... rework this (and inline-method argument re-writing)
+                # and get `swap:` working.
+                if op.dst in op.srcs:
+                    any_change = True
+                    op.srcs = [src for src in op.srcs if src != op.dst]
+                assert op.srcs
+                if len(op.srcs) == 1:
+                    # Might as well convert to a copy!
+                    block.ops.append(CopyOp(dst=op.dst, src=op.srcs[0], span=op.span))
+                    any_change = True
+                else:
+                    block.ops.append(op)
+
+            return any_change
+
+        return process_block(self.ir)
 
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
