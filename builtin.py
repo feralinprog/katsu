@@ -233,31 +233,30 @@ def declare_method(
         raise ValueError(f"{message} 'body' argument should not specify any parameters")
 
     inline = False
+    tail_recursive = False
     if attrs:
         if not isinstance(attrs, DataExpr):
             raise ValueError(f"{message} 'attrs' argument should be a vector")
         for attr in attrs.components:
             if isinstance(attr, NameExpr) and attr.name.value == "+inline":
                 inline = True
+            elif isinstance(attr, NameExpr) and attr.name.value == "+tail-recursive":
+                tail_recursive = True
             else:
                 raise ValueError(f"Unknown method attribute: '{attr}'.")
 
-    body_comp_ctxt = CompilationContext.stacked_compilation_context(
-        slots=[(default_receiver, SlotRegister(0))]
-        + [(name, SlotRegister(i + 1)) for i, name in enumerate(param_names)],
-        base=block.ctxt,
-    )
-
-    compiled_body = CompiledBody(body.body, bytecode=None, comp_ctxt=body_comp_ctxt)
+    compiled_body = CompiledBody(body.body, bytecode=None, comp_ctxt=block.ctxt, method=None)
     method = Method(
         param_matchers=param_matchers,
         body=QuoteMethodBody(
             context=block.ctxt,  # TODO: this seems a bit funky, not a real Context...
             param_names=param_names,
             compiled_body=compiled_body,
+            tail_recursive=tail_recursive,
         ),
         inline=inline,
     )
+    compiled_body.method = method.body
 
     # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
     assert isinstance(block.ctxt.base, Context)

@@ -123,7 +123,7 @@ TODO:
   * %{ { key; value}; { key; value } ... }
 * modules?
   * should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)
-* explicit tail-calls?
+* allow force-inlining at call site?
 * method:does: should allow marking arguments optional (-> just generate all combos)
 * allow for docs everywhere!
 * macros / annotations / hook in to parser for custom syntax?

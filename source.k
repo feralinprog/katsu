@@ -1,3 +1,4 @@
+# TODO: try the Y combinator with quotes... does this break the compiler?
 
 #method: [(n: Number) recurse] does: [
 #    if: n > 0 then: [

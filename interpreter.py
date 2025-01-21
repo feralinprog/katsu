@@ -446,6 +446,7 @@ class QuoteMethodBody(MethodBody):
     # This includes the receiver name.
     param_names: list[str]
     compiled_body: "CompiledBody"
+    tail_recursive: bool
 
     def __str__(self):
         # TODO: pprint, make less verbose
@@ -605,6 +606,9 @@ class CompiledBody:
     # Only None if this compiled body has been invalidated or has not even been invoked yet.
     bytecode: Optional[BytecodeSequence]
     comp_ctxt: "compilation.CompilationContext"
+    # If this body comes from a method definition, this links to that method.
+    # TODO: this feels a bit hacky. probably need to refactor this...
+    method: Optional[QuoteMethodBody]
     # Purely for debug logging.
     was_invalidated: bool = False
 
@@ -620,9 +624,10 @@ class CompiledBody:
 
     def maybe_recompile(self) -> BytecodeSequence:
         if not self.bytecode:
-            # TODO: make a copy of comp_ctxt? but not the .base?
-            compiler = compilation.Compiler.for_context(self.comp_ctxt)
-            compiler.compile_body(self.body)
+            if self.method:
+                compiler = compilation.Compiler.compile_quote_method_body(self.method)
+            else:
+                compiler = compilation.Compiler.compile_standalone_expr(self.comp_ctxt, self.body)
             self.bytecode = compiler.low_level_bytecode
             compilation.show_compiler_output(
                 self.body,
@@ -1262,14 +1267,11 @@ def shift_top_frame(state: RuntimeState) -> None:
 
 def eval_toplevel(expr: Expr, context: Context) -> Value:
     # TODO: the context should have a default-receiver populated...
-    compiler = compilation.Compiler.for_context(
-        context=compilation.CompilationContext.from_context(context)
-    )
-    compiler.compile_body(expr)
+    compiler = compilation.Compiler.compile_toplevel_expr(context, expr)
     # TODO: delete this special case. This just blindly assumes the expression was a simple name lookup.
     # just doing this for now in order to test out other compilation
-    assert len(compiler.ir.ops) <= 2
-    return context.slots[compiler.ir.ops[0].slot_name] if compiler.ir.ops else NullValue()
+    assert len(compiler.ir.ops) <= 3
+    return context.slots[compiler.ir.ops[1].slot_name] if len(compiler.ir.ops) > 1 else NullValue()
     bytecode = compiler.low_level_bytecode
     compilation.show_compiler_output(
         expr, bytecode, compiler.multimethod_deps, is_recompilation=False
@@ -1424,10 +1426,14 @@ def compile_intrinsic__if_then_else_(
 ) -> Optional["compilation.Register"]:
     receiver_reg, cond_reg, tbody_reg, fbody_reg = args
 
+    # Note that even if compiling tail calls into the true/false bodies, we must
+    # still add destination registers, in case any of these tail calls are multimethod
+    # invocations.
+
     true_block_ops = []
     true_block_null = compiler.allocate_virtual_reg()
     true_block_ops.append(compilation.LiteralOp(dst=true_block_null, value=NullValue(), span=span))
-    true_block_result = None if tail_call else compiler.allocate_virtual_reg()
+    true_block_result = compiler.allocate_virtual_reg()
     true_block_ops.append(
         compilation.InvokeRegisterOp(
             dst=true_block_result,
@@ -1447,7 +1453,7 @@ def compile_intrinsic__if_then_else_(
     false_block_ops.append(
         compilation.LiteralOp(dst=false_block_null, value=NullValue(), span=span)
     )
-    false_block_result = None if tail_call else compiler.allocate_virtual_reg()
+    false_block_result = compiler.allocate_virtual_reg()
     false_block_ops.append(
         compilation.InvokeRegisterOp(
             dst=false_block_result,
@@ -1474,17 +1480,14 @@ def compile_intrinsic__if_then_else_(
         ),
     )
 
-    if tail_call:
-        return None
-    else:
-        return compiler.add_ir_op(
-            block,
-            compilation.PhiOp(
-                dst=compiler.allocate_virtual_reg(),
-                srcs=[true_block_result, false_block_result],
-                span=span,
-            ),
-        )
+    return compiler.add_ir_op(
+        block,
+        compilation.PhiOp(
+            dst=compiler.allocate_virtual_reg(),
+            srcs=[true_block_result, false_block_result],
+            span=span,
+        ),
+    )
 
 
 def call_impl(

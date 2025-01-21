@@ -180,6 +180,13 @@ class JumpOp(IROp):
 
 
 @dataclass(kw_only=True)
+class UnreachableOp(IROp):
+    # May have a destination register, as a stand-in.
+    # Dead code elimination should end up deleting all instances of such a register.
+    pass
+
+
+@dataclass(kw_only=True)
 class ReturnOp(IROp):
     value: Register
 
@@ -197,6 +204,10 @@ class CopyOp(IROp):
 @dataclass(kw_only=True)
 class PhiOp(IROp):
     srcs: list[Register]
+    # If true, this phi op must not be optimized away, even if there is only a single source.
+    # This is effectively an "open" phi, where additional sources may be added later (due to
+    # tail-recursion).
+    force_keep: bool = False
 
 
 @dataclass(kw_only=True)
@@ -211,7 +222,9 @@ class BaseInvokeOp(IROp):
     tail_position: bool
 
     def __post_init__(self):
-        assert self.tail_call == (self.dst == None)
+        # Require a destination register, even if tail-call. This simplifies matters, and
+        # extra registers will be removed later via dead code elimination.
+        assert self.dst is not None
 
 
 @dataclass(kw_only=True)
@@ -222,28 +235,17 @@ class InvokeRegisterOp(BaseInvokeOp):
 @dataclass(kw_only=True)
 class InvokeMultimethodOp(BaseInvokeOp):
     multimethod: MultiMethod
-    # Start of the (inlined) multimethod invocation.
-    multimethod_start_label: Label
-
-    def __post_init__(self):
-        # Kinda hacky. Multimethod invocations need a destination register in case
-        # of method dispatch failure (which signals, which produces a value), even
-        # if the actual dispatch branches all result in tail calls.
-        pass
 
 
 @dataclass(kw_only=True)
 class InvokeMethodOp(BaseInvokeOp):
     method: Method
-    # Start of the (inlined) multimethod which this method is part of.
-    multimethod_start_label: Label
+    method_start_label: Label
 
 
 @dataclass(kw_only=True)
 class InvokeQuoteOp(BaseInvokeOp):
     quote: QuoteMethodBody
-    # Start of the (inlined) multimethod which this method is part of.
-    multimethod_start_label: Label
 
 
 @dataclass(kw_only=True)
@@ -282,8 +284,6 @@ class MultimethodDispatchOp(IROp):
     dispatch_args: list[Register]
     dispatch: list[Tuple[Method, "IRBlock"]]
     dispatch_failed: "IRBlock"
-    # Start of the (inlined) multimethod which this dispatch is part of.
-    multimethod_start_label: Label
 
 
 @dataclass(kw_only=True)
@@ -300,13 +300,24 @@ class IfElseOp(IROp):
 
 
 @dataclass
+class InliningInfo:
+    body: QuoteMethodBody
+    allows_tail_recursion: bool
+    # Everything below here is required if allows_tail_recursion, and must be None otherwise.
+    # ---------------------------------------------------------------------------------------
+    # Phi op per <default-receiver> and method parameter/argument.
+    # The body must have been compiled to use these outputs as the argument values.
+    argument_phi_ops: Optional[list[PhiOp]]
+    entry_point: Optional[Label]
+
+
+@dataclass
 class IRBlock:
     ops: list[IROp]
     # Context to use when compiling / optimizing anything in the body of this block.
     ctxt: CompilationContext
-    # Stack of quote-method-bodies we have inlined so far in the static scope of this block.
-    # Each method has associated the label of the inlined-multimethod starting point.
-    inlining_stack: list[Tuple[QuoteMethodBody, "Label"]]
+    # Stack of (information about) quote-method-bodies we have inlined so far in the static scope of this block.
+    inlining_stack: list[InliningInfo]
 
 
 def should_inline_multimethod_dispatch(multimethod: MultiMethod) -> bool:
@@ -391,9 +402,95 @@ class Compiler:
         self.num_labels += 1
         return label
 
-    def compile_body(self, expr: Expr):
+    @staticmethod
+    def compile_quote_method_body(method: QuoteMethodBody) -> "Compiler":
+        compiler = Compiler(
+            ir=IRBlock(
+                ops=[],
+                ctxt=CompilationContext.stacked_compilation_context(
+                    slots=[], base=method.compiled_body.comp_ctxt
+                ),
+                inlining_stack=[],
+            ),
+            multimethod_deps=[],
+            inlining_depth=0,
+            num_virtual_regs=0,
+            num_labels=0,
+        )
+
+        # TODO: offset slot registers (initial inputs to method) if there are already slot registers assigned?
+        # e.g. if defining a method within another method.
+        # method definitions outside of top level are probably totally broken right now...
+        if method.tail_recursive:
+            span = method.compiled_body.body.span
+
+            entry_point = compiler.allocate_label()
+            compiler.ir.ops.append(entry_point)
+
+            # Includes default-receiver.
+            argument_phi_ops = []
+            for i, name in enumerate([default_receiver] + method.param_names):
+                op = PhiOp(
+                    dst=compiler.allocate_virtual_reg(),
+                    srcs=[SlotRegister(i)],
+                    force_keep=True,
+                    span=span,
+                )
+                argument_phi_ops.append(op)
+                compiler.ir.ops.append(op)
+                compiler.ir.ctxt.slots.append((name, op.dst))
+
+            compiler.ir.inlining_stack.append(
+                InliningInfo(
+                    body=method,
+                    allows_tail_recursion=True,
+                    argument_phi_ops=argument_phi_ops,
+                    entry_point=entry_point,
+                )
+            )
+        else:
+            compiler.ir.ctxt.slots.append((default_receiver, SlotRegister(0)))
+            for i, name in enumerate(method.param_names):
+                compiler.ir.ctxt.slots.append((name, SlotRegister(i + 1)))
+
+        compiler._compile_expr(method.compiled_body.body)
+
+        return compiler
+
+    @staticmethod
+    def compile_toplevel_expr(ctxt: Context, expr: Expr) -> "Compiler":
+        compiler = Compiler(
+            ir=IRBlock(
+                ops=[],
+                ctxt=CompilationContext.stacked_compilation_context(slots=[], base=ctxt),
+                inlining_stack=[],
+            ),
+            multimethod_deps=[],
+            inlining_depth=0,
+            num_virtual_regs=0,
+            num_labels=0,
+        )
+
+        compiler.ir.ctxt.slots.append(
+            (
+                default_receiver,
+                compiler.add_ir_op(
+                    compiler.ir,
+                    LiteralOp(
+                        dst=compiler.allocate_virtual_reg(), value=NullValue(), span=expr.span
+                    ),
+                ),
+            )
+        )
+
+        compiler._compile_expr(expr)
+
+        return compiler
+
+    def _compile_expr(self, expr: Expr) -> "Compiler":
         try:
             print(colored("~~~~~~~~~ COMPILATION PROCESS ~~~~~~~~~~~~", "cyan"))
+
             print("input expression:", expr)
             print(colored("input compilation context (bottom -> top of stack):", "green"))
             stack_from_top = []
@@ -415,26 +512,48 @@ class Compiler:
 
             any_change = True
             iteration = 0
+
+            def optimize(summary: str, fn):
+                nonlocal any_change
+                print(colored(f"{summary} (iteration={iteration}):", "red"))
+                delta = fn()
+                if delta:
+                    any_change = True
+                    print_ir_block(self.ir, depth=1)
+                else:
+                    print("    (no delta)")
+                "a breakpoint right after printing latest state"
+
             while any_change:
                 any_change = False
                 iteration += 1
 
-                def optimize(summary: str, fn):
-                    nonlocal any_change
-                    print(colored(f"{summary} (iteration={iteration}):", "red"))
-                    delta = fn()
-                    if delta:
-                        any_change = True
-                        print_ir_block(self.ir, depth=1)
-                    else:
-                        print("    (no delta)")
-                    "a breakpoint right after printing latest state"
+                # Inline multimethod dispatches to open up the method invocations.
+                optimize("inlining multimethod dispatches", self.tree_inline_multimethod_dispatches)
+                # Inline method invocations to open up the method bodies and hopefully allow
+                # closure inlining.
+                optimize("inlining methods", self.tree_inline_methods)
+                # Try to move closures to their call sites.
+                optimize("propagating copies", self.tree_propagate_copies)
+                optimize("inlining closures", self.tree_inline_closures)
 
-                optimize("inlining multimethod dispatches", self.inline_multimethod_dispatches)
-                optimize("inlining methods", self.inline_methods)
-                optimize("propagating copies", self.propagate_copies)
-                optimize("inlining closures", self.inline_closures)
-                # optimize("deleting dead code", self.delete_dead_code)
+            # Tail recursion could have produced unnecessary phi nodes; now we can clean those up.
+            # TODO: optimize("simplifying phi nodes post-inlining", self.simplify_phi_nodes)
+            # !! From this point on, no more inlining methods. !!
+
+            optimize("propagating copies", self.tree_propagate_copies)
+            # TODO: self.convert_to_basic_blocks()
+
+            any_change = True
+            while any_change:
+                any_change = False
+                iteration += 1
+                # TODO: optimize("inferring types", self.bb_infer_types)
+                # This includes:
+                # * applying type knowledge to simplify multimethod dispatches
+                # * deleting UnreachableOp instances (and the registers they "write" to)
+                # TODO: optimize("eliminating dead code", self.bb_eliminate_dead_code)
+                # TODO: optimize("propagating copies", self.bb_propagate_copies)
 
             # print("compiling to low level bytecode:")
             # self.compile_to_low_level_bytecode()
@@ -520,8 +639,6 @@ class Compiler:
                         arg_reg = self.compile_expr(block, arg, tail_position=False)
                     arg_regs.append(arg_reg)
 
-                start_label = self.allocate_label()
-                self.add_ir_op(block, start_label)
                 # Even if a tail call, we must add a destination register to be used in case of dispatch failure.
                 invocation = InvokeMultimethodOp(
                     dst=self.allocate_virtual_reg(),
@@ -529,7 +646,6 @@ class Compiler:
                     call_args=arg_regs,
                     tail_call=tail_call,
                     tail_position=tail_position,
-                    multimethod_start_label=start_label,
                     span=span,
                 )
                 return self.add_ir_op(block, invocation)
@@ -588,7 +704,9 @@ class Compiler:
             # )
             quote = QuoteValue(
                 parameters=expr.parameters,
-                compiled_body=CompiledBody(expr.body, bytecode=None, comp_ctxt=body_comp_ctxt),
+                compiled_body=CompiledBody(
+                    expr.body, bytecode=None, comp_ctxt=body_comp_ctxt, method=None
+                ),
                 context=None,  # will be filled in later during evaluation
                 span=expr.span,
             )
@@ -663,9 +781,10 @@ class Compiler:
                     dispatch.append((method, method_block))
                     sub_blocks.append(method_block)
 
-                    dst = None if op.tail_call else self.allocate_virtual_reg()
-                    if dst:
-                        method_results.append(dst)
+                    dst = self.allocate_virtual_reg()
+                    method_results.append(dst)
+                    start_label = self.allocate_label()
+                    method_block.ops.append(start_label)
                     method_block.ops.append(
                         InvokeMethodOp(
                             dst=dst,
@@ -673,7 +792,7 @@ class Compiler:
                             call_args=op.call_args,
                             tail_call=op.tail_call,
                             tail_position=op.tail_position,
-                            multimethod_start_label=op.multimethod_start_label,
+                            method_start_label=start_label,
                             span=op.span,
                         )
                     )
@@ -682,10 +801,7 @@ class Compiler:
                 dispatch_failed = IRBlock(
                     ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
                 )
-                # If all methods have no results (due to tail-calling), then the signaling result
-                # is the only possible result of the multimethod dispatch, so just write it to
-                # the original invocation op's destination.
-                signal_result = self.allocate_virtual_reg() if method_results else op.dst
+                signal_result = self.allocate_virtual_reg()
                 dispatch_failed.ops.append(
                     SignalOp(
                         dst=signal_result,
@@ -704,7 +820,6 @@ class Compiler:
                         dispatch=dispatch,
                         dispatch_failed=dispatch_failed,
                         sub_blocks=sub_blocks,
-                        multimethod_start_label=op.multimethod_start_label,
                         span=op.span,
                     )
                 )
@@ -739,54 +854,49 @@ class Compiler:
 
                 method = op.method
                 if isinstance(method.body, QuoteMethodBody):
-                    if should_inline_quote_method(method):
+                    if any(method.body == inlined.body for inlined in block.inlining_stack):
+                        inlined = next(
+                            info for info in block.inlining_stack if method.body == info.body
+                        )
+                    else:
+                        inlined = None
+                    # Stop inlining if we have already inlined the same method, but it doesn't support tail recursion.
+                    # If we did try to inline, we would either have to jump back to the entry point (which doesn't exist,
+                    # since we didn't compile the original inlining assuming there would be tail recursino), or actually
+                    # inline again, which would lead to infinite compilation recursion.
+                    if (
+                        not inlined or inlined.allows_tail_recursion
+                    ) and should_inline_quote_method(method):
                         # If already in the inlining stack, then we can handle this as a jump to where we
                         # already inlined this method body.
-                        if any(
-                            method.body == inlined_method
-                            for inlined_method, _ in block.inlining_stack
-                        ):
-                            raise NotImplementedError()
-                            # TODO: really need to fix up behavior here.
-                            # * make sure that we are writing to the argument slots from the context
-                            #   of the inlined method body, not the _current_ context. (may be different
-                            #   in case of name shadowing due to inlining multiple methods)
-                            # * is copy propagation valid in the presence of these jumps? it could have
-                            #   already propagated (original-non-inlined-)inputs-to-arguments into the
-                            #   method body itself...
-
-                            def find_slot(name):
-                                slot_result = block.ctxt.lookup(name)
-                                assert isinstance(slot_result, Tuple)
-                                slot_reg, _ = slot_result
-                                assert isinstance(slot_reg, SlotRegister)
-                                return slot_reg
+                        if inlined:
+                            assert len(inlined.argument_phi_ops) == 1 + len(method.body.param_names)
+                            for phi_op in inlined.argument_phi_ops:
+                                assert isinstance(phi_op, PhiOp)
+                                assert phi_op.force_keep
+                            default_receiver_phi_op, arg_phi_ops = (
+                                inlined.argument_phi_ops[0],
+                                inlined.argument_phi_ops[1:],
+                            )
 
                             # Copy arguments into the right slots.
                             # The default receiver is just <null>.
-                            self.add_ir_op(
+                            default_receiver_reg = self.add_ir_op(
                                 block,
                                 LiteralOp(
-                                    dst=find_slot(default_receiver),
+                                    dst=self.allocate_virtual_reg(),
                                     value=NullValue(),
                                     span=op.span,
                                 ),
                             )
+                            default_receiver_phi_op.srcs.append(default_receiver_reg)
+
                             assert len(op.call_args) == len(method.body.param_names)
                             for i, param_name in enumerate(method.body.param_names):
-                                self.add_ir_op(
-                                    block,
-                                    CopyOp(
-                                        dst=find_slot(param_name), src=op.call_args[i], span=op.span
-                                    ),
-                                )
+                                arg_phi_ops[i].srcs.append(op.call_args[i])
 
-                            inlined_start = next(
-                                label
-                                for inlined_method, label in block.inlining_stack
-                                if method.body == inlined_method
-                            )
-                            self.add_ir_op(block, JumpOp(target=inlined_start, span=op.span))
+                            self.add_ir_op(block, JumpOp(target=inlined.entry_point, span=op.span))
+                            self.add_ir_op(block, UnreachableOp(dst=op.dst, span=op.span))
                         else:
                             # Set up arguments.
                             # The default receiver is just <null>.
@@ -798,26 +908,74 @@ class Compiler:
                                     span=op.span,
                                 ),
                             )
+                            if method.body.tail_recursive:
+                                default_receiver_phi_op = PhiOp(
+                                    dst=self.allocate_virtual_reg(),
+                                    srcs=[default_receiver_reg],
+                                    force_keep=True,
+                                    span=op.span,
+                                )
 
                             assert len(op.call_args) == len(method.body.param_names)
+                            if method.body.tail_recursive:
+                                argument_phi_ops = []
+                                for i, arg_reg in enumerate(op.call_args):
+                                    argument_phi_ops.append(
+                                        PhiOp(
+                                            dst=self.allocate_virtual_reg(),
+                                            srcs=[arg_reg],
+                                            force_keep=True,
+                                            span=op.span,
+                                        )
+                                    )
+
+                            if method.body.tail_recursive:
+                                block.ops.append(default_receiver_phi_op)
+                                block.ops.extend(argument_phi_ops)
 
                             # "Push" the inline context.
-                            inline_ctxt = CompilationContext.stacked_compilation_context(
-                                slots=[(default_receiver, default_receiver_reg)]
-                                + [
-                                    (param, op.call_args[i])
-                                    for i, param in enumerate(method.body.param_names)
-                                ],
-                                base=block.ctxt,
-                            )
+                            if method.body.tail_recursive:
+                                inline_ctxt = CompilationContext.stacked_compilation_context(
+                                    slots=[(default_receiver, default_receiver_phi_op.dst)]
+                                    + [
+                                        (param, argument_phi_ops[i].dst)
+                                        for i, param in enumerate(method.body.param_names)
+                                    ],
+                                    base=block.ctxt,
+                                )
+                            else:
+                                inline_ctxt = CompilationContext.stacked_compilation_context(
+                                    slots=[(default_receiver, default_receiver_reg)]
+                                    + [
+                                        (param, op.call_args[i])
+                                        for i, param in enumerate(method.body.param_names)
+                                    ],
+                                    base=block.ctxt,
+                                )
 
                             # Indicate that we are currently inlining the method, so if we find recursive evaluation
                             # we know we can just jump back to the starting point of the multimethod.
                             inline_block = IRBlock(
-                                ops=[],
+                                ops=list(argument_phi_ops) if method.body.tail_recursive else [],
                                 ctxt=inline_ctxt,
                                 inlining_stack=block.inlining_stack
-                                + [(method.body, op.multimethod_start_label)],
+                                + [
+                                    (
+                                        InliningInfo(
+                                            body=method.body,
+                                            allows_tail_recursion=True,
+                                            argument_phi_ops=argument_phi_ops,
+                                            entry_point=op.method_start_label,
+                                        )
+                                        if method.body.tail_recursive
+                                        else InliningInfo(
+                                            body=method.body,
+                                            allows_tail_recursion=False,
+                                            argument_phi_ops=None,
+                                            entry_point=None,
+                                        )
+                                    )
+                                ],
                             )
 
                             # Finally we are ready to inline the body.
@@ -947,6 +1105,8 @@ class Compiler:
                     # TODO: we don't have to forget all the remappings when hitting a JumpOp, just
                     # mappings that were established after the JumpOp target label. (I think...)
                     remapping = {}
+                elif isinstance(op, UnreachableOp):
+                    pass
                 elif isinstance(op, ReturnOp):
                     op.value = remap(op.value)
                 elif isinstance(op, CopyOp):
@@ -1017,6 +1177,8 @@ class Compiler:
                     # TODO: do we actually need to clear out mappings here? Maybe not...
                     closures = {}
                     block.ops.append(op)
+                elif isinstance(op, UnreachableOp):
+                    pass
                 elif isinstance(op, ReturnOp):
                     block.ops.append(op)
                 elif isinstance(op, CopyOp):
@@ -1183,6 +1345,12 @@ def print_ir_block(block: IRBlock, depth: int = 0):
         elif isinstance(op, JumpOp):
             prefix()
             print("jump " + colored(f"{op.target.id}", "light_magenta"))
+        elif isinstance(op, UnreachableOp):
+            prefix()
+            if op.dst:
+                print(f"{op.dst} = unreachable")
+            else:
+                print("unreachable")
         elif isinstance(op, ReturnOp):
             prefix()
             print(f"return {op.value}")
@@ -1191,7 +1359,11 @@ def print_ir_block(block: IRBlock, depth: int = 0):
             print(f"{op.dst} = {op.src}")
         elif isinstance(op, PhiOp):
             prefix()
-            print(f"{op.dst} = phi({', '.join(str(src) for src in op.srcs)})")
+            print(f"{op.dst} = phi({', '.join(str(src) for src in op.srcs)})", end="")
+            if op.force_keep:
+                print(" (force-keep)")
+            else:
+                print()
         elif isinstance(op, LiteralOp):
             prefix()
             print(
@@ -1209,7 +1381,7 @@ def print_ir_block(block: IRBlock, depth: int = 0):
                 print(f"invoke {op.callable}", end="")
             elif isinstance(op, InvokeMultimethodOp):
                 print(
-                    f"invoke-multimethod {op.multimethod.name} (label={op.multimethod_start_label.id}, inline_dispatch={op.multimethod.inline_dispatch})",
+                    f"invoke-multimethod {op.multimethod.name} (inline_dispatch={op.multimethod.inline_dispatch})",
                     end="",
                 )
             elif isinstance(op, InvokeMethodOp):
@@ -1222,11 +1394,9 @@ def print_ir_block(block: IRBlock, depth: int = 0):
                     print(f"<native:{op.method.body.handler.handler}>", end="")
                 else:
                     raise AssertionError(f"forgot a method body type: {op.method.body}")
-                print(
-                    f" (label={op.multimethod_start_label.id}, inline={op.method.inline})", end=""
-                )
+                print(f" (label={op.method_start_label.id}, inline={op.method.inline})", end="")
             elif isinstance(op, InvokeQuoteOp):
-                print(f"invoke-quote {op.quote} (label={op.multimethod_start_label.id})", end="")
+                print(f"invoke-quote {op.quote}", end="")
             elif isinstance(op, InvokeIntrinsicOp):
                 print(f"invoke-intrinsic {op.intrinsic.handler}", end="")
             elif isinstance(op, InvokeNativeOp):
@@ -1257,7 +1427,7 @@ def print_ir_block(block: IRBlock, depth: int = 0):
         elif isinstance(op, MultimethodDispatchOp):
             prefix()
             print(
-                f"multimethod-dispatch {op.slot_name} (label={op.multimethod_start_label.id}) on {', '.join(str(arg) for arg in op.dispatch_args)}"
+                f"multimethod-dispatch {op.slot_name} on {', '.join(str(arg) for arg in op.dispatch_args)}"
             )
             for method, body_block in op.dispatch:
 
