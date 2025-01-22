@@ -170,6 +170,9 @@ class Label(IROp):
     def __post_init__(self):
         assert not self.dst
 
+    def __hash__(self):
+        return hash(self.id)
+
 
 @dataclass(kw_only=True)
 class JumpOp(IROp):
@@ -320,6 +323,122 @@ class TreeIRBlock:
     inlining_stack: list[InliningInfo]
 
 
+@dataclass(kw_only=True)
+class BasicBlockJumpOp(IROp):
+    target: "BasicIRBlock"
+
+    def __post_init__(self):
+        assert not self.dst
+        if self.target.id == 8:
+            "spot for debugging"
+
+
+@dataclass(kw_only=True)
+class BasicBlockMultimethodDispatchOp(IROp):
+    slot_name: str
+    dispatch_args: list[Register]
+    dispatch: list[Tuple[Method, "BasicIRBlock"]]
+    dispatch_failed: "BasicIRBlock"
+
+
+@dataclass(kw_only=True)
+class SignalOp(IROp):
+    condition_name: str
+    signal_args: list[Register]
+
+
+@dataclass(kw_only=True)
+class BasicBlockIfElseOp(IROp):
+    condition: Register
+    true_block: "BasicIRBlock"
+    false_block: "BasicIRBlock"
+
+
+# Basic block à la Single Static Assignment form.
+@dataclass
+class BasicIRBlock:
+    # For debug only.
+    id: int
+    is_entry: bool
+    # Only the last operation may have any nonlinear control flow, i.e. any of:
+    # - JumpOp (rather, BasicBlockJumpOp)
+    # - ReturnOp
+    # - MultimethodDispatchOp (rather, BasicBlockMultimethodDispatchOp)
+    # - IfElseOp (rather, BasicBlockIfElseOp)
+    # Also, there should be no label ops in here, and all inline block ops should
+    # be flattened.
+    ops: list[IROp]
+    incoming: list["BasicIRBlock"]
+    outgoing: list["BasicIRBlock"]
+
+    def __repr__(self):
+        return f"BasicIRBlock(id={self.id})"
+
+    def link_outgoing(self, next: "BasicIRBlock"):
+        if self not in next.incoming:
+            next.incoming.append(self)
+        if next not in self.outgoing:
+            self.outgoing.append(next)
+
+    linear_op_types = (
+        UnreachableOp,
+        CopyOp,
+        PhiOp,
+        LiteralOp,
+        BaseInvokeOp,
+        ClosureOp,
+        SlotLookupOp,
+        VectorOp,
+        TupleOp,
+        SignalOp,
+    )
+    nonlinear_op_types = (
+        BasicBlockJumpOp,
+        ReturnOp,
+        BasicBlockMultimethodDispatchOp,
+        BasicBlockIfElseOp,
+    )
+
+    # Indicates whether the block falls through (does not have a jump or other
+    # nonlinear control flow op at the end) or not.
+    def falls_through(self) -> bool:
+        return not (self.ops and isinstance(self.ops[-1], self.nonlinear_op_types))
+
+    def add_op(self, op: IROp):
+        # Should not be adding any more ops once there's already a nonlinear
+        # control flow op.
+        assert self.falls_through()
+        assert isinstance(op, self.linear_op_types + self.nonlinear_op_types)
+        self.ops.append(op)
+
+    def validate(self):
+        assert self.ops
+        for op in self.ops[:-1]:
+            assert isinstance(op, self.linear_op_types)
+        assert isinstance(self.ops[-1], self.linear_op_types + self.nonlinear_op_types)
+        if self.is_entry:
+            assert not self.incoming
+        for prev in self.incoming:
+            assert self in prev.outgoing
+        for next in self.outgoing:
+            assert self in next.incoming
+
+        # All phi nodes should only have sources which are slot registers, or else the output of an op in a predecessor block.
+        for op in self.ops:
+            if not isinstance(op, PhiOp):
+                continue
+            for src in op.srcs:
+                if isinstance(src, SlotRegister):
+                    continue
+
+                def basic_block_has_output(block: BasicIRBlock, reg: Register):
+                    return any(op.dst == reg for op in block.ops)
+
+                assert any(
+                    basic_block_has_output(prev, src) for prev in self.incoming
+                ), f"invalid phi node for {op.dst}: source {src} not in any predecessor block"
+
+
 def should_inline_multimethod_dispatch(multimethod: MultiMethod) -> bool:
     # TODO: Inline also if heuristics suggest it should be inlined.
     return multimethod.inline_dispatch
@@ -351,39 +470,19 @@ class Compiler:
     # Keep track of label count for allocation purposes.
     num_labels: int
 
-    # Internal use only.
-    def __init__(
-        self,
-        ir,
-        multimethod_deps,
-        inlining_depth,
-        num_virtual_regs,
-        num_labels,
-    ):
-        self.ir = ir
-        self.multimethod_deps = multimethod_deps
-        self.inlining_depth = inlining_depth
-        self.num_virtual_regs = num_virtual_regs
-        self.num_labels = num_labels
+    basic_blocks: list[BasicIRBlock]
+    # Keep track of label count for allocation purposes.
+    num_basic_blocks: int
 
-    @classmethod
-    def for_context(cls, context: CompilationContext) -> "Compiler":
-        # Make a shallow copy so that re-compilation doesn't end up reusing the same
-        # already-added (say) local variables.
-        # TODO: deep copy..?
-        return cls(
-            ir=TreeIRBlock(
-                ops=[],
-                ctxt=CompilationContext.stacked_compilation_context(
-                    slots=list(context.slots), base=context.base
-                ),
-                inlining_stack=[],
-            ),
-            multimethod_deps=[],
-            inlining_depth=0,
-            num_virtual_regs=0,
-            num_labels=0,
-        )
+    # Internal use only.
+    def __init__(self, ir):
+        self.ir = ir
+        self.multimethod_deps = []
+        self.inlining_depth = 0
+        self.num_virtual_regs = 0
+        self.num_labels = 0
+        self.basic_blocks = []
+        self.num_basic_blocks = 0
 
     # Add an IR operation, and return the destination register (for convenience).
     def add_ir_op(self, block: TreeIRBlock, op: IROp) -> Optional[Register]:
@@ -402,6 +501,15 @@ class Compiler:
         self.num_labels += 1
         return label
 
+    # Allocate the next available basic block id.
+    def allocate_basic_block(self, is_entry=False) -> BasicIRBlock:
+        block = BasicIRBlock(
+            id=self.num_basic_blocks, is_entry=is_entry, ops=[], incoming=[], outgoing=[]
+        )
+        self.basic_blocks.append(block)
+        self.num_basic_blocks += 1
+        return block
+
     @staticmethod
     def compile_quote_method_body(method: QuoteMethodBody) -> "Compiler":
         compiler = Compiler(
@@ -411,11 +519,7 @@ class Compiler:
                     slots=[], base=method.compiled_body.comp_ctxt
                 ),
                 inlining_stack=[],
-            ),
-            multimethod_deps=[],
-            inlining_depth=0,
-            num_virtual_regs=0,
-            num_labels=0,
+            )
         )
 
         # TODO: offset slot registers (initial inputs to method) if there are already slot registers assigned?
@@ -464,11 +568,7 @@ class Compiler:
                 ops=[],
                 ctxt=CompilationContext.stacked_compilation_context(slots=[], base=ctxt),
                 inlining_stack=[],
-            ),
-            multimethod_deps=[],
-            inlining_depth=0,
-            num_virtual_regs=0,
-            num_labels=0,
+            )
         )
 
         compiler.ir.ctxt.slots.append(
@@ -513,7 +613,7 @@ class Compiler:
             any_change = True
             iteration = 0
 
-            def optimize(summary: str, fn):
+            def optimize_tree(summary: str, fn):
                 nonlocal any_change
                 print(colored(f"{summary} (iteration={iteration}):", "red"))
                 delta = fn()
@@ -529,20 +629,26 @@ class Compiler:
                 iteration += 1
 
                 # Inline multimethod dispatches to open up the method invocations.
-                optimize("inlining multimethod dispatches", self.tree_inline_multimethod_dispatches)
+                optimize_tree(
+                    "inlining multimethod dispatches", self.tree_inline_multimethod_dispatches
+                )
                 # Inline method invocations to open up the method bodies and hopefully allow
                 # closure inlining.
-                optimize("inlining methods", self.tree_inline_methods)
+                optimize_tree("inlining methods", self.tree_inline_methods)
                 # Try to move closures to their call sites.
-                optimize("propagating copies", self.tree_propagate_copies)
-                optimize("inlining closures", self.tree_inline_closures)
+                optimize_tree("propagating copies", self.tree_propagate_copies)
+                optimize_tree("inlining closures", self.tree_inline_closures)
 
             # Tail recursion could have produced unnecessary phi nodes; now we can clean those up.
-            optimize("simplifying phi nodes post-inlining", self.tree_simplify_phi_nodes)
+            optimize_tree("simplifying phi nodes post-inlining", self.tree_simplify_phi_nodes)
             # !! From this point on, no more inlining methods. !!
 
-            optimize("propagating copies", self.tree_propagate_copies)
-            # TODO: self.convert_to_basic_blocks()
+            optimize_tree("propagating copies", self.tree_propagate_copies)
+            print(colored(f"converting to basic blocks:", "red"))
+            self.convert_to_basic_blocks()
+            print_basic_blocks(self.basic_blocks)
+            for block in self.basic_blocks:
+                block.validate()
 
             any_change = True
             while any_change:
@@ -1351,158 +1457,351 @@ class Compiler:
 
         return process_block(self.ir)
 
+    def convert_to_basic_blocks(self) -> bool:
+        # Walks the tree block, converting instructions over to the provided basic block until reaching
+        # any nonlinear control flow (at which point this creates new descendant basic blocks and proceeds).
+        # Also is given (and updates) a global label to basic-block mapping, where the basic block begins just after the label.
+        # Returns the basic block hosting the tail end of ops from the original tree block.
+        def process_tree_block(
+            tree_block: TreeIRBlock,
+            basic_block: BasicIRBlock,
+            label_to_basic_block: dict[Label, BasicIRBlock],
+        ) -> BasicIRBlock:
+            current_block = basic_block
+            for op in tree_block.ops:
+                if isinstance(op, InlineBlockOp):
+                    assert len(op.sub_blocks) == 1
+                    current_block = process_tree_block(
+                        op.sub_blocks[0], current_block, label_to_basic_block=label_to_basic_block
+                    )
+                elif isinstance(op, Label):
+                    # Split at labels, since jumps may go to here.
+                    assert op not in label_to_basic_block
+                    new_block = self.allocate_basic_block()
+                    label_to_basic_block[op] = new_block
+                    basic_block.add_op(BasicBlockJumpOp(target=new_block, span=op.span))
+                    basic_block.link_outgoing(new_block)
+                    current_block = new_block
+                elif isinstance(op, JumpOp):
+                    # This should be fine to assume, since all jumps are backward. (Forward jumps are handled
+                    # instead with specialised ops like IfElseOp.)
+                    assert op.target in label_to_basic_block
+                    target = label_to_basic_block[op.target]
+                    current_block.add_op(BasicBlockJumpOp(target=target, span=op.span))
+                    current_block.link_outgoing(target)
+                    # Next instruction goes in a new basic block. (It will be unreachable!)
+                    current_block = self.allocate_basic_block()
+                elif isinstance(op, UnreachableOp):
+                    current_block.add_op(op)
+                elif isinstance(op, ReturnOp):
+                    current_block.add_op(op)
+                    # Next instruction goes in a new basic block. (It will be unreachable!)
+                    current_block = self.allocate_basic_block()
+                elif isinstance(
+                    op,
+                    (
+                        CopyOp,
+                        PhiOp,
+                        LiteralOp,
+                        BaseInvokeOp,
+                        ClosureOp,
+                        SlotLookupOp,
+                        VectorOp,
+                        TupleOp,
+                    ),
+                ):
+                    current_block.add_op(op)
+                elif isinstance(op, MultimethodDispatchOp):
+                    dispatch = [(method, self.allocate_basic_block()) for method, _ in op.dispatch]
+                    dispatch_failed = self.allocate_basic_block()
+                    after_block = self.allocate_basic_block()
+
+                    current_block.add_op(
+                        BasicBlockMultimethodDispatchOp(
+                            slot_name=op.slot_name,
+                            dispatch_args=op.dispatch_args,
+                            dispatch=dispatch,
+                            dispatch_failed=dispatch_failed,
+                            span=op.span,
+                        )
+                    )
+                    for _, method_block in dispatch:
+                        current_block.link_outgoing(method_block)
+                    current_block.link_outgoing(dispatch_failed)
+
+                    for i in range(len(dispatch)):
+                        _, method_tree_block = op.dispatch[i]
+                        _, method_basic_block = dispatch[i]
+                        method_basic_block = process_tree_block(
+                            method_tree_block,
+                            method_basic_block,
+                            label_to_basic_block=label_to_basic_block,
+                        )
+                        if method_basic_block.falls_through():
+                            method_basic_block.add_op(
+                                BasicBlockJumpOp(target=after_block, span=op.span)
+                            )
+                            method_basic_block.link_outgoing(after_block)
+
+                    dispatch_failed = process_tree_block(
+                        op.dispatch_failed,
+                        dispatch_failed,
+                        label_to_basic_block=label_to_basic_block,
+                    )
+                    if dispatch_failed.falls_through():
+                        dispatch_failed.add_op(BasicBlockJumpOp(target=after_block, span=op.span))
+                        dispatch_failed.link_outgoing(after_block)
+
+                    current_block = after_block
+                elif isinstance(op, SignalOp):
+                    current_block.add_op(op)
+                elif isinstance(op, IfElseOp):
+                    true_block = self.allocate_basic_block()
+                    false_block = self.allocate_basic_block()
+                    after_block = self.allocate_basic_block()
+
+                    current_block.add_op(
+                        BasicBlockIfElseOp(
+                            condition=op.condition,
+                            true_block=true_block,
+                            false_block=false_block,
+                            span=op.span,
+                        )
+                    )
+                    current_block.link_outgoing(true_block)
+                    current_block.link_outgoing(false_block)
+
+                    true_block = process_tree_block(
+                        op.true_block, true_block, label_to_basic_block=label_to_basic_block
+                    )
+                    if true_block.falls_through():
+                        true_block.add_op(BasicBlockJumpOp(target=after_block, span=op.span))
+                        true_block.link_outgoing(after_block)
+
+                    false_block = process_tree_block(
+                        op.false_block, false_block, label_to_basic_block=label_to_basic_block
+                    )
+                    if false_block.falls_through():
+                        false_block.add_op(BasicBlockJumpOp(target=after_block, span=op.span))
+                        false_block.link_outgoing(after_block)
+
+                    current_block = after_block
+                else:
+                    raise AssertionError(f"forgot an IROp: {type(op)}")
+            return current_block
+
+        entry_block = self.allocate_basic_block(is_entry=True)
+        output_block = process_tree_block(self.ir, entry_block, label_to_basic_block={})
+        if not output_block.ops:
+            self.basic_blocks.remove(output_block)
+
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
 
 
 should_show_compiler_output = False
+indent_per_level = "    "
+
+
+def print_op(index: int, op: IROp, depth: int):
+    level = indent_per_level
+    indent = level * depth
+
+    def prefix():
+        # print(indent + f"{index}: ", end="")
+        print(indent, end="")
+
+    if isinstance(op, InlineBlockOp):
+        prefix()
+        print("<inline block>:")
+        (inline_block,) = op.sub_blocks
+        print(indent + level + colored("slots:", "grey"))
+        for name, value in inline_block.ctxt.slots:
+            print(indent + level + level + colored(f"{name} -> {value}", "grey"))
+        print_ir_block(inline_block, depth=(depth + 1))
+    elif isinstance(op, Label):
+        prefix()
+        print(colored(f"{op.id}:", "light_blue"))
+    elif isinstance(op, JumpOp):
+        prefix()
+        print("jump " + colored(f"{op.target.id}", "light_magenta"))
+    elif isinstance(op, UnreachableOp):
+        prefix()
+        if op.dst:
+            print(f"{op.dst} = unreachable")
+        else:
+            print("unreachable")
+    elif isinstance(op, ReturnOp):
+        prefix()
+        print(f"return {op.value}")
+    elif isinstance(op, CopyOp):
+        prefix()
+        print(f"{op.dst} = {op.src}")
+    elif isinstance(op, PhiOp):
+        prefix()
+        print(f"{op.dst} = phi({', '.join(str(src) for src in op.srcs)})", end="")
+        if op.force_keep:
+            print(" (force-keep)")
+        else:
+            print()
+    elif isinstance(op, LiteralOp):
+        prefix()
+        print(
+            f"{op.dst} = literal {repr(op.value.value) if isinstance(op.value, StringValue) else op.value}"
+        )
+    elif isinstance(op, BaseInvokeOp):
+        prefix()
+
+        if op.dst:
+            print(f"{op.dst} = ", end="")
+        if op.tail_call:
+            print("tail-", end="")
+
+        if isinstance(op, InvokeRegisterOp):
+            print(f"invoke {op.callable}", end="")
+        elif isinstance(op, InvokeMultimethodOp):
+            print(
+                f"invoke-multimethod {op.multimethod.name} (inline_dispatch={op.multimethod.inline_dispatch})",
+                end="",
+            )
+        elif isinstance(op, InvokeMethodOp):
+            print("invoke-method ", end="")
+            if isinstance(op.method.body, QuoteMethodBody):
+                print(f"<quote:{op.method.body}>", end="")
+            elif isinstance(op.method.body, IntrinsicMethodBody):
+                print(f"<intrinsic:{op.method.body.handler.handler}>", end="")
+            elif isinstance(op.method.body, NativeMethodBody):
+                print(f"<native:{op.method.body.handler.handler}>", end="")
+            else:
+                raise AssertionError(f"forgot a method body type: {op.method.body}")
+            print(f" (label={op.method_start_label.id}, inline={op.method.inline})", end="")
+        elif isinstance(op, InvokeQuoteOp):
+            print(f"invoke-quote {op.quote}", end="")
+        elif isinstance(op, InvokeIntrinsicOp):
+            print(f"invoke-intrinsic {op.intrinsic.handler}", end="")
+        elif isinstance(op, InvokeNativeOp):
+            print(f"invoke-native {op.native.handler}", end="")
+        else:
+            raise AssertionError(f"forgot an op type: {op}")
+
+        if op.call_args:
+            print(f" with {', '.join(str(arg) for arg in op.call_args)}", end="")
+        else:
+            print(" with <no args>", end="")
+        if op.tail_position:
+            print(" (in tail position)")
+        else:
+            print()
+    elif isinstance(op, ClosureOp):
+        prefix()
+        print(f"{op.dst} = closure {op.quote}")
+    elif isinstance(op, SlotLookupOp):
+        prefix()
+        print(f"{op.dst} = slot-lookup {op.slot_name}")
+    elif isinstance(op, VectorOp):
+        prefix()
+        print(f"{op.dst} = vector {', '.join(str(comp) for comp in op.components)}")
+    elif isinstance(op, TupleOp):
+        prefix()
+        print(f"{op.dst} = tuple {', '.join(str(comp) for comp in op.components)}")
+    elif isinstance(op, MultimethodDispatchOp):
+        prefix()
+        print(
+            f"multimethod-dispatch {op.slot_name} on {', '.join(str(arg) for arg in op.dispatch_args)}"
+        )
+        for method, body_block in op.dispatch:
+
+            def matcher_str(matcher):
+                if isinstance(matcher, ParameterAnyMatcher):
+                    return "<any>"
+                elif isinstance(matcher, ParameterTypeMatcher):
+                    return matcher.param_type.name
+                elif isinstance(matcher, ParameterValueMatcher):
+                    return f"eq({matcher.param_value})"
+
+            print(
+                indent
+                + level
+                + f"if ({', '.join(matcher_str(matcher) for matcher in method.param_matchers)}):"
+            )
+            print_ir_block(body_block, depth=(depth + 2))
+
+        print(indent + level + "else:")
+        print_ir_block(op.dispatch_failed, depth=(depth + 2))
+    elif isinstance(op, SignalOp):
+        prefix()
+        print(
+            f"{op.dst} = signal :{op.condition_name} with {', '.join(str(arg) for arg in op.signal_args)}"
+        )
+    elif isinstance(op, IfElseOp):
+        assert not op.dst
+        prefix()
+        print(f"if-else {op.condition}")
+        print(indent + level + "if-truthy:")
+        print_ir_block(op.true_block, depth=(depth + 2))
+        print(indent + level + "if-falsy:")
+        print_ir_block(op.false_block, depth=(depth + 2))
+    elif isinstance(op, BasicBlockJumpOp):
+        prefix()
+        print(f"jump {op.target.id}")
+    elif isinstance(op, BasicBlockMultimethodDispatchOp):
+        prefix()
+        print(
+            f"multimethod-dispatch {op.slot_name} on {', '.join(str(arg) for arg in op.dispatch_args)}"
+        )
+        for method, target in op.dispatch:
+
+            def matcher_str(matcher):
+                if isinstance(matcher, ParameterAnyMatcher):
+                    return "<any>"
+                elif isinstance(matcher, ParameterTypeMatcher):
+                    return matcher.param_type.name
+                elif isinstance(matcher, ParameterValueMatcher):
+                    return f"eq({matcher.param_value})"
+
+            print(
+                indent
+                + level
+                + f"({', '.join(matcher_str(matcher) for matcher in method.param_matchers)}) -> jump {target.id}"
+            )
+
+        print(indent + level + f"else -> jump {op.dispatch_failed.id}")
+    elif isinstance(op, BasicBlockIfElseOp):
+        assert not op.dst
+        prefix()
+        print(
+            f"if-truthy {op.condition} -> jump {op.true_block.id}; else -> jump {op.false_block.id}"
+        )
+    else:
+        raise AssertionError(f"forgot an IROp: {type(op)}")
 
 
 def print_ir_block(block: TreeIRBlock, depth: int = 0):
-    level = "    "
-
-    def print_op(index: int, op: IROp, depth: int):
-        indent = level * depth
-
-        def prefix():
-            # print(indent + f"{index}: ", end="")
-            print(indent, end="")
-
-        if isinstance(op, InlineBlockOp):
-            prefix()
-            print("<inline block>:")
-            (inline_block,) = op.sub_blocks
-            print(indent + level + colored("slots:", "grey"))
-            for name, value in inline_block.ctxt.slots:
-                print(indent + level + level + colored(f"{name} -> {value}", "grey"))
-            print_ir_block(inline_block, depth=(depth + 1))
-        elif isinstance(op, Label):
-            prefix()
-            print(colored(f"{op.id}:", "light_blue"))
-        elif isinstance(op, JumpOp):
-            prefix()
-            print("jump " + colored(f"{op.target.id}", "light_magenta"))
-        elif isinstance(op, UnreachableOp):
-            prefix()
-            if op.dst:
-                print(f"{op.dst} = unreachable")
-            else:
-                print("unreachable")
-        elif isinstance(op, ReturnOp):
-            prefix()
-            print(f"return {op.value}")
-        elif isinstance(op, CopyOp):
-            prefix()
-            print(f"{op.dst} = {op.src}")
-        elif isinstance(op, PhiOp):
-            prefix()
-            print(f"{op.dst} = phi({', '.join(str(src) for src in op.srcs)})", end="")
-            if op.force_keep:
-                print(" (force-keep)")
-            else:
-                print()
-        elif isinstance(op, LiteralOp):
-            prefix()
-            print(
-                f"{op.dst} = literal {repr(op.value.value) if isinstance(op.value, StringValue) else op.value}"
-            )
-        elif isinstance(op, BaseInvokeOp):
-            prefix()
-
-            if op.dst:
-                print(f"{op.dst} = ", end="")
-            if op.tail_call:
-                print("tail-", end="")
-
-            if isinstance(op, InvokeRegisterOp):
-                print(f"invoke {op.callable}", end="")
-            elif isinstance(op, InvokeMultimethodOp):
-                print(
-                    f"invoke-multimethod {op.multimethod.name} (inline_dispatch={op.multimethod.inline_dispatch})",
-                    end="",
-                )
-            elif isinstance(op, InvokeMethodOp):
-                print("invoke-method ", end="")
-                if isinstance(op.method.body, QuoteMethodBody):
-                    print(f"<quote:{op.method.body}>", end="")
-                elif isinstance(op.method.body, IntrinsicMethodBody):
-                    print(f"<intrinsic:{op.method.body.handler.handler}>", end="")
-                elif isinstance(op.method.body, NativeMethodBody):
-                    print(f"<native:{op.method.body.handler.handler}>", end="")
-                else:
-                    raise AssertionError(f"forgot a method body type: {op.method.body}")
-                print(f" (label={op.method_start_label.id}, inline={op.method.inline})", end="")
-            elif isinstance(op, InvokeQuoteOp):
-                print(f"invoke-quote {op.quote}", end="")
-            elif isinstance(op, InvokeIntrinsicOp):
-                print(f"invoke-intrinsic {op.intrinsic.handler}", end="")
-            elif isinstance(op, InvokeNativeOp):
-                print(f"invoke-native {op.native.handler}", end="")
-            else:
-                raise AssertionError(f"forgot an op type: {op}")
-
-            if op.call_args:
-                print(f" with {', '.join(str(arg) for arg in op.call_args)}", end="")
-            else:
-                print(" with <no args>", end="")
-            if op.tail_position:
-                print(" (in tail position)")
-            else:
-                print()
-        elif isinstance(op, ClosureOp):
-            prefix()
-            print(f"{op.dst} = closure {op.quote}")
-        elif isinstance(op, SlotLookupOp):
-            prefix()
-            print(f"{op.dst} = slot-lookup {op.slot_name}")
-        elif isinstance(op, VectorOp):
-            prefix()
-            print(f"{op.dst} = vector {', '.join(str(comp) for comp in op.components)}")
-        elif isinstance(op, TupleOp):
-            prefix()
-            print(f"{op.dst} = tuple {', '.join(str(comp) for comp in op.components)}")
-        elif isinstance(op, MultimethodDispatchOp):
-            prefix()
-            print(
-                f"multimethod-dispatch {op.slot_name} on {', '.join(str(arg) for arg in op.dispatch_args)}"
-            )
-            for method, body_block in op.dispatch:
-
-                def matcher_str(matcher):
-                    if isinstance(matcher, ParameterAnyMatcher):
-                        return "<any>"
-                    elif isinstance(matcher, ParameterTypeMatcher):
-                        return matcher.param_type.name
-                    elif isinstance(matcher, ParameterValueMatcher):
-                        return f"eq({matcher.param_value})"
-
-                print(
-                    indent
-                    + level
-                    + f"if ({', '.join(matcher_str(matcher) for matcher in method.param_matchers)}):"
-                )
-                print_ir_block(body_block, depth=(depth + 2))
-
-            print(indent + level + "else:")
-            print_ir_block(op.dispatch_failed, depth=(depth + 2))
-        elif isinstance(op, SignalOp):
-            prefix()
-            print(
-                f"{op.dst} = signal :{op.condition_name} with {', '.join(str(arg) for arg in op.signal_args)}"
-            )
-        elif isinstance(op, IfElseOp):
-            assert not op.dst
-            prefix()
-            print(f"if-else {op.condition}")
-            print(indent + level + "if-truthy:")
-            print_ir_block(op.true_block, depth=(depth + 2))
-            print(indent + level + "if-falsy:")
-            print_ir_block(op.false_block, depth=(depth + 2))
-        else:
-            raise AssertionError(f"forgot an IROp: {type(op)}")
-
     for i, op in enumerate(block.ops):
         print_op(i, op, depth)
+
+
+def print_basic_blocks(blocks: list[BasicIRBlock]):
+    for block in sorted(blocks, key=lambda b: b.id):
+        print(
+            colored(f"===== block {block.id} {'(entry) ' if block.is_entry else ''}=====", "green")
+        )
+        print(
+            colored(
+                "incoming: "
+                + ", ".join(str(prev.id) for prev in sorted(block.incoming, key=lambda b: b.id)),
+                "grey",
+            )
+        )
+        for i, op in enumerate(block.ops):
+            print_op(i, op, depth=0)
+        print(
+            colored(
+                "outgoing: "
+                + ", ".join(str(next.id) for next in sorted(block.outgoing, key=lambda b: b.id)),
+                "grey",
+            )
+        )
 
 
 def show_compiler_output(
