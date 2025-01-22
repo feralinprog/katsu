@@ -1304,7 +1304,7 @@ class Compiler:
                     closures = {}
                     block.ops.append(op)
                 elif isinstance(op, UnreachableOp):
-                    pass
+                    block.ops.append(op)
                 elif isinstance(op, ReturnOp):
                     block.ops.append(op)
                 elif isinstance(op, CopyOp):
