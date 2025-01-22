@@ -371,8 +371,14 @@ class BasicIRBlock:
     incoming: list["BasicIRBlock"]
     outgoing: list["BasicIRBlock"]
 
+    # Calculated after converting to basic blocks.
+    dominators: list["BasicIRBlock"]
+
     def __repr__(self):
         return f"BasicIRBlock(id={self.id})"
+
+    def __hash__(self):
+        return hash(self.id)
 
     def link_outgoing(self, next: "BasicIRBlock"):
         if self not in next.incoming:
@@ -423,7 +429,8 @@ class BasicIRBlock:
         for next in self.outgoing:
             assert self in next.incoming
 
-        # All phi nodes should only have sources which are slot registers, or else the output of an op in a predecessor block.
+        # All phi nodes should only have sources which are slot registers, or else the output of an
+        # op in (a dominator of) a predecessor block.
         for op in self.ops:
             if not isinstance(op, PhiOp):
                 continue
@@ -435,8 +442,10 @@ class BasicIRBlock:
                     return any(op.dst == reg for op in block.ops)
 
                 assert any(
-                    basic_block_has_output(prev, src) for prev in self.incoming
-                ), f"invalid phi node for {op.dst}: source {src} not in any predecessor block"
+                    basic_block_has_output(dom, src)
+                    for prev in self.incoming
+                    for dom in prev.dominators
+                ), f"invalid phi node for {op.dst}: source {src} not in any dominator of any predecessor block"
 
 
 def should_inline_multimethod_dispatch(multimethod: MultiMethod) -> bool:
@@ -504,7 +513,12 @@ class Compiler:
     # Allocate the next available basic block id.
     def allocate_basic_block(self, is_entry=False) -> BasicIRBlock:
         block = BasicIRBlock(
-            id=self.num_basic_blocks, is_entry=is_entry, ops=[], incoming=[], outgoing=[]
+            id=self.num_basic_blocks,
+            is_entry=is_entry,
+            ops=[],
+            incoming=[],
+            outgoing=[],
+            dominators=[],
         )
         self.basic_blocks.append(block)
         self.num_basic_blocks += 1
@@ -646,6 +660,7 @@ class Compiler:
             optimize_tree("propagating copies", self.tree_propagate_copies)
             print(colored(f"converting to basic blocks:", "red"))
             self.convert_to_basic_blocks()
+            self.compute_dominators()
             print_basic_blocks(self.basic_blocks)
             for block in self.basic_blocks:
                 block.validate()
@@ -1595,6 +1610,37 @@ class Compiler:
         if not output_block.ops:
             self.basic_blocks.remove(output_block)
 
+    def compute_dominators(self) -> None:
+        for block in self.basic_blocks:
+            assert not block.dominators
+
+        # Initially use sets; convert to lists at the end.
+
+        for block in self.basic_blocks:
+            if block.is_entry:
+                block.dominators = set([block])
+            else:
+                block.dominators = set(self.basic_blocks)
+
+        any_change = True
+        while any_change:
+            any_change = False
+            for block in self.basic_blocks:
+                if block.is_entry:
+                    continue
+                if block.incoming:
+                    new_dominators = set([block]) | set.intersection(
+                        *[prev.dominators for prev in block.incoming]
+                    )
+                else:
+                    new_dominators = set([block])
+                if new_dominators != block.dominators:
+                    any_change = True
+                    block.dominators = new_dominators
+
+        for block in self.basic_blocks:
+            block.dominators = list(sorted(block.dominators, key=lambda b: b.id))
+
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
 
@@ -1790,6 +1836,13 @@ def print_basic_blocks(blocks: list[BasicIRBlock]):
             colored(
                 "incoming: "
                 + ", ".join(str(prev.id) for prev in sorted(block.incoming, key=lambda b: b.id)),
+                "grey",
+            )
+        )
+        print(
+            colored(
+                "dominators: "
+                + ", ".join(str(dom.id) for dom in sorted(block.dominators, key=lambda b: b.id)),
                 "grey",
             )
         )
