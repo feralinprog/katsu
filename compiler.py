@@ -368,12 +368,11 @@ class BasicIRBlock:
     # Also, there should be no label ops in here, and all inline block ops should
     # be flattened.
     ops: list[IROp]
-    # TODO: just replace with sets...
-    incoming: list["BasicIRBlock"]
-    outgoing: list["BasicIRBlock"]
+    incoming: set["BasicIRBlock"]
+    outgoing: set["BasicIRBlock"]
 
     # Calculated after converting to basic blocks.
-    dominators: list["BasicIRBlock"]
+    dominators: set["BasicIRBlock"]
 
     def __repr__(self):
         return f"BasicIRBlock(id={self.id})"
@@ -382,10 +381,8 @@ class BasicIRBlock:
         return hash(self.id)
 
     def link_outgoing(self, next: "BasicIRBlock"):
-        if self not in next.incoming:
-            next.incoming.append(self)
-        if next not in self.outgoing:
-            self.outgoing.append(next)
+        next.incoming.add(self)
+        self.outgoing.add(next)
 
     linear_op_types = (
         UnreachableOp,
@@ -517,9 +514,9 @@ class Compiler:
             id=self.num_basic_blocks,
             is_entry=is_entry,
             ops=[],
-            incoming=[],
-            outgoing=[],
-            dominators=[],
+            incoming=set(),
+            outgoing=set(),
+            dominators=set(),
         )
         self.basic_blocks.append(block)
         self.num_basic_blocks += 1
@@ -1617,17 +1614,21 @@ class Compiler:
             self.basic_blocks.remove(output_block)
 
     def simplify_control_flow_graph(self) -> None:
-        # Any basic blocks with a single incoming edge can be merged into their predecessors.
+        # Any basic block B with a single incoming edge can be merged into its predecessor,
+        # as long as that predecessor either only has a single outgoing edge (in which case the
+        # ops can be merged), or B consists of just a jump (in which case this is effectively
+        # just renaming B to its own successor).
+        # TODO: handle the latter case
         # (Note: dead code elimination will take care of blocks with _no_ incoming edges; this
         # requires some more care, since output registers of the unreachable basic block need
         # to be pruned in later blocks.)
         to_delete = []
         for block in self.basic_blocks:
             if len(block.incoming) == 1:
-                prev = block.incoming[0]
+                prev = list(block.incoming)[0]
                 if len(prev.outgoing) != 1:
                     continue
-                assert prev.outgoing[0] == block
+                assert list(prev.outgoing)[0] == block
 
                 # Delete whatever caused the jump at the end of the previous block.
                 # (Could be a basic jump op, or for instance a multimethod dispatch that has
@@ -1648,8 +1649,6 @@ class Compiler:
     def compute_dominators(self) -> None:
         for block in self.basic_blocks:
             assert not block.dominators
-
-        # Initially use sets; convert to lists at the end.
 
         for block in self.basic_blocks:
             if block.is_entry:
@@ -1672,9 +1671,6 @@ class Compiler:
                 if new_dominators != block.dominators:
                     any_change = True
                     block.dominators = new_dominators
-
-        for block in self.basic_blocks:
-            block.dominators = list(sorted(block.dominators, key=lambda b: b.id))
 
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
