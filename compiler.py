@@ -380,9 +380,9 @@ class BasicIRBlock:
     def __hash__(self):
         return hash(self.id)
 
-    def link_outgoing(self, next: "BasicIRBlock"):
-        next.incoming.add(self)
-        self.outgoing.add(next)
+    def link_outgoing(self, succ: "BasicIRBlock"):
+        succ.incoming.add(self)
+        self.outgoing.add(succ)
 
     linear_op_types = (
         UnreachableOp,
@@ -422,10 +422,10 @@ class BasicIRBlock:
         assert isinstance(self.ops[-1], self.linear_op_types + self.nonlinear_op_types)
         if self.is_entry:
             assert not self.incoming
-        for prev in self.incoming:
-            assert self in prev.outgoing
-        for next in self.outgoing:
-            assert self in next.incoming
+        for pred in self.incoming:
+            assert self in pred.outgoing
+        for succ in self.outgoing:
+            assert self in succ.incoming
 
         # All phi nodes should only have sources which are slot registers, or else the output of an
         # op in (a dominator of) a predecessor block.
@@ -441,9 +441,12 @@ class BasicIRBlock:
 
                 assert any(
                     basic_block_has_output(dom, src)
-                    for prev in self.incoming
-                    for dom in prev.dominators
+                    for pred in self.incoming
+                    for dom in pred.dominators
                 ), f"invalid phi node for {op.dst}: source {src} not in any dominator of any predecessor block"
+
+        # TODO: we could also validate that any other registers used in the RHS of an op are the
+        # output of an op in a strict dominator of the current block.
 
 
 def should_inline_multimethod_dispatch(multimethod: MultiMethod) -> bool:
@@ -1625,21 +1628,21 @@ class Compiler:
         to_delete = []
         for block in self.basic_blocks:
             if len(block.incoming) == 1:
-                prev = list(block.incoming)[0]
-                if len(prev.outgoing) != 1:
+                pred = list(block.incoming)[0]
+                if len(pred.outgoing) != 1:
                     continue
-                assert list(prev.outgoing)[0] == block
+                assert list(pred.outgoing)[0] == block
 
                 # Delete whatever caused the jump at the end of the previous block.
                 # (Could be a basic jump op, or for instance a multimethod dispatch that has
                 # been optimized / simplified so we know it has only one branch.)
-                prev.ops = prev.ops[:-1] + block.ops
-                prev.outgoing.remove(block)
+                pred.ops = pred.ops[:-1] + block.ops
+                pred.outgoing.remove(block)
 
-                for next in block.outgoing:
-                    assert block in next.incoming
-                    next.incoming.remove(block)
-                    prev.link_outgoing(next)
+                for succ in block.outgoing:
+                    assert block in succ.incoming
+                    succ.incoming.remove(block)
+                    pred.link_outgoing(succ)
 
                 to_delete.append(block)
 
@@ -1664,7 +1667,7 @@ class Compiler:
                     continue
                 if block.incoming:
                     new_dominators = set([block]) | set.intersection(
-                        *[prev.dominators for prev in block.incoming]
+                        *[pred.dominators for pred in block.incoming]
                     )
                 else:
                     new_dominators = set([block])
@@ -1866,7 +1869,7 @@ def print_basic_blocks(blocks: list[BasicIRBlock]):
         print(
             colored(
                 "incoming: "
-                + ", ".join(str(prev.id) for prev in sorted(block.incoming, key=lambda b: b.id)),
+                + ", ".join(str(pred.id) for pred in sorted(block.incoming, key=lambda b: b.id)),
                 "grey",
             )
         )
@@ -1882,7 +1885,7 @@ def print_basic_blocks(blocks: list[BasicIRBlock]):
         print(
             colored(
                 "outgoing: "
-                + ", ".join(str(next.id) for next in sorted(block.outgoing, key=lambda b: b.id)),
+                + ", ".join(str(succ.id) for succ in sorted(block.outgoing, key=lambda b: b.id)),
                 "grey",
             )
         )
