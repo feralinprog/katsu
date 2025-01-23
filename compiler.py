@@ -368,6 +368,7 @@ class BasicIRBlock:
     # Also, there should be no label ops in here, and all inline block ops should
     # be flattened.
     ops: list[IROp]
+    # TODO: just replace with sets...
     incoming: list["BasicIRBlock"]
     outgoing: list["BasicIRBlock"]
 
@@ -660,6 +661,11 @@ class Compiler:
             optimize_tree("propagating copies", self.tree_propagate_copies)
             print(colored(f"converting to basic blocks:", "red"))
             self.convert_to_basic_blocks()
+            print_basic_blocks(self.basic_blocks)
+            print(colored(f"simplifying control flow graph:", "red"))
+            self.simplify_control_flow_graph()
+            print_basic_blocks(self.basic_blocks)
+            print(colored(f"computing dominators:", "red"))
             self.compute_dominators()
             print_basic_blocks(self.basic_blocks)
             for block in self.basic_blocks:
@@ -1609,6 +1615,35 @@ class Compiler:
         output_block = process_tree_block(self.ir, entry_block, label_to_basic_block={})
         if not output_block.ops:
             self.basic_blocks.remove(output_block)
+
+    def simplify_control_flow_graph(self) -> None:
+        # Any basic blocks with a single incoming edge can be merged into their predecessors.
+        # (Note: dead code elimination will take care of blocks with _no_ incoming edges; this
+        # requires some more care, since output registers of the unreachable basic block need
+        # to be pruned in later blocks.)
+        to_delete = []
+        for block in self.basic_blocks:
+            if len(block.incoming) == 1:
+                prev = block.incoming[0]
+                if len(prev.outgoing) != 1:
+                    continue
+                assert prev.outgoing[0] == block
+
+                # Delete whatever caused the jump at the end of the previous block.
+                # (Could be a basic jump op, or for instance a multimethod dispatch that has
+                # been optimized / simplified so we know it has only one branch.)
+                prev.ops = prev.ops[:-1] + block.ops
+                prev.outgoing.remove(block)
+
+                for next in block.outgoing:
+                    assert block in next.incoming
+                    next.incoming.remove(block)
+                    prev.link_outgoing(next)
+
+                to_delete.append(block)
+
+        for block in to_delete:
+            self.basic_blocks.remove(block)
 
     def compute_dominators(self) -> None:
         for block in self.basic_blocks:
