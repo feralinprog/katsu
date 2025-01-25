@@ -1905,10 +1905,6 @@ class Compiler:
     #       Initial block input state, per block.
     #   initial_out_states:
     #       Initial block output states (one per block's successor), per block.
-    #   enforce_transfer_once:
-    #       If true, make sure that every block (reachable from the entry block) is guaranteed to be
-    #           visited (i.e. transfer function invoked and applied to successors) at least once.
-    #       If false,
     # Runs a forward dataflow analysis until convergence, then returns the final in-state of each block
     # and the final out-states (one per block's successor) of each block.
     # Note that this is only guaranteed to ever visit blocks reachable from the entry block.
