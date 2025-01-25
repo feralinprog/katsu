@@ -3,7 +3,7 @@ from typing import Callable, Optional, Tuple, Union
 
 from termcolor import colored
 
-from compiler import CompilationContext, Compiler, SlotRegister, TreeIRBlock, default_receiver
+from compiler import CompilationContext, Compiler, Register, TreeIRBlock, UnreachableOp
 from interpreter import (
     BoolType,
     BoolValue,
@@ -256,7 +256,7 @@ def declare_method(
         ),
         inline=inline,
     )
-    compiled_body.method = method.body
+    compiled_body.method = method
 
     # Add it to a multimethod, or create a new multimethod if the slot isn't yet defined.
     assert isinstance(block.ctxt.base, Context)
@@ -517,8 +517,14 @@ builtin_method("mix-in:to:", (None, TypeType, TypeType), handle__mix_in_to_)
 
 
 def handle__let_eq_(
-    compiler: Compiler, span: SourceSpan, receiver: Optional[Expr], decl: Expr, value: Expr
-) -> None:
+    compiler: Compiler,
+    block: TreeIRBlock,
+    span: SourceSpan,
+    tail_call: bool,
+    receiver: Optional[Expr],
+    decl: Expr,
+    value: Expr,
+) -> Optional[Register]:
     if receiver:
         raise ValueError("let:=: does not need a receiver")
 
@@ -527,39 +533,63 @@ def handle__let_eq_(
     else:
         raise ValueError(f"let:=: 'declaration' argument should be a name; got {decl}")
 
-    if local_name in compiler.ctxt.slots:
+    if local_name in [name for name, _ in block.ctxt.slots]:
         raise ValueError(f"Slot '{local_name}' is already defined.")
     # Compile the value-expression before adding to the context, so that the value-expression cannot
     # use the local.
-    compiler.compile_expr(value)
-    # TODO: fix this up
-    compiler.ctxt.slots[local_name] = compiler.allocate_virtual_reg()
-    compiler.add_bytecode("create-slot", (local_name,), span=span)
+    value_reg = compiler.compile_expr(block, value, tail_position=False, currently_inlining=False)
+    if value_reg:
+        # TODO: if this block is part of a quote-method-body in the inlining stack, then we need to
+        # add a phi op for this so that tail-recursion-to-iteration conversion can handle propagating
+        # the state of the local variable.
+        block.ctxt.slots.append((local_name, value_reg))
+    else:
+        # TODO: compiler warning in this case.
+        value_reg = compiler.allocate_virtual_reg()
+        block.ctxt.slots.append((local_name, value_reg))
+        compiler.add_ir_op(block, UnreachableOp(dst=value_reg, span=span))
 
 
 builtin_compile_time("let:=:", handle__let_eq_)
 
 
-def handle__set(ctxt: Context, slot: Value, value: Value) -> Value:
-    # TODO: set ctxt to the receiver if the receiver is some sort of reified context value?
-    if isinstance(slot, QuoteValue):
-        if isinstance(slot.compiled_body.body, NameExpr):
-            slot = slot.compiled_body.body.name.value
-        else:
-            raise ValueError(f"=: 'slot' argument should be a quoted name; got {slot}")
+def handle__set(
+    compiler: Compiler,
+    block: TreeIRBlock,
+    span: SourceSpan,
+    tail_call: bool,
+    slot: Expr,
+    value: Expr,
+) -> Optional[Register]:
+    if isinstance(slot, NameExpr):
+        slot = slot.name.value
     else:
-        raise ValueError("=: receiver should be a quoted name")
+        raise ValueError(f"=: 'slot' argument should be a name; got {slot}")
 
-    while ctxt and slot not in ctxt.slots:
+    ctxt = block.ctxt
+    while isinstance(ctxt, CompilationContext) and not any(slot == name for name, _ in ctxt.slots):
         ctxt = ctxt.base
+    if isinstance(ctxt, Context):
+        while ctxt and slot not in ctxt.slots:
+            ctxt = ctxt.base
     if not ctxt:
-        raise ValueError(f"'{slot}' is not yet defined.")
-    ctxt.slots[slot] = value
-    return value
+        raise ValueError(f"'{slot}' is not defined.")
+
+    value_reg = compiler.compile_expr(block, value, tail_position=False, currently_inlining=False)
+
+    # TODO: deal with tail-recursion inlining context.
+    if isinstance(ctxt, CompilationContext):
+        # Replace the slot with the value_reg.
+        ctxt.slots = [(name, (value_reg if name == slot else reg)) for name, reg in ctxt.slots]
+    else:
+        # Write the slot value to the runtime context.
+        # TODO: define new op for this
+        raise NotImplementedError()
+
+    return value_reg
 
 
-# TODO: maybe should be compile time so LHS isn't a quote.
-builtin_method("=:", (QuoteType, None), handle__set, inline=True)
+builtin_compile_time("=:", handle__set)
 
 
 # Each handler is a function from value -> value, where the input value satisfies the provided receiver matcher.
