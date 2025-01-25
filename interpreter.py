@@ -606,9 +606,9 @@ class CompiledBody:
     # Only None if this compiled body has been invalidated or has not even been invoked yet.
     bytecode: Optional[BytecodeSequence]
     comp_ctxt: "compilation.CompilationContext"
-    # If this body comes from a method definition, this links to that method.
+    # If this body comes from a method definition (for a quote method, in particular), this links to that method.
     # TODO: this feels a bit hacky. probably need to refactor this...
-    method: Optional[QuoteMethodBody]
+    method: Optional[Method]
     # Purely for debug logging.
     was_invalidated: bool = False
 
@@ -625,7 +625,7 @@ class CompiledBody:
     def maybe_recompile(self) -> BytecodeSequence:
         if not self.bytecode:
             if self.method:
-                compiler = compilation.Compiler.compile_quote_method_body(self.method)
+                compiler = compilation.Compiler.compile_quote_method(self.method)
             else:
                 compiler = compilation.Compiler.compile_standalone_expr(self.comp_ctxt, self.body)
             self.bytecode = compiler.low_level_bytecode

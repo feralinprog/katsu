@@ -77,7 +77,8 @@ method: [test-while] does: [
     let: i =: 10
     while: [i > 0] do: [
         print: i
-        'i = i - 1
+        i = i - 1
+        print: i
     ]
 ]
 test-while

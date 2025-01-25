@@ -13,7 +13,7 @@ from parser import (
     UnaryMessageExpr,
     UnaryOpExpr,
 )
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, TypeAlias, TypeVar, Union
 
 from termcolor import colored
 
@@ -37,10 +37,16 @@ from interpreter import (
     ParameterTypeMatcher,
     ParameterValueMatcher,
     QuoteMethodBody,
+    QuoteType,
     QuoteValue,
     StringValue,
     SymbolValue,
+    TupleType,
+    TypeValue,
     Value,
+    VectorType,
+    is_subtype,
+    type_of,
 )
 from lexer import TokenType
 from span import SourceSpan
@@ -466,15 +472,14 @@ def should_inline_quote_method(method: Method) -> bool:
 # * flatten the tree into lower level IR
 # * convert to bytecodes (or do native compilation... but that's a later project)
 
+S = TypeVar("S")
+
 
 # Compiler for a specific method / quote body in a particular CompilationContext.
 class Compiler:
     ir: TreeIRBlock
     # List of multimethods which, if changed, invalidate the compilation.
     multimethod_deps: list[MultiMethod]
-    # How many quote-method-bodies or just quote-closures deep we are into inlining.
-    # TODO: is this deletable? need to figure out the tail-call inlining...
-    inlining_depth: int
     # Keep track of virtual register count for allocation purposes.
     num_virtual_regs: int
     # Keep track of label count for allocation purposes.
@@ -484,15 +489,18 @@ class Compiler:
     # Keep track of label count for allocation purposes.
     num_basic_blocks: int
 
+    # Parameter types, or None if any type is allowed / there wasn't a parameter matcher.
+    parameter_types: dict[SlotRegister, Optional[TypeValue]]
+
     # Internal use only.
     def __init__(self, ir):
         self.ir = ir
         self.multimethod_deps = []
-        self.inlining_depth = 0
         self.num_virtual_regs = 0
         self.num_labels = 0
         self.basic_blocks = []
         self.num_basic_blocks = 0
+        self.parameter_types = {}
 
     # Add an IR operation, and return the destination register (for convenience).
     def add_ir_op(self, block: TreeIRBlock, op: IROp) -> Optional[Register]:
@@ -526,12 +534,15 @@ class Compiler:
         return block
 
     @staticmethod
-    def compile_quote_method_body(method: QuoteMethodBody) -> "Compiler":
+    def compile_quote_method(method: Method) -> "Compiler":
+        assert isinstance(method.body, QuoteMethodBody)
+        quote = method.body
+
         compiler = Compiler(
             ir=TreeIRBlock(
                 ops=[],
                 ctxt=CompilationContext.stacked_compilation_context(
-                    slots=[], base=method.compiled_body.comp_ctxt
+                    slots=[], base=quote.compiled_body.comp_ctxt
                 ),
                 inlining_stack=[],
             )
@@ -540,15 +551,15 @@ class Compiler:
         # TODO: offset slot registers (initial inputs to method) if there are already slot registers assigned?
         # e.g. if defining a method within another method.
         # method definitions outside of top level are probably totally broken right now...
-        if method.tail_recursive:
-            span = method.compiled_body.body.span
+        if quote.tail_recursive:
+            span = quote.compiled_body.body.span
 
             entry_point = compiler.allocate_label()
             compiler.ir.ops.append(entry_point)
 
             # Includes default-receiver.
             argument_phi_ops = []
-            for i, name in enumerate([default_receiver] + method.param_names):
+            for i, name in enumerate([default_receiver] + quote.param_names):
                 op = PhiOp(
                     dst=compiler.allocate_virtual_reg(),
                     srcs=[SlotRegister(i)],
@@ -561,7 +572,7 @@ class Compiler:
 
             compiler.ir.inlining_stack.append(
                 InliningInfo(
-                    body=method,
+                    body=quote,
                     allows_tail_recursion=True,
                     argument_phi_ops=argument_phi_ops,
                     entry_point=entry_point,
@@ -569,10 +580,21 @@ class Compiler:
             )
         else:
             compiler.ir.ctxt.slots.append((default_receiver, SlotRegister(0)))
-            for i, name in enumerate(method.param_names):
+            for i, name in enumerate(quote.param_names):
                 compiler.ir.ctxt.slots.append((name, SlotRegister(i + 1)))
 
-        compiler.compile_body(method.compiled_body.body)
+        # None = no restrictions / any type.
+        compiler.parameter_types[SlotRegister(0)] = None
+        assert len(method.param_matchers) == len(quote.param_names)
+        for i, matcher in enumerate(method.param_matchers):
+            slot = SlotRegister(i + 1)
+            if isinstance(matcher, ParameterTypeMatcher):
+                compiler.parameter_types[slot] = matcher.param_type
+            else:
+                # TODO: incorporate value matchers too (singleton type, or something?).
+                compiler.parameter_types[slot] = None
+
+        compiler.compile_body(quote.compiled_body.body)
 
         return compiler
 
@@ -620,7 +642,9 @@ class Compiler:
                     print(f"    {slot} -> {value}")
 
             print(colored("initial compilation to tree IR:", "red"))
-            result_reg = self.compile_expr(self.ir, expr, tail_position=True)
+            result_reg = self.compile_expr(
+                self.ir, expr, tail_position=True, currently_inlining=False
+            )
             if result_reg:
                 self.add_ir_op(self.ir, ReturnOp(value=result_reg, span=expr.span))
             print_ir_block(self.ir, depth=1)
@@ -649,7 +673,10 @@ class Compiler:
                 )
                 # Inline method invocations to open up the method bodies and hopefully allow
                 # closure inlining.
-                optimize_tree("inlining methods", self.tree_inline_methods)
+                optimize_tree(
+                    "inlining methods",
+                    lambda: self.tree_inline_methods(allow_quote_method_inlining=True),
+                )
                 # Try to move closures to their call sites.
                 optimize_tree("propagating copies", self.tree_propagate_copies)
                 optimize_tree("inlining closures", self.tree_inline_closures)
@@ -657,8 +684,25 @@ class Compiler:
             # Tail recursion could have produced unnecessary phi nodes; now we can clean those up.
             optimize_tree("simplifying phi nodes post-inlining", self.tree_simplify_phi_nodes)
             # !! From this point on, no more inlining methods. !!
+            # (We still can inline closures, though.)
 
-            optimize_tree("propagating copies", self.tree_propagate_copies)
+            while any_change:
+                any_change = False
+                iteration += 1
+
+                # Inline multimethod dispatches to open up the method invocations.
+                optimize_tree(
+                    "inlining multimethod dispatches", self.tree_inline_multimethod_dispatches
+                )
+                # Inline method invocations _except_ for quote methods.
+                optimize_tree(
+                    "inlining methods",
+                    lambda: self.tree_inline_methods(allow_quote_method_inlining=False),
+                )
+                # Try to move closures to their call sites.
+                optimize_tree("propagating copies", self.tree_propagate_copies)
+                optimize_tree("inlining closures", self.tree_inline_closures)
+
             print(colored(f"converting to basic blocks:", "red"))
             self.convert_to_basic_blocks()
             print_basic_blocks(self.basic_blocks)
@@ -670,17 +714,33 @@ class Compiler:
             print_basic_blocks(self.basic_blocks)
             for block in self.basic_blocks:
                 block.validate()
+            # TODO: also do some global validation:
+            # * single entry block
+            # * actually SSA -- every reg assigned just once
+
+            def optimize_cfg(summary: str, fn):
+                nonlocal any_change
+                print(colored(f"{summary} (iteration={iteration}):", "red"))
+                delta = fn()
+                if delta:
+                    any_change = True
+                    print_basic_blocks(self.basic_blocks)
+                else:
+                    print("(no delta)")
+                "a breakpoint right after printing latest state"
 
             any_change = True
             while any_change:
                 any_change = False
                 iteration += 1
-                # TODO: optimize("inferring types", self.bb_infer_types)
+                optimize_cfg("eliminating unreachable code", self.cfg_eliminate_unreachable_code)
+                optimize_cfg("inferring types", self.cfg_infer_types)
                 # This includes:
                 # * applying type knowledge to simplify multimethod dispatches
                 # * deleting UnreachableOp instances (and the registers they "write" to)
-                # TODO: optimize("eliminating dead code", self.bb_eliminate_dead_code)
-                # TODO: optimize("propagating copies", self.bb_propagate_copies)
+                # * replacing single-source phi nodes with copy ops
+                # TODO: optimize_cfg("eliminating dead code", self.cfg_eliminate_dead_code)
+                # TODO: optimize_cfg("propagating copies", self.cfg_propagate_copies)
 
             # print("compiling to low level bytecode:")
             # self.compile_to_low_level_bytecode()
@@ -693,7 +753,7 @@ class Compiler:
 
     # Add IROps which evaluate the given expression.
     def compile_expr(
-        self, block: TreeIRBlock, expr: Expr, tail_position: bool
+        self, block: TreeIRBlock, expr: Expr, tail_position: bool, currently_inlining: bool
     ) -> Optional[Register]:
         assert expr is not None
 
@@ -704,7 +764,7 @@ class Compiler:
         ]:
             tail_call = True
             if not tail_position:
-                if self.inlining_depth > 0:
+                if currently_inlining:
                     # This is ok -- the tail-call got inlined somewhere where it is no longer in
                     # tail position. Inlining is stronger than tail-calling, anyway.
                     tail_call = False
@@ -765,7 +825,9 @@ class Compiler:
                         assert isinstance(default_receiver_reg, Register)
                         arg_reg = default_receiver_reg
                     else:
-                        arg_reg = self.compile_expr(block, arg, tail_position=False)
+                        arg_reg = self.compile_expr(
+                            block, arg, tail_position=False, currently_inlining=currently_inlining
+                        )
                     arg_regs.append(arg_reg)
 
                 # Even if a tail call, we must add a destination register to be used in case of dispatch failure.
@@ -815,7 +877,7 @@ class Compiler:
                 message, [expr.target] + expr.args, tail_call=tail_call, span=expr.span
             )
         elif isinstance(expr, ParenExpr):
-            return self.compile_expr(block, expr.inner, tail_position)
+            return self.compile_expr(block, expr.inner, tail_position, currently_inlining)
         elif isinstance(expr, QuoteExpr):
             # TODO: this is where `it` default param needs to be added (or not).
             if not expr.parameters:
@@ -845,7 +907,9 @@ class Compiler:
         elif isinstance(expr, DataExpr):
             component_regs = []
             for component in expr.components:
-                reg = self.compile_expr(block, component, tail_position=False)
+                reg = self.compile_expr(
+                    block, component, tail_position=False, currently_inlining=currently_inlining
+                )
                 # Each component should produce a result into a register... no tail calls possible here.
                 assert reg
                 component_regs.append(reg)
@@ -860,12 +924,16 @@ class Compiler:
             last_output = None
             for i, part in enumerate(expr.sequence):
                 part_is_tail_position = tail_position and (i == len(expr.sequence) - 1)
-                last_output = self.compile_expr(block, part, part_is_tail_position)
+                last_output = self.compile_expr(
+                    block, part, part_is_tail_position, currently_inlining=currently_inlining
+                )
             return last_output
         elif isinstance(expr, TupleExpr):
             component_regs = []
             for component in expr.components:
-                reg = self.compile_expr(block, component, tail_position=False)
+                reg = self.compile_expr(
+                    block, component, tail_position=False, currently_inlining=currently_inlining
+                )
                 # Each component should produce a result into a register... no tail calls possible here.
                 assert reg
                 component_regs.append(reg)
@@ -964,7 +1032,7 @@ class Compiler:
 
         return process_block(self.ir)
 
-    def tree_inline_methods(self):
+    def tree_inline_methods(self, allow_quote_method_inlining: bool):
         def process_block(block: TreeIRBlock) -> bool:
             old_ops = list(block.ops)
             block.ops = []
@@ -991,14 +1059,18 @@ class Compiler:
                         inlined = None
                     # Stop inlining if we have already inlined the same method, but it doesn't support tail recursion.
                     # If we did try to inline, we would either have to jump back to the entry point (which doesn't exist,
-                    # since we didn't compile the original inlining assuming there would be tail recursino), or actually
+                    # since we didn't compile the original inlining assuming there would be tail recursion), or actually
                     # inline again, which would lead to infinite compilation recursion.
                     if (
-                        not inlined or inlined.allows_tail_recursion
-                    ) and should_inline_quote_method(method):
+                        allow_quote_method_inlining
+                        and (not inlined or inlined.allows_tail_recursion)
+                        and should_inline_quote_method(method)
+                    ):
                         # If already in the inlining stack, then we can handle this as a jump to where we
                         # already inlined this method body.
                         if inlined:
+                            # TODO: also need to have phi ops for _locals_, not just arguments... otherwise
+                            # local mutation with tail recursion optimization effectively forgets the mutation.
                             assert len(inlined.argument_phi_ops) == 1 + len(method.body.param_names)
                             for phi_op in inlined.argument_phi_ops:
                                 assert isinstance(phi_op, PhiOp)
@@ -1109,13 +1181,12 @@ class Compiler:
                             )
 
                             # Finally we are ready to inline the body.
-                            self.inlining_depth += 1
                             result = self.compile_expr(
                                 inline_block,
                                 method.body.compiled_body.body,
                                 tail_position=op.tail_position,
+                                currently_inlining=True,
                             )
-                            self.inlining_depth -= 1
 
                             # Add the inline block!
                             self.add_ir_op(
@@ -1378,13 +1449,6 @@ class Compiler:
                             base=quote.compiled_body.comp_ctxt,
                         )
 
-                        def find_slot(name):
-                            slot_result = inline_ctxt.lookup(name)
-                            assert isinstance(slot_result, Tuple)
-                            slot_reg, _ = slot_result
-                            assert isinstance(slot_reg, SlotRegister)
-                            return slot_reg
-
                         # No new quote-method-bodies inlined, just a closure quote. Not tracked on the inlining stack,
                         # since these are first class values (unlike multimethods / multimethod invocation).
                         inline_block = TreeIRBlock(
@@ -1392,13 +1456,12 @@ class Compiler:
                         )
 
                         # Finally we are ready to inline the body.
-                        self.inlining_depth += 1
                         result = self.compile_expr(
                             inline_block,
                             quote.compiled_body.body,
                             tail_position=op.tail_position,
+                            currently_inlining=True,
                         )
-                        self.inlining_depth -= 1
 
                         # Add the inline block!
                         self.add_ir_op(block, InlineBlockOp(sub_blocks=[inline_block], span=None))
@@ -1674,6 +1737,338 @@ class Compiler:
                 if new_dominators != block.dominators:
                     any_change = True
                     block.dominators = new_dominators
+
+    def cfg_eliminate_unreachable_code(self) -> bool:
+        # A block is unreachable if there is no path from the entry block to it.
+        # First we visit blocks from the entry block to determine reachability;
+        # then we collect the list of registers to 'delete' (due to unreachable assignments),
+        # and propagate their deletion through the rest of the blocks.
+        reachable_blocks = set()
+        queue = [block for block in self.basic_blocks if block.is_entry]
+        while queue:
+            block, queue = queue[0], queue[1:]
+            reachable_blocks.add(block)
+            for succ in block.outgoing:
+                if succ not in reachable_blocks:
+                    queue.append(succ)
+
+        unreachable_blocks = set(
+            [block for block in self.basic_blocks if block not in reachable_blocks]
+        )
+        # Sanity check: no reachable block should have an outgoing edge to an unreachable block.
+        # (Unreachable blocks may have outgoing edges to reachable blocks, though.)
+        for block in reachable_blocks:
+            assert not (block.outgoing & unreachable_blocks)
+
+        # Remove all the outgoing links to reachable blocks, and delete from the CFG
+        for block in unreachable_blocks:
+            for succ in block.outgoing:
+                succ.incoming.remove(block)
+        for block in unreachable_blocks:
+            self.basic_blocks.remove(block)
+
+        unassigned_regs = set()
+        for block in unreachable_blocks:
+            for op in block.ops:
+                if op.dst:
+                    unassigned_regs.add(op.dst)
+
+        print(
+            colored(
+                f"unreachable blocks: {', '.join(str(block.id) for block in unreachable_blocks)}",
+                "cyan",
+            )
+        )
+        print(colored(f"unassigned regs: {', '.join(str(reg) for reg in unassigned_regs)}", "cyan"))
+
+        for block in reachable_blocks:
+            old_ops = block.ops
+            block.ops = []
+            for op in old_ops:
+                # LINEAR OPS
+                if isinstance(op, UnreachableOp):
+                    raise AssertionError("unreachable op shouldn't exist in reachable code")
+                elif isinstance(op, CopyOp):
+                    assert op.src not in unassigned_regs
+                    block.ops.append(op)
+                elif isinstance(op, PhiOp):
+                    assert not (set(op.srcs) <= unassigned_regs)
+                    op.srcs = [src for src in op.srcs if src not in unassigned_regs]
+                    if len(op.srcs) == 1:
+                        # Convert to a direct assignment.
+                        block.ops.append(CopyOp(dst=op.dst, src=op.srcs[0], span=op.span))
+                    else:
+                        block.ops.append(op)
+                elif isinstance(op, LiteralOp):
+                    block.ops.append(op)
+                elif isinstance(op, BaseInvokeOp):
+                    assert not (set(op.call_args) & unassigned_regs)
+                    block.ops.append(op)
+                elif isinstance(op, ClosureOp):
+                    block.ops.append(op)
+                elif isinstance(op, SlotLookupOp):
+                    block.ops.append(op)
+                elif isinstance(op, VectorOp):
+                    assert not (set(op.components) & unassigned_regs)
+                    block.ops.append(op)
+                elif isinstance(op, TupleOp):
+                    assert not (set(op.components) & unassigned_regs)
+                    block.ops.append(op)
+                elif isinstance(op, SignalOp):
+                    assert not (set(op.signal_args) & unassigned_regs)
+                    block.ops.append(op)
+
+                # NONLINEAR OPS
+                elif isinstance(op, BasicBlockJumpOp):
+                    block.ops.append(op)
+                elif isinstance(op, ReturnOp):
+                    assert op.value not in unassigned_regs
+                    block.ops.append(op)
+                elif isinstance(op, BasicBlockMultimethodDispatchOp):
+                    assert not (set(op.dispatch_args) & unassigned_regs)
+                    block.ops.append(op)
+                elif isinstance(op, BasicBlockIfElseOp):
+                    assert op.condition not in unassigned_regs
+                    block.ops.append(op)
+
+                else:
+                    raise AssertionError(f"Forgot an op: {type(op)}")
+
+        return len(unreachable_blocks) != 0
+
+    # Inputs:
+    #   join:
+    #       Combines multiple states (generally, one output state from each predecessor of a block)
+    #       into a single state (generally, the new input to that block).
+    #       Must be a pure function.
+    #   transfer:
+    #       Passes a state through a basic block, and outputs a map of output states, one per successor.
+    #       Must be a pure function.
+    #   initial_in_state:
+    #       Initial block input state, per block.
+    #   initial_out_states:
+    #       Initial block output states (one per block's successor), per block.
+    #   enforce_transfer_once:
+    #       If true, make sure that every block (reachable from the entry block) is guaranteed to be
+    #           visited (i.e. transfer function invoked and applied to successors) at least once.
+    #       If false,
+    # Runs a forward dataflow analysis until convergence, then returns the final in-state of each block
+    # and the final out-states (one per block's successor) of each block.
+    # Note that this is only guaranteed to ever visit blocks reachable from the entry block.
+    def forward_dataflow_analysis(
+        self,
+        join: Callable[[list[S]], S],
+        transfer: Callable[[BasicIRBlock, S], dict[BasicIRBlock, S]],
+        initial_in_state: dict[BasicIRBlock, S],
+        initial_out_states: dict[BasicIRBlock, dict[BasicIRBlock, S]],
+    ) -> Tuple[dict[BasicIRBlock, S], dict[BasicIRBlock, dict[BasicIRBlock, S]]]:
+        # Last known (joined) input state per block.
+        last_in_state: dict[BasicIRBlock, S] = initial_in_state
+        # Last known output state collection per block: a possibly distinct output state per successor.
+        last_out_states: dict[BasicIRBlock, dict[BasicIRBlock, S]] = initial_out_states
+        work_queue: list[BasicIRBlock]
+
+        def do_work(block: BasicIRBlock, force_transfer: bool):
+            if block.is_entry:
+                # Don't join the in-state; just use the provided initial values, always.
+                in_state = last_in_state[block]
+            else:
+                in_state = join([last_out_states[pred][block] for pred in block.incoming])
+            if last_in_state[block] == in_state and not force_transfer:
+                # Nothing changed; no work to do!
+                return
+            last_in_state[block] = in_state
+            out_states = transfer(block, in_state)
+            _last_out_states = last_out_states[block]  # for the current block only
+            for succ in block.outgoing:
+                if out_states[succ] != _last_out_states[succ]:
+                    # Successor's joined input may change; add the successor to the work queue.
+                    if succ not in work_queue:
+                        work_queue.append(succ)
+            last_out_states[block] = out_states
+
+        # Prime the pump:
+        work_queue = []
+        initial_visited = set()
+        initial_visit_queue = [block for block in self.basic_blocks if block.is_entry]
+        while initial_visit_queue:
+            block, initial_visit_queue = initial_visit_queue[0], initial_visit_queue[1:]
+            initial_visited.add(block)
+            do_work(block, force_transfer=True)
+            for succ in block.outgoing:
+                if succ not in initial_visited:
+                    initial_visit_queue.append(succ)
+
+        # Run the pump:
+        while work_queue:
+            block, work_queue = work_queue[0], work_queue[1:]
+            do_work(block, force_transfer=False)
+
+        return last_in_state, last_out_states
+
+    def cfg_infer_types(self) -> None:
+        # Singleton.
+        @dataclass
+        class AnyType:
+            pass
+
+        any_type = AnyType()
+
+        Types: TypeAlias = Union[list[TypeValue], AnyType]
+        # Per register, indicates knowledge of what possible types the value is known to have,
+        # or any_type if it could take any type. If a register is not present, we don't yet know
+        # what types it may have, and must not use it for typing judgements yet.
+        # Note that this implies a _subtyping_ relationship: the value is a subtype of any of these
+        # provided types.
+        S: TypeAlias = dict[Register, Types]
+
+        def merge_types(many_types: list[Types]) -> Types:
+            if any(types is any_type for types in many_types):
+                return any_type
+            merged = []
+            for types in many_types:
+                for type in types:
+                    if type not in merged:
+                        merged.append(type)
+            # TODO: can simplify by deleting any A where A <= B for some other B in the list.
+            return merged
+
+        def join(states: list[S]) -> S:
+            merged = {}
+            for state in states:
+                for reg, types in state.items():
+                    if reg not in merged:
+                        merged[reg] = types
+                        continue
+                    merged[reg] = merge_types([merged[reg], types])
+            return merged
+
+        def transfer(block: BasicIRBlock, state: S) -> dict[BasicIRBlock, S]:
+            reg_types = dict(state)
+            for op in block.ops:
+                # LINEAR OPS
+                if isinstance(op, UnreachableOp):
+                    raise AssertionError("shouldn't have gotten to unreachable op")
+                elif isinstance(op, CopyOp):
+                    if op.src in reg_types:
+                        reg_types[op.dst] = reg_types[op.src]
+                elif isinstance(op, PhiOp):
+                    if all(src in reg_types for src in op.srcs):
+                        reg_types[op.dst] = merge_types([reg_types.get(src, []) for src in op.srcs])
+                elif isinstance(op, LiteralOp):
+                    reg_types[op.dst] = [type_of(op.value)]
+                elif isinstance(op, BaseInvokeOp):
+                    # TODO: use return type information, _especially_ for natives / intrinsics
+                    reg_types[op.dst] = any_type
+                elif isinstance(op, ClosureOp):
+                    reg_types[op.dst] = [QuoteType]
+                elif isinstance(op, SlotLookupOp):
+                    # TODO: put a lease on the slot?
+                    reg_types[op.dst] = any_type
+                elif isinstance(op, VectorOp):
+                    # TODO: might want to get fancier in the future with per-element typing.
+                    reg_types[op.dst] = VectorType
+                elif isinstance(op, TupleOp):
+                    # TODO: might want to get fancier in the future with per-element typing.
+                    reg_types[op.dst] = TupleType
+                elif isinstance(op, SignalOp):
+                    # Signaling really can produce any result -- it's up to the user / debugger.
+                    reg_types[op.dst] = any_type
+
+                # NONLINEAR OPS -- directly return.
+                elif isinstance(op, BasicBlockJumpOp):
+                    return {op.target: reg_types}
+                elif isinstance(op, ReturnOp):
+                    return {}
+                elif isinstance(op, BasicBlockMultimethodDispatchOp):
+
+                    def derive_types(args: list[Register], matchers: list[ParameterMatcher]) -> S:
+                        # TODO: could get fancier and even _remove_ types if we know that they are impossible
+                        # under the assumption that this dispatch branch is chosen.
+                        # For instance, if there are types A < B, and a method 'a' on A and a method 'b' on B,
+                        # then if 'b' is chosen it means not only that the argument is a subtype of B, but it
+                        # is also _not_ a subtype of A.
+                        assert len(args) == len(matchers)
+                        restricted_reg_types = dict(reg_types)
+                        for arg, matcher in zip(args, matchers):
+                            if arg not in reg_types:
+                                continue
+                            if isinstance(matcher, ParameterAnyMatcher):
+                                # Can't derive any new info from this.
+                                continue
+                            elif isinstance(matcher, ParameterTypeMatcher):
+                                arg_types = reg_types[arg]
+                                arg_supertype = matcher.param_type
+                                # Argument type is a subtype of arg_super_type; we can exclude any known possible
+                                # types that don't meet this requirement.
+                                if arg_types is any_type:
+                                    restricted = [arg_supertype]
+                                else:
+                                    # TODO: actually this may be a bit tricky... suppose we have a struct type S
+                                    # and an (a priori) unrelated mixin M, i.e. we do not have S <= M. If we know
+                                    # that some argument is of type S (or subtype thereof), and the multimethod
+                                    # parameter matcher expects an M, this does _not_ let us conclude that there
+                                    # are no possible options for this variable type (assuming this dispatch option
+                                    # was selected); rather, that conclusion depends on whether or not there is any
+                                    # _other_ type which is both a subtype of S and M, such as a new user defined
+                                    # type which simply inherits from both.
+                                    # Maybe the right thing for now is to consider types as a conjuction of
+                                    # disjunctions -- in this case we would 'simply' note that the variable must be
+                                    # both an S and an M, with no further simplification.
+                                    # TODO: apply intersection of arg_supertype and existing arg_types.
+                                    restricted = [arg_supertype]
+                                restricted_reg_types[arg] = restricted
+                            else:
+                                continue
+                        return restricted_reg_types
+
+                    reg_types_per_succ = {
+                        method_block: derive_types(op.dispatch_args, method.param_matchers)
+                        for method, method_block in op.dispatch
+                    }
+                    # Likewise could get fancier here, making use of info that dispatch argument types do _not_
+                    # match any of the dispatch branch requirements. However, probably not very useful, since
+                    # generally this branch just leads to a signaling op.
+                    reg_types_per_succ[op.dispatch_failed] = reg_types
+                    return reg_types_per_succ
+                elif isinstance(op, BasicBlockIfElseOp):
+                    # TODO: depending on what the condition is, we may be able to apply path dependent typing.
+                    # For now, just apply the same type knowledge to both branches.
+                    return {op.true_block: reg_types, op.false_block: reg_types}
+                else:
+                    raise AssertionError(f"Forgot an op: {type(op)}")
+
+        initial_in_state: dict[BasicIRBlock, S] = {block: {} for block in self.basic_blocks}
+        initial_out_states: dict[BasicIRBlock, dict[BasicIRBlock, S]] = {
+            block: {succ: {} for succ in block.outgoing} for block in self.basic_blocks
+        }
+
+        for block in self.basic_blocks:
+            if not block.is_entry:
+                continue
+            reg_types = initial_in_state[block]
+            for reg, param_type in self.parameter_types.items():
+                if param_type:
+                    reg_types[reg] = [param_type]
+                else:
+                    reg_types[reg] = any_type
+
+        in_state, out_states = self.forward_dataflow_analysis(
+            join, transfer, initial_in_state, initial_out_states
+        )
+        for block in self.basic_blocks:
+            print(f"===== block {block.id} typing inputs ======")
+            if block not in in_state:
+                print("(unreachable)")
+                continue
+            reg_types = in_state[block]
+            for reg, types in reg_types.items():
+                if types is None:
+                    print(f"{reg} -> unreachable / never evaluated")
+                elif types is any_type:
+                    continue
+                else:
+                    print(f"{reg} -> " + ", ".join(str(t) for t in types))
 
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
