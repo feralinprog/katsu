@@ -292,7 +292,8 @@ class MultimethodDispatchOp(IROp):
     slot_name: str
     dispatch_args: list[Register]
     dispatch: list[Tuple[Method, "TreeIRBlock"]]
-    dispatch_failed: "TreeIRBlock"
+    no_matching_method: Optional["TreeIRBlock"]
+    ambiguous_method_resolution: Optional["TreeIRBlock"]
 
 
 @dataclass(kw_only=True)
@@ -344,7 +345,8 @@ class BasicBlockMultimethodDispatchOp(IROp):
     slot_name: str
     dispatch_args: list[Register]
     dispatch: list[Tuple[Method, "BasicIRBlock"]]
-    dispatch_failed: "BasicIRBlock"
+    no_matching_method: Optional["BasicIRBlock"]
+    ambiguous_method_resolution: Optional["BasicIRBlock"]
 
 
 @dataclass(kw_only=True)
@@ -994,20 +996,40 @@ class Compiler:
                         )
                     )
 
-                # Add one more sub-block for the 'dispatch failed' case.
-                dispatch_failed = TreeIRBlock(
+                # Add more sub-blocks for the 'dispatch failed' cases.
+                no_matching_method = TreeIRBlock(
                     ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
                 )
-                signal_result = self.allocate_virtual_reg()
-                dispatch_failed.ops.append(
+                no_matching_method_signal_result = self.allocate_virtual_reg()
+                no_matching_method.ops.append(
                     SignalOp(
-                        dst=signal_result,
+                        dst=no_matching_method_signal_result,
                         condition_name="no-matching-method",
                         signal_args=op.call_args,
                         span=op.span,
                     )
                 )
-                sub_blocks.append(dispatch_failed)
+                sub_blocks.append(no_matching_method)
+
+                # We can do a simple optimization here; ambiguous-method-resolution is impossible
+                # if there are only zero or one dispatch options. (I expect this is a pretty common case.)
+                if len(multimethod.methods) != 1:
+                    ambiguous_method_resolution = TreeIRBlock(
+                        ops=[], ctxt=block.ctxt, inlining_stack=block.inlining_stack
+                    )
+                    ambiguous_method_resolution_signal_result = self.allocate_virtual_reg()
+                    ambiguous_method_resolution.ops.append(
+                        SignalOp(
+                            dst=ambiguous_method_resolution_signal_result,
+                            condition_name="ambiguous-method-resolution",
+                            signal_args=op.call_args,
+                            span=op.span,
+                        )
+                    )
+                    sub_blocks.append(ambiguous_method_resolution)
+                else:
+                    ambiguous_method_resolution = None
+                    ambiguous_method_resolution_signal_result = None
 
                 block.ops.append(
                     MultimethodDispatchOp(
@@ -1015,7 +1037,8 @@ class Compiler:
                         slot_name=multimethod.name,
                         dispatch_args=op.call_args,
                         dispatch=dispatch,
-                        dispatch_failed=dispatch_failed,
+                        no_matching_method=no_matching_method,
+                        ambiguous_method_resolution=ambiguous_method_resolution,
                         sub_blocks=sub_blocks,
                         span=op.span,
                     )
@@ -1025,7 +1048,17 @@ class Compiler:
                     # Re-use the old invoke op's destination register so that downstream consumers
                     # still get a value available in this register.
                     block.ops.append(
-                        PhiOp(dst=op.dst, srcs=method_results + [signal_result], span=op.span)
+                        PhiOp(
+                            dst=op.dst,
+                            srcs=method_results
+                            + [no_matching_method_signal_result]
+                            + (
+                                [ambiguous_method_resolution_signal_result]
+                                if ambiguous_method_resolution_signal_result
+                                else []
+                            ),
+                            span=op.span,
+                        )
                     )
 
             return any_change
@@ -1597,7 +1630,12 @@ class Compiler:
                     current_block.add_op(op)
                 elif isinstance(op, MultimethodDispatchOp):
                     dispatch = [(method, self.allocate_basic_block()) for method, _ in op.dispatch]
-                    dispatch_failed = self.allocate_basic_block()
+                    no_matching_method = (
+                        self.allocate_basic_block() if op.no_matching_method else None
+                    )
+                    ambiguous_method_resolution = (
+                        self.allocate_basic_block() if op.ambiguous_method_resolution else None
+                    )
                     after_block = self.allocate_basic_block()
 
                     current_block.add_op(
@@ -1605,13 +1643,17 @@ class Compiler:
                             slot_name=op.slot_name,
                             dispatch_args=op.dispatch_args,
                             dispatch=dispatch,
-                            dispatch_failed=dispatch_failed,
+                            no_matching_method=no_matching_method,
+                            ambiguous_method_resolution=ambiguous_method_resolution,
                             span=op.span,
                         )
                     )
                     for _, method_block in dispatch:
                         current_block.link_outgoing(method_block)
-                    current_block.link_outgoing(dispatch_failed)
+                    if no_matching_method:
+                        current_block.link_outgoing(no_matching_method)
+                    if ambiguous_method_resolution:
+                        current_block.link_outgoing(ambiguous_method_resolution)
 
                     for i in range(len(dispatch)):
                         _, method_tree_block = op.dispatch[i]
@@ -1627,14 +1669,29 @@ class Compiler:
                             )
                             method_basic_block.link_outgoing(after_block)
 
-                    dispatch_failed = process_tree_block(
-                        op.dispatch_failed,
-                        dispatch_failed,
-                        label_to_basic_block=label_to_basic_block,
-                    )
-                    if dispatch_failed.falls_through():
-                        dispatch_failed.add_op(BasicBlockJumpOp(target=after_block, span=op.span))
-                        dispatch_failed.link_outgoing(after_block)
+                    if op.no_matching_method:
+                        no_matching_method = process_tree_block(
+                            op.no_matching_method,
+                            no_matching_method,
+                            label_to_basic_block=label_to_basic_block,
+                        )
+                        if no_matching_method.falls_through():
+                            no_matching_method.add_op(
+                                BasicBlockJumpOp(target=after_block, span=op.span)
+                            )
+                            no_matching_method.link_outgoing(after_block)
+
+                    if op.ambiguous_method_resolution:
+                        ambiguous_method_resolution = process_tree_block(
+                            op.ambiguous_method_resolution,
+                            ambiguous_method_resolution,
+                            label_to_basic_block=label_to_basic_block,
+                        )
+                        if ambiguous_method_resolution.falls_through():
+                            ambiguous_method_resolution.add_op(
+                                BasicBlockJumpOp(target=after_block, span=op.span)
+                            )
+                            ambiguous_method_resolution.link_outgoing(after_block)
 
                     current_block = after_block
                 elif isinstance(op, SignalOp):
@@ -2026,10 +2083,13 @@ class Compiler:
                         method_block: derive_types(op.dispatch_args, method.param_matchers)
                         for method, method_block in op.dispatch
                     }
-                    # Likewise could get fancier here, making use of info that dispatch argument types do _not_
-                    # match any of the dispatch branch requirements. However, probably not very useful, since
-                    # generally this branch just leads to a signaling op.
-                    reg_types_per_succ[op.dispatch_failed] = reg_types
+                    # Likewise could get fancier here with restricted type options. However, probably
+                    # not very useful, since these branch just lead to a signaling ops and are not
+                    # the happy path.
+                    if op.no_matching_method:
+                        reg_types_per_succ[op.no_matching_method] = reg_types
+                    if op.ambiguous_method_resolution:
+                        reg_types_per_succ[op.ambiguous_method_resolution] = reg_types
                     return reg_types_per_succ
                 elif isinstance(op, BasicBlockIfElseOp):
                     # TODO: depending on what the condition is, we may be able to apply path dependent typing.
@@ -2201,8 +2261,12 @@ def print_op(index: int, op: IROp, depth: int):
             )
             print_ir_block(body_block, depth=(depth + 2))
 
-        print(indent + level + "else:")
-        print_ir_block(op.dispatch_failed, depth=(depth + 2))
+        if op.no_matching_method:
+            print(indent + level + "no-matching-method:")
+            print_ir_block(op.no_matching_method, depth=(depth + 2))
+        if op.ambiguous_method_resolution:
+            print(indent + level + "ambiguous-method-resolution:")
+            print_ir_block(op.ambiguous_method_resolution, depth=(depth + 2))
     elif isinstance(op, SignalOp):
         prefix()
         print(
@@ -2240,7 +2304,14 @@ def print_op(index: int, op: IROp, depth: int):
                 + f"({', '.join(matcher_str(matcher) for matcher in method.param_matchers)}) -> jump {target.id}"
             )
 
-        print(indent + level + f"else -> jump {op.dispatch_failed.id}")
+        if op.no_matching_method:
+            print(indent + level + f"no-matching-method -> jump {op.no_matching_method.id}")
+        if op.ambiguous_method_resolution:
+            print(
+                indent
+                + level
+                + f"ambiguous-method-resolution -> jump {op.ambiguous_method_resolution.id}"
+            )
     elif isinstance(op, BasicBlockIfElseOp):
         assert not op.dst
         prefix()
