@@ -363,7 +363,8 @@ class BasicBlockPhiOp(IROp):
 @dataclass(kw_only=True)
 class BasicBlockMultimethodDispatchOp(IROp):
     slot_name: str
-    dispatch_args: list[Register]
+    # Dispatch arg may be None if its value cannot affect the dispatch result.
+    dispatch_args: list[Optional[Register]]
     dispatch: list[Tuple[Method, "BasicIRBlock"]]
     no_matching_method: Optional["BasicIRBlock"]
     ambiguous_method_resolution: Optional["BasicIRBlock"]
@@ -424,6 +425,10 @@ class BasicIRBlock:
     def link_outgoing(self, succ: "BasicIRBlock"):
         succ.incoming.add(self)
         self.outgoing.add(succ)
+
+    def unlink_outgoing(self, succ: "BasicIRBlock"):
+        succ.incoming.remove(self)
+        self.outgoing.remove(succ)
 
     linear_op_types = (
         UnreachableOp,
@@ -2073,7 +2078,9 @@ class Compiler:
                     assert op.value not in unassigned_regs
                     block.ops.append(op)
                 elif isinstance(op, BasicBlockMultimethodDispatchOp):
-                    assert not (set(op.dispatch_args) & unassigned_regs)
+                    assert not (
+                        set([arg for arg in op.dispatch_args if arg is not None]) & unassigned_regs
+                    )
                     block.ops.append(op)
                 elif isinstance(op, BasicBlockIfElseOp):
                     assert op.condition not in unassigned_regs
@@ -2224,7 +2231,9 @@ class Compiler:
                     return reg_types, {}
                 elif isinstance(op, BasicBlockMultimethodDispatchOp):
 
-                    def derive_types(args: list[Register], matchers: list[ParameterMatcher]) -> S:
+                    def derive_types(
+                        args: list[Optional[Register]], matchers: list[ParameterMatcher]
+                    ) -> S:
                         # TODO: could get fancier and even _remove_ types if we know that they are impossible
                         # under the assumption that this dispatch branch is chosen.
                         # For instance, if there are types A < B, and a method 'a' on A and a method 'b' on B,
@@ -2233,7 +2242,7 @@ class Compiler:
                         assert len(args) == len(matchers)
                         restricted_reg_types = dict(reg_types)
                         for arg, matcher in zip(args, matchers):
-                            if arg not in reg_types:
+                            if arg is None or arg not in reg_types:
                                 continue
                             if isinstance(matcher, ParameterAnyMatcher):
                                 # Can't derive any new info from this.
@@ -2323,8 +2332,114 @@ class Compiler:
             #         print(f"{reg} -> " + ", ".join(str(t) for t in types))
 
     def cfg_simplify_dispatches(self) -> bool:
+        any_change = False
 
-        return False
+        for block in self.basic_blocks:
+            op = block.ops[-1]
+            if not isinstance(op, BasicBlockMultimethodDispatchOp):
+                continue
+
+            def is_certain_match(reg: Register, matcher: ParameterMatcher):
+                if isinstance(matcher, ParameterAnyMatcher):
+                    return True
+                elif isinstance(matcher, ParameterTypeMatcher):
+                    reg_types = block.types[reg]
+                    if reg_types is ANY_TYPE:
+                        return False
+                    if not all(is_subtype(reg_type, matcher.param_type) for reg_type in reg_types):
+                        return False
+                    return True
+                elif isinstance(matcher, ParameterValueMatcher):
+                    # TODO: would be nice to evaluate these as well, if we have value-level 'type'
+                    # information for registers.
+                    return False
+                else:
+                    raise AssertionError(f"forgot a matcher type: {matcher}")
+
+            def is_certain_mismatch(reg: Register, matcher: ParameterMatcher):
+                # TODO: implement.
+                return False
+
+            def method_is_certain_match(
+                reg_and_matchers: list[Tuple[Register, ParameterMatcher]]
+            ) -> bool:
+                return all(is_certain_match(reg, matcher) for reg, matcher in reg_and_matchers)
+
+            def method_is_certain_mismatch(
+                reg_and_matchers: list[Tuple[Register, ParameterMatcher]]
+            ) -> bool:
+                return all(is_certain_mismatch(reg, matcher) for reg, matcher in reg_and_matchers)
+
+            dispatches_to_delete = []
+            for i, method_and_block in enumerate(op.dispatch):
+                method, _ = method_and_block
+                assert len(method.param_matchers) == len(op.dispatch_args)
+                reg_and_matchers = [
+                    (reg, matcher)
+                    for reg, matcher in zip(op.dispatch_args, method.param_matchers)
+                    if reg is not None
+                ]
+                if method_is_certain_match(reg_and_matchers):
+                    # We can delete no-matching-method error handling, yay!
+                    if op.no_matching_method:
+                        any_change = True
+                        block.unlink_outgoing(op.no_matching_method)
+                        op.no_matching_method = None
+                if method_is_certain_mismatch(reg_and_matchers):
+                    dispatches_to_delete.append(method_and_block)
+
+            if dispatches_to_delete:
+                any_change = True
+                for option in dispatches_to_delete:
+                    op.dispatch.remove(option)
+
+            # If dispatch actually doesn't care what the value of a particular parameter is, then
+            # delete that parameter.
+            for i, param_reg in enumerate(op.dispatch_args):
+                if not param_reg:
+                    continue
+                reg_required = False
+                for method, _ in op.dispatch:
+                    if not is_certain_match(param_reg, method.param_matchers[i]):
+                        reg_required = True
+                        break
+                if not reg_required:
+                    any_change = True
+                    op.dispatch_args[i] = None
+
+            # TODO: can get fancier with the precondition here, if we know types well enough.
+            if len(op.dispatch) == 1:
+                # We can delete ambiguous-method-resolution handling, yay!
+                if op.ambiguous_method_resolution:
+                    any_change = True
+                    block.unlink_outgoing(op.ambiguous_method_resolution)
+                    op.ambiguous_method_resolution = None
+
+            # Sanity check -- we shouldn't have been able to optimize away every option.
+            assert op.dispatch or op.no_matching_method or op.ambiguous_method_resolution
+
+            # The Final Optimization To End All Optimizations:
+            # If the dispatch actually has only one option, just make it a jump instead.
+            if (
+                len(op.dispatch) == 1
+                and not op.no_matching_method
+                and not op.ambiguous_method_resolution
+            ):
+                _, target = op.dispatch[0]
+                block.ops[-1] = BasicBlockJumpOp(target=target, span=op.span)
+                any_change = True
+            elif not op.dispatch and op.no_matching_method and not op.ambiguous_method_resolution:
+                block.ops[-1] = BasicBlockJumpOp(target=op.no_matching_method, span=op.span)
+                any_change = True
+            elif not op.dispatch and not op.no_matching_method and op.ambiguous_method_resolution:
+                block.ops[-1] = BasicBlockJumpOp(
+                    target=op.ambiguous_method_resolution, span=op.span
+                )
+                any_change = True
+
+        if any_change:
+            self.compute_dominators()
+        return any_change
 
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
@@ -2496,7 +2611,7 @@ def print_op(index: int, op: IROp, depth: int):
     elif isinstance(op, BasicBlockMultimethodDispatchOp):
         prefix()
         print(
-            f"multimethod-dispatch {op.slot_name} on {', '.join(str(arg) for arg in op.dispatch_args)}"
+            f"multimethod-dispatch {op.slot_name} on {', '.join(str(arg) if arg else '*' for arg in op.dispatch_args)}"
         )
         for method, target in op.dispatch:
 
