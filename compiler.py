@@ -376,6 +376,17 @@ class BasicBlockIfElseOp(IROp):
     false_block: "BasicIRBlock"
 
 
+# Singleton.
+@dataclass
+class AnyType:
+    pass
+
+
+ANY_TYPE = AnyType()
+
+Types: TypeAlias = Union[list[TypeValue], AnyType]
+
+
 # Basic block à la Single Static Assignment form.
 @dataclass
 class BasicIRBlock:
@@ -395,6 +406,14 @@ class BasicIRBlock:
 
     # Calculated after converting to basic blocks.
     dominators: set["BasicIRBlock"]
+
+    # Calculated essentially on-demand.
+    # Per register, indicates knowledge of what possible types the value is known to have,
+    # or ANY_TYPE if it could take any type. If a register is not present, we don't yet know
+    # what types it may have, and must not use it for typing judgements yet.
+    # Note that this implies a _subtyping_ relationship: the value is a subtype of any of these
+    # provided types.
+    types: dict[Register, Types]
 
     def __repr__(self):
         return f"BasicIRBlock(id={self.id})"
@@ -494,6 +513,7 @@ def should_inline_quote_method(method: Method) -> bool:
 # * convert to bytecodes (or do native compilation... but that's a later project)
 
 S = TypeVar("S")
+T = TypeVar("T")
 
 
 # Compiler for a specific method / quote body in a particular CompilationContext.
@@ -549,6 +569,7 @@ class Compiler:
             incoming=set(),
             outgoing=set(),
             dominators=set(),
+            types={},
         )
         self.basic_blocks.append(block)
         self.num_basic_blocks += 1
@@ -2066,26 +2087,28 @@ class Compiler:
     #       into a single state (generally, the new input to that block).
     #       Must be a pure function.
     #   transfer:
-    #       Passes a state through a basic block, and outputs a map of output states, one per successor.
+    #       Passes a state through a basic block, and outputs a single output value along with a map of
+    #       output states, one per successor.
     #       Must be a pure function.
     #   initial_in_state:
     #       Initial block input state, per block.
     #   initial_out_states:
     #       Initial block output states (one per block's successor), per block.
-    # Runs a forward dataflow analysis until convergence, then returns the final in-state of each block
-    # and the final out-states (one per block's successor) of each block.
+    # Runs a forward dataflow analysis until convergence, then returns the final transfer output of
+    #   each block.
     # Note that this is only guaranteed to ever visit blocks reachable from the entry block.
     def forward_dataflow_analysis(
         self,
         join: Callable[[list[S]], S],
-        transfer: Callable[[BasicIRBlock, S], dict[BasicIRBlock, S]],
+        transfer: Callable[[BasicIRBlock, S], Tuple[T, dict[BasicIRBlock, S]]],
         initial_in_state: dict[BasicIRBlock, S],
         initial_out_states: dict[BasicIRBlock, dict[BasicIRBlock, S]],
-    ) -> Tuple[dict[BasicIRBlock, S], dict[BasicIRBlock, dict[BasicIRBlock, S]]]:
+    ) -> dict[BasicIRBlock, T]:
         # Last known (joined) input state per block.
         last_in_state: dict[BasicIRBlock, S] = initial_in_state
         # Last known output state collection per block: a possibly distinct output state per successor.
         last_out_states: dict[BasicIRBlock, dict[BasicIRBlock, S]] = initial_out_states
+        last_transfer_value: dict[BasicIRBlock, T] = {}
         work_queue: list[BasicIRBlock]
 
         def do_work(block: BasicIRBlock, force_transfer: bool):
@@ -2098,7 +2121,8 @@ class Compiler:
                 # Nothing changed; no work to do!
                 return
             last_in_state[block] = in_state
-            out_states = transfer(block, in_state)
+            value, out_states = transfer(block, in_state)
+            last_transfer_value[block] = value
             _last_out_states = last_out_states[block]  # for the current block only
             for succ in block.outgoing:
                 if out_states[succ] != _last_out_states[succ]:
@@ -2124,27 +2148,19 @@ class Compiler:
             block, work_queue = work_queue[0], work_queue[1:]
             do_work(block, force_transfer=False)
 
-        return last_in_state, last_out_states
+        return last_transfer_value
 
     def cfg_infer_types(self) -> None:
-        # Singleton.
-        @dataclass
-        class AnyType:
-            pass
-
-        any_type = AnyType()
-
-        Types: TypeAlias = Union[list[TypeValue], AnyType]
         # Per register, indicates knowledge of what possible types the value is known to have,
-        # or any_type if it could take any type. If a register is not present, we don't yet know
+        # or ANY_TYPE if it could take any type. If a register is not present, we don't yet know
         # what types it may have, and must not use it for typing judgements yet.
         # Note that this implies a _subtyping_ relationship: the value is a subtype of any of these
         # provided types.
         S: TypeAlias = dict[Register, Types]
 
         def merge_types(many_types: list[Types]) -> Types:
-            if any(types is any_type for types in many_types):
-                return any_type
+            if any(types is ANY_TYPE for types in many_types):
+                return ANY_TYPE
             merged = []
             for types in many_types:
                 for type in types:
@@ -2181,12 +2197,12 @@ class Compiler:
                     reg_types[op.dst] = [type_of(op.value)]
                 elif isinstance(op, BaseInvokeOp):
                     # TODO: use return type information, _especially_ for natives / intrinsics
-                    reg_types[op.dst] = any_type
+                    reg_types[op.dst] = ANY_TYPE
                 elif isinstance(op, ClosureOp):
                     reg_types[op.dst] = [QuoteType]
                 elif isinstance(op, SlotLookupOp):
                     # TODO: put a lease on the slot?
-                    reg_types[op.dst] = any_type
+                    reg_types[op.dst] = ANY_TYPE
                 elif isinstance(op, VectorOp):
                     # TODO: might want to get fancier in the future with per-element typing.
                     reg_types[op.dst] = VectorType
@@ -2195,13 +2211,13 @@ class Compiler:
                     reg_types[op.dst] = TupleType
                 elif isinstance(op, SignalOp):
                     # Signaling really can produce any result -- it's up to the user / debugger.
-                    reg_types[op.dst] = any_type
+                    reg_types[op.dst] = ANY_TYPE
 
                 # NONLINEAR OPS -- directly return.
                 elif isinstance(op, BasicBlockJumpOp):
-                    return {op.target: reg_types}
+                    return reg_types, {op.target: reg_types}
                 elif isinstance(op, ReturnOp):
-                    return {}
+                    return reg_types, {}
                 elif isinstance(op, BasicBlockMultimethodDispatchOp):
 
                     def derive_types(args: list[Register], matchers: list[ParameterMatcher]) -> S:
@@ -2223,7 +2239,7 @@ class Compiler:
                                 arg_supertype = matcher.param_type
                                 # Argument type is a subtype of arg_super_type; we can exclude any known possible
                                 # types that don't meet this requirement.
-                                if arg_types is any_type:
+                                if arg_types is ANY_TYPE:
                                     restricted = [arg_supertype]
                                 else:
                                     # TODO: actually this may be a bit tricky... suppose we have a struct type S
@@ -2255,13 +2271,17 @@ class Compiler:
                         reg_types_per_succ[op.no_matching_method] = reg_types
                     if op.ambiguous_method_resolution:
                         reg_types_per_succ[op.ambiguous_method_resolution] = reg_types
-                    return reg_types_per_succ
+                    return reg_types, reg_types_per_succ
                 elif isinstance(op, BasicBlockIfElseOp):
                     # TODO: depending on what the condition is, we may be able to apply path dependent typing.
                     # For now, just apply the same type knowledge to both branches.
-                    return {op.true_block: reg_types, op.false_block: reg_types}
+                    return reg_types, {op.true_block: reg_types, op.false_block: reg_types}
                 else:
                     raise AssertionError(f"Forgot an op: {type(op)}")
+
+            # If we got this fartransfer(block, in_state), there was no nonlinear op at the end. Must be a top-level block being compiled.
+            assert not block.outgoing
+            return reg_types, {}
 
         initial_in_state: dict[BasicIRBlock, S] = {block: {} for block in self.basic_blocks}
         initial_out_states: dict[BasicIRBlock, dict[BasicIRBlock, S]] = {
@@ -2276,24 +2296,27 @@ class Compiler:
                 if param_type:
                     reg_types[reg] = [param_type]
                 else:
-                    reg_types[reg] = any_type
+                    reg_types[reg] = ANY_TYPE
 
-        in_state, out_states = self.forward_dataflow_analysis(
+        typing_info = self.forward_dataflow_analysis(
             join, transfer, initial_in_state, initial_out_states
         )
         for block in self.basic_blocks:
-            print(f"===== block {block.id} typing inputs ======")
-            if block not in in_state:
-                print("(unreachable)")
-                continue
-            reg_types = in_state[block]
-            for reg, types in reg_types.items():
-                if types is None:
-                    print(f"{reg} -> unreachable / never evaluated")
-                elif types is any_type:
-                    continue
-                else:
-                    print(f"{reg} -> " + ", ".join(str(t) for t in types))
+            if block in typing_info:
+                block.types = typing_info[block]
+
+            # print(f"===== block {block.id} typing inputs ======")
+            # if block not in typing_info:
+            #     print("(unreachable)")
+            #     continue
+            # reg_types = typing_info[block]
+            # for reg, types in reg_types.items():
+            #     if types is None:
+            #         print(f"{reg} -> unreachable / never evaluated")
+            #     elif types is ANY_TYPE:
+            #         continue
+            #     else:
+            #         print(f"{reg} -> " + ", ".join(str(t) for t in types))
 
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
