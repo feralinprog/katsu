@@ -2665,7 +2665,10 @@ def regs_referenced_by_basic_ir_op(op: IROp) -> set[Register]:
     elif isinstance(op, LiteralOp):
         return ds
     elif isinstance(op, BaseInvokeOp):
-        return ds | set(op.call_args)
+        refs = ds | set(op.call_args)
+        if isinstance(op, InvokeRegisterOp):
+            refs |= set([op.callable])
+        return refs
     elif isinstance(op, ClosureOp):
         return ds
     elif isinstance(op, SlotLookupOp):
@@ -2681,7 +2684,7 @@ def regs_referenced_by_basic_ir_op(op: IROp) -> set[Register]:
     elif isinstance(op, BasicBlockPhiOp):
         return ds | set([reg for reg, _ in op.srcs])
     elif isinstance(op, BasicBlockMultimethodDispatchOp):
-        return set(op.dispatch_args)
+        return set([arg for arg in op.dispatch_args if arg is not None])
     elif isinstance(op, BasicBlockIfElseOp):
         return set([op.condition])
     else:
@@ -2707,19 +2710,20 @@ def print_basic_blocks(blocks: list[BasicIRBlock]):
                 "grey",
             )
         )
-        print(colored("register types:", "grey"))
-        referenced_regs = set().union(*[regs_referenced_by_basic_ir_op(op) for op in block.ops])
-        for reg in sorted(
-            referenced_regs, key=lambda r: ((0 if isinstance(r, SlotRegister) else 1), r.index)
-        ):
-            if reg not in block.types:
-                print(colored(f"  {reg} -> unreachable / never evaluated", "red"))
-                continue
-            types = block.types[reg]
-            if types is ANY_TYPE:
-                print(colored(f"  {reg} -> *", "grey"))
-            else:
-                print(colored(f"  {reg} -> " + ", ".join(str(t) for t in types), "grey"))
+        if block.types:
+            print(colored("register types:", "grey"))
+            referenced_regs = set().union(*[regs_referenced_by_basic_ir_op(op) for op in block.ops])
+            for reg in sorted(
+                referenced_regs, key=lambda r: ((0 if isinstance(r, SlotRegister) else 1), r.index)
+            ):
+                if reg not in block.types:
+                    print(colored(f"  {reg} -> unreachable / never evaluated", "red"))
+                    continue
+                types = block.types[reg]
+                if types is ANY_TYPE:
+                    print(colored(f"  {reg} -> *", "grey"))
+                else:
+                    print(colored(f"  {reg} -> " + ", ".join(str(t) for t in types), "grey"))
         for i, op in enumerate(block.ops):
             print_op(i, op, depth=0)
         print(
