@@ -791,6 +791,8 @@ class Compiler:
                 optimize_cfg("simplifying control flow graph", self.simplify_control_flow_graph)
                 optimize_cfg("eliminating unreachable code", self.cfg_eliminate_unreachable_code)
                 optimize_cfg("inferring types", self.cfg_infer_types)
+                print_basic_blocks(self.basic_blocks)
+                optimize_cfg("simplifying multimethod dispatches", self.cfg_simplify_dispatches)
                 # This includes:
                 # * applying type knowledge to simplify multimethod dispatches
                 # * deleting UnreachableOp instances (and the registers they "write" to)
@@ -2318,6 +2320,10 @@ class Compiler:
             #     else:
             #         print(f"{reg} -> " + ", ".join(str(t) for t in types))
 
+    def cfg_simplify_dispatches(self) -> bool:
+
+        return False
+
     def compile_to_low_level_bytecode(self) -> None:
         raise NotImplementedError()
 
@@ -2529,6 +2535,42 @@ def print_ir_block(block: TreeIRBlock, depth: int = 0):
         print_op(i, op, depth)
 
 
+def regs_referenced_by_basic_ir_op(op: IROp) -> set[Register]:
+    # dst-set
+    ds = set([op.dst] if op.dst else [])
+
+    if isinstance(op, UnreachableOp):
+        return ds
+    elif isinstance(op, ReturnOp):
+        return set([op.value])
+    elif isinstance(op, CopyOp):
+        return ds | set([op.src])
+    elif isinstance(op, LiteralOp):
+        return ds
+    elif isinstance(op, BaseInvokeOp):
+        return ds | set(op.call_args)
+    elif isinstance(op, ClosureOp):
+        return ds
+    elif isinstance(op, SlotLookupOp):
+        return ds
+    elif isinstance(op, VectorOp):
+        return ds | set(op.components)
+    elif isinstance(op, TupleOp):
+        return ds | set(op.components)
+    elif isinstance(op, SignalOp):
+        return ds | set(op.signal_args)
+    elif isinstance(op, BasicBlockJumpOp):
+        return set()
+    elif isinstance(op, BasicBlockPhiOp):
+        return ds | set([reg for reg, _ in op.srcs])
+    elif isinstance(op, BasicBlockMultimethodDispatchOp):
+        return set(op.dispatch_args)
+    elif isinstance(op, BasicBlockIfElseOp):
+        return set([op.condition])
+    else:
+        raise AssertionError(f"forgot an IROp: {type(op)}")
+
+
 def print_basic_blocks(blocks: list[BasicIRBlock]):
     for block in sorted(blocks, key=lambda b: b.id):
         print(
@@ -2548,6 +2590,19 @@ def print_basic_blocks(blocks: list[BasicIRBlock]):
                 "grey",
             )
         )
+        print(colored("register types:", "grey"))
+        referenced_regs = set().union(*[regs_referenced_by_basic_ir_op(op) for op in block.ops])
+        for reg in sorted(
+            referenced_regs, key=lambda r: ((0 if isinstance(r, SlotRegister) else 1), r.index)
+        ):
+            if reg not in block.types:
+                print(colored(f"  {reg} -> unreachable / never evaluated", "red"))
+                continue
+            types = block.types[reg]
+            if types is ANY_TYPE:
+                print(colored(f"  {reg} -> *", "grey"))
+            else:
+                print(colored(f"  {reg} -> " + ", ".join(str(t) for t in types), "grey"))
         for i, op in enumerate(block.ops):
             print_op(i, op, depth=0)
         print(
