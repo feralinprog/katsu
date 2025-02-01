@@ -413,7 +413,7 @@ class BasicIRBlock:
     # what types it may have, and must not use it for typing judgements yet.
     # Note that this implies a _subtyping_ relationship: the value is a subtype of any of these
     # provided types.
-    types: dict[Register, Types]
+    types: Optional[dict[Register, Types]]
 
     def __repr__(self):
         return f"BasicIRBlock(id={self.id})"
@@ -569,7 +569,7 @@ class Compiler:
             incoming=set(),
             outgoing=set(),
             dominators=set(),
-            types={},
+            types=None,
         )
         self.basic_blocks.append(block)
         self.num_basic_blocks += 1
@@ -799,6 +799,8 @@ class Compiler:
                 # * replacing single-source phi nodes with copy ops
                 # TODO: optimize_cfg("eliminating dead code", self.cfg_eliminate_dead_code)
                 # TODO: optimize_cfg("propagating copies", self.cfg_propagate_copies)
+                for block in self.basic_blocks:
+                    block.types = None
 
             # print("compiling to low level bytecode:")
             # self.compile_to_low_level_bytecode()
