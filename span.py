@@ -41,6 +41,9 @@ class SourceSpan:
     def __str__(self):
         return f"<{self.file.source_path}> ({self.start} to {self.end})"
 
+    def __repr__(self):
+        return "<SourceSpan>"
+
 
 def combine_spans(*spans: list[SourceSpan]) -> SourceSpan:
     """Determine the minimal span containing each span in the input list."""
