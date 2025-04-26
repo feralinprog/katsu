@@ -1,15 +1,23 @@
 cmake_minimum_required(VERSION 3.15...4.0)
 
-project(Katsu VERSION 0.0
-              DESCRIPTION "Katsu Language"
-              LANGUAGES CXX)
+project(Katsu
+  VERSION 0.0
+  DESCRIPTION "Katsu Language"
+  LANGUAGES CXX
+)
 
+# Single library (libkatsudon.a) available for static linking
+# for both a main executable and tests.
+add_library(katsudon STATIC
+  src/katsu.cc
+)
+target_include_directories(katsudon PUBLIC src/)
+
+# Main katsu executable.
 add_executable(katsu src/main.cc)
 target_link_libraries(katsu PUBLIC katsudon)
 
-add_library(katsudon STATIC src/katsu.cc)
-target_include_directories(katsudon PUBLIC src/)
-
+# Unit tests, using the Catch2 framework.
 Include(FetchContent)
 
 FetchContent_Declare(
@@ -20,6 +28,11 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(Catch2)
 
-add_executable(test src/katsu_test.cc)
-target_link_libraries(test PRIVATE Catch2::Catch2WithMain)
-target_link_libraries(test PRIVATE katsudon)
+# Unit tests.
+add_executable(test
+  src/katsu_test.cc
+)
+target_link_libraries(test PRIVATE
+  Catch2::Catch2WithMain
+  katsudon
+)
