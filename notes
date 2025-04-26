@@ -1,0 +1,132 @@
+basic syntax ideas:
+
+operators / calls:
+
+    if: x < 5 then: {
+        print: x
+    } else: {
+        print: (x to-string + " >= 5")
+    }
+
+    desugared to something like:
+
+    current-context if:then:else: (
+        (current-context x) < 5,
+        { current-context print: (current-context x) },
+        { current-context print: (((current-context x) to-string) +(">= 5"))
+    )
+
+blocks:
+
+    #[1, 2, 3] each: :x {
+        print: x
+    }
+
+    #[1, 2, 3] each-with-index: $i $x {
+        print: f"element {i} is {x}"
+    }
+
+    equivalently (just syntax, though):
+
+    #[1, 2, 3] each: do :x
+        print: x
+    end
+    #[1, 2, 3] each-with-index: do $i $x
+        print: f"element {i} is {x}"
+    end
+
+    note the "#" indicating macro syntax...
+        this passes some AST representation of "1, 2, 3" to some registered #[] function
+    likewise f"" (which should generalize to e.g. f[], or even just <prefix><begin-delimeter><contents><end-delimeter>)
+        this passes some representation of ["element ", " is ", ""], along with <i> and <x>, to some registered formatter function
+    or maybe this can be generally <prefix><delim><contents><delim>, where if delim is quotes then parse into blocks of strings / contents,
+        and otherwise just parse entire contents as (expected to be) valid syntax
+
+    #[1, 2, 3] each: :x do {
+
+    }
+
+define methods:
+
+    method: #{ { :factorial :n } } does. (
+        if: n == 0 then: {
+            1
+        } else: {
+            n * factorial: n - 1
+        }
+    )
+
+    note the "." (instead of ":") indicating macro syntax, too. pass the AST instead of evaluating, for this particular argument.
+    also #{ ... } is a dict (like python -- ordered by insertion)
+    and :<name> are symbols
+
+    maybe a better way? if method:does: also expects first arg to be an AST representation instead of an actual dict...
+
+    method. (factorial: n) does. (
+        ...
+    )
+
+variables:
+
+    method: (sum: a and: b and: c) does. (
+        mut. x
+        x .= a + b
+        # equiv: :x = a + b (which is desugared to invoking =: with args :x, a+b)
+        let. y =: x + c
+        # equiv: let: :y =: x + c
+        c
+    )
+    print: (sum: 1 and: 2 and: 3)
+
+
+overall syntax:
+    expr:
+        <expr> <binary-op> <expr>               binary operation (desugared to <binary-op>: <expr> and: <expr>)
+        <unary-op> <expr>                       unary operation (desugared to <unary-op>: <expr>)
+        [<expr>] <name>                         unary message send (default target is the current context)
+        [<expr>] name: <expr> ...               n-ary message send (also, can use '.' instead of ':') (default target is the current context)
+        (<expr> ...)                            establish precedence; group multiple expressions
+        $<name> ... { <expr> ... }              block (... or maybe just do :symbol ..., and distinguish from actual symbols by presence of {})
+        :<symbol>                               symbol literal (symbol = name, but also allows : in order to represent all message names)
+        <number>                                number literal
+
+evaluation model:
+    message sending will:
+        take the message name (symbol) and receiver+args (an array)
+        look up message name in current context (falling back to linked contexts, until you hit global context)
+        invoke result with receiver+args along with information about current-context
+    ... ok so it's not really message sending
+    "context" is pretty much a prototype-based object, but only for message handlers
+
+continuations and error handling:
+* implement call/cc? maybe, not sure if required
+  - maybe just delimited continuations? and implement fibers separately
+  - or maybe just don't do either! that would be easier.
+* error handling:
+  * scheme dynamic-unwind?
+  * would like to support signaling conditions and handling with handlers (and restarts, which can be built in-language)
+    - though this seems like it requires some form of dynamic-unwind (if implementing try/catch via continuation-in-handler)
+      or otherwise a simple upward unwind (if using something like return-from which is guaranteed to only go away from
+      top-of-stack)
+    - maybe best option is to have primitives:
+      * unwind-protect (quote to call, and quote to run no matter what while unwinding stack frames)
+      * call/cc but the continuation is only valid in dynamic scope of the called quote (i.e. can only return to call/cc site)
+      * and finally, hard-code calling handle-signal: method on any exception
+
+call frame structure:
+* has code, current spot
+* has 
+
+TODO:
+* coroutines / fibers
+* literal data structure syntax?
+  * %{ { key; value}; { key; value } ... }
+* modules?
+  * should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)
+* allow force-inlining at call site?
+* method:does: should allow marking arguments optional (-> just generate all combos)
+* allow for docs everywhere!
+* macros / annotations / hook in to parser for custom syntax?
+  * tail-call
+  * 'let' syntax
+  * replace @ret [...] with [...] call/rc w/ slot added so return: uses the return-continuation

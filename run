@@ -1,0 +1,39 @@
+#!/bin/bash
+
+set -e
+
+build ()
+{
+    echo "================== BUILDING =================="
+    cmake -S . -B out
+    cmake --build out
+}
+
+test ()
+{
+    echo "================== TESTING =================="
+    out/test $@
+}
+
+katsu ()
+{
+    echo "================== RUNNING =================="
+    out/katsu $@
+}
+
+if [ $# -eq 0 ]; then
+    build
+    test
+    katsu
+    exit 0
+fi
+
+case "$1" in
+    b|build)        shift; build ;;
+    t|test)         shift; build; test $@ ;;
+    k|katsu|r|run)  shift; build; katsu $@ ;;
+    "")                    build; katsu ;;
+    *)
+        echo "not sure what to do with '$1'" >&2
+        exit 1 ;;
+esac
