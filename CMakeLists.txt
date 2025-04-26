@@ -5,9 +5,10 @@ project(Katsu VERSION 0.0
               LANGUAGES CXX)
 
 add_executable(katsu src/main.cc)
-target_link_libraries(katsu PUBLIC libkatsu)
+target_link_libraries(katsu PUBLIC katsudon)
 
-add_library(libkatsu STATIC src/katsu.cc src/katsu.h)
+add_library(katsudon STATIC src/katsu.cc)
+target_include_directories(katsudon PUBLIC src/)
 
 Include(FetchContent)
 
@@ -21,4 +22,4 @@ FetchContent_MakeAvailable(Catch2)
 
 add_executable(test src/katsu_test.cc)
 target_link_libraries(test PRIVATE Catch2::Catch2WithMain)
-target_link_libraries(test PRIVATE libkatsu)
+target_link_libraries(test PRIVATE katsudon)
