@@ -10,6 +10,7 @@ project(Katsu
 # for both a main executable and tests.
 add_library(katsudon STATIC
   src/katsu.cc
+  src/lexer.cc
 )
 target_include_directories(katsudon PUBLIC src/)
 
