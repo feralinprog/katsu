@@ -2,6 +2,12 @@
 
 set -e
 
+format ()
+{
+    echo "================== FORMATTING =================="
+    clang-format -i $(find src/ -name "*.cc" -or -name "*.h")
+}
+
 build ()
 {
     echo "================== BUILDING =================="
@@ -29,6 +35,7 @@ if [ $# -eq 0 ]; then
 fi
 
 case "$1" in
+    f|format)       shift; format ;;
     b|build)        shift; build ;;
     t|test)         shift; build; test $@ ;;
     k|katsu|r|run)  shift; build; katsu $@ ;;

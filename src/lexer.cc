@@ -1,7 +1,7 @@
 #include "lexer.h"
 
-#include <stdexcept>
 #include <cctype>
+#include <stdexcept>
 #include <string>
 
 namespace Katsu
@@ -46,25 +46,24 @@ namespace Katsu
         }
 
         if (this->eof()) {
-            return Token {
-                .span = SourceSpan { .file = this->source, .start = this->loc, .end = this->loc },
+            return Token{
+                .span = SourceSpan{.file = this->source, .start = this->loc, .end = this->loc},
                 .type = TokenType::END,
-                .value = std::monostate{},
+                .value = std::monostate(),
             };
         }
 
         SourceLocation start = this->loc;
-        const auto make_token = [this, &start](TokenType type, TokenValue value = std::monostate{}) {
-            return Token {
-                .span = { .file = this->source, .start = start, .end = this->loc },
+        const auto make_token = [this, &start](TokenType type,
+                                               TokenValue value = std::monostate{}) {
+            return Token{
+                .span = {.file = this->source, .start = start, .end = this->loc},
                 .type = type,
                 .value = value,
             };
         };
 
-        const auto is_whitespace = [](char c) {
-            return c == ' ' || c == '\t' || c == '\r';
-        };
+        const auto is_whitespace = [](char c) { return c == ' ' || c == '\t' || c == '\r'; };
 
         char c = this->get();
         switch (c) {
@@ -108,16 +107,15 @@ namespace Katsu
                 // We need to collect the lexeme and then see what kind of token it is.
 
                 const auto is_word_char = [](char c) {
-                    return !(c == ';' || c == '\n' || c == ' ' || c == '\t' || c == '\r'
-                        || c == '(' || c == ')' || c == '{' || c == '}' || c == '['
-                        || c == ']' || c == '"' || c == ',');
+                    return !(c == ';' || c == '\n' || c == ' ' || c == '\t' || c == '\r' ||
+                             c == '(' || c == ')' || c == '{' || c == '}' || c == '[' || c == ']' ||
+                             c == '"' || c == ',');
                 };
                 const auto is_op_char = [](char c) {
-                    return c == '`' || c == '~' || c == '!' || c == '@' || c == '#'
-                        || c == '$' || c == '%' || c == '^' || c == '&' || c == '*'
-                        || c == '-' || c == '+' || c == '=' || c == '\\' || c == '|'
-                        || c == '"' || c == '\'' || c == ',' || c == '<' || c == '.'
-                        || c == '>' || c == '/' || c == '?';
+                    return c == '`' || c == '~' || c == '!' || c == '@' || c == '#' || c == '$' ||
+                           c == '%' || c == '^' || c == '&' || c == '*' || c == '-' || c == '+' ||
+                           c == '=' || c == '\\' || c == '|' || c == '"' || c == '\'' || c == ',' ||
+                           c == '<' || c == '.' || c == '>' || c == '/' || c == '?';
                 };
 
                 // Collect word characters.
@@ -140,8 +138,7 @@ namespace Katsu
                 }
 
                 // Symbols / messages:
-                if (word.find(':') != std::string::npos)
-                {
+                if (word.find(':') != std::string::npos) {
                     if (word == ":") {
                         return make_token(TokenType::ERROR);
                     }
@@ -244,8 +241,8 @@ namespace Katsu
                 this->lookahead.push_back(this->lexer.next());
             }
             while (this->lookahead[1].type == TokenType::WHITESPACE ||
-                this->lookahead[1].type == TokenType::COMMENT ||
-                this->lookahead[1].type == TokenType::NEWLINE) {
+                   this->lookahead[1].type == TokenType::COMMENT ||
+                   this->lookahead[1].type == TokenType::NEWLINE) {
                 this->lookahead[1] = this->lexer.next();
             }
         }

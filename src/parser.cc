@@ -14,10 +14,8 @@ namespace Katsu
     // int depth = 0;
     // bool should_log = false;
 
-    std::unique_ptr<Expr> PrattParser::parse(
-        TokenStream& stream,
-        int precedence,
-        bool is_toplevel) const
+    std::unique_ptr<Expr> PrattParser::parse(TokenStream& stream, int precedence,
+                                             bool is_toplevel) const
     {
         // depth += 1;
         Token token = stream.consume();
@@ -25,7 +23,8 @@ namespace Katsu
             token = stream.consume();
         }
         if (token.type == TokenType::END) {
-            throw std::runtime_error("parse() requires there to be a remaining token that is not NEWLINE or EOF");
+            throw std::runtime_error(
+                "parse() requires there to be a remaining token that is not NEWLINE or EOF");
         }
 
         const auto& prefix_it = this->prefix_parselets.find(token.type);
@@ -41,14 +40,16 @@ namespace Katsu
         //     for (int i = 0; i < depth - 1; i++) {
         //         std::cout << "| ";
         //     }
-        //     std::cout << "parsing prefix " << token.type << ", prec=" << precedence << ", token=" << token << "\n";
+        //     std::cout << "parsing prefix " << token.type << ", prec=" << precedence << ", token="
+        //               << token << "\n";
         // }
         std::unique_ptr<Expr> expr = prefix.parse(stream, *this, token);
 
         const auto active_precedence = [this](Token token) {
             const auto& infix_it = this->infix_parselets.find(token.type);
             if (infix_it == this->infix_parselets.end()) {
-                // TODO: throw a parse error? No infix parselets available to determine precedence for {token}
+                // TODO: throw a parse error? No infix parselets available to determine precedence
+                // for {token}
                 return 0;
             }
             InfixParselet& infix = infix_it->second;
@@ -57,17 +58,16 @@ namespace Katsu
         };
 
         while (active_precedence(stream.peek()) > precedence &&
-            (!is_toplevel || (
-                !stream.current_has_type(TokenType::SEMICOLON) &&
-                !stream.current_has_type(TokenType::NEWLINE)))
-        ) {
+               (!is_toplevel || (!stream.current_has_type(TokenType::SEMICOLON) &&
+                                 !stream.current_has_type(TokenType::NEWLINE)))) {
             token = stream.consume();
             // if (should_log)
             // {
             //     for (int i = 0; i < depth - 1; i++) {
             //         std::cout << "| ";
             //     }
-            //     std::cout << "got infix token " << token.type << ", prec=" << precedence << ", token=" << token << "\n";
+            //     std::cout << "got infix token " << token.type << ", prec=" << precedence
+            //               << ", token=" << token << "\n";
             // }
             if (token.type == TokenType::END) {
                 throw parse_error("Unexpected EOF.", token.span);
@@ -94,7 +94,9 @@ namespace Katsu
         //     for (int i = 0; i < depth - 1; i++) {
         //         std::cout << "| ";
         //     }
-        //     std::cout << "finished parsing at prec=" << precedence << " since next token " << stream.peek() << " has active_prec=" << active_precedence(stream.peek()) << "\n";
+        //     std::cout << "finished parsing at prec=" << precedence << " since next token "
+        //               << stream.peek() << " has active_prec=" << active_precedence(stream.peek())
+        //               << "\n";
         // }
 
         // depth -= 1;
@@ -150,26 +152,22 @@ namespace Katsu
     class OperatorPrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
-            std::unique_ptr<Expr> right = parser.parse(stream, static_cast<int>(Precedence::PREFIX));
-            return std::make_unique<UnaryOpExpr>(
-                SourceSpan::combine({token.span, right->span}),
-                token, std::move(right)
-            );
+            std::unique_ptr<Expr> right =
+                parser.parse(stream, static_cast<int>(Precedence::PREFIX));
+            return std::make_unique<UnaryOpExpr>(SourceSpan::combine({token.span, right->span}),
+                                                 token,
+                                                 std::move(right));
         }
     };
 
     class MessagePrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             std::vector<Token> messages{};
             std::vector<std::unique_ptr<Expr>> args{};
@@ -178,7 +176,8 @@ namespace Katsu
             args.push_back(parser.parse(stream, static_cast<int>(Precedence::N_ARY_MESSAGE) + 1));
             while (stream.current_has_type(TokenType::MESSAGE)) {
                 messages.push_back(stream.consume());
-                args.push_back(parser.parse(stream, static_cast<int>(Precedence::N_ARY_MESSAGE) + 1));
+                args.push_back(
+                    parser.parse(stream, static_cast<int>(Precedence::N_ARY_MESSAGE) + 1));
             }
 
             std::vector<SourceSpan> spans{};
@@ -189,39 +188,32 @@ namespace Katsu
                 spans.push_back(arg->span);
             }
 
-            return std::make_unique<NAryMessageExpr>(
-                SourceSpan::combine(spans),
-                std::nullopt /* target */,
-                messages,
-                std::move(args)
-            );
+            return std::make_unique<NAryMessageExpr>(SourceSpan::combine(spans),
+                                                     std::nullopt /* target */,
+                                                     messages,
+                                                     std::move(args));
         }
     };
 
     class LParenPrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             std::unique_ptr<Expr> inner = parser.parse(stream, 0 /* precedence */);
             Token rparen = expect(stream, TokenType::RPAREN);
             return std::make_unique<ParenExpr>(
                 SourceSpan::combine({token.span, inner->span, rparen.span}),
-                std::move(inner)
-            );
+                std::move(inner));
         }
     };
 
     class LSquarePrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             std::unique_ptr<Expr> body = parser.parse(stream, 0 /* precedence */);
             Token rsquare = expect(stream, TokenType::RSQUARE);
@@ -229,8 +221,7 @@ namespace Katsu
             return std::make_unique<QuoteExpr>(
                 SourceSpan::combine({token.span, body->span, rsquare.span}),
                 parameters,
-                std::move(body)
-            );
+                std::move(body));
             // body = parser.parse(stream, precedence=0)
             // rparen = stream.consume(TokenType.RSQUARE)
             // return QuoteExpr(
@@ -242,18 +233,14 @@ namespace Katsu
     class LCurlyPrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             if (stream.current_has_type(TokenType::RCURLY)) {
                 Token rcurly = stream.consume();
                 std::vector<std::unique_ptr<Expr>> components{};
-                return std::make_unique<DataExpr>(
-                    SourceSpan::combine({token.span, rcurly.span}),
-                    std::move(components)
-                );
+                return std::make_unique<DataExpr>(SourceSpan::combine({token.span, rcurly.span}),
+                                                  std::move(components));
             }
 
             std::vector<std::unique_ptr<Expr>> components{};
@@ -275,18 +262,15 @@ namespace Katsu
             }
             return std::make_unique<DataExpr>(
                 SourceSpan::combine({token.span, inner_span, rcurly.span}),
-                std::move(components)
-            );
+                std::move(components));
         }
     };
 
     class NamePrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             return std::make_unique<NameExpr>(token.span, token);
         }
@@ -295,18 +279,14 @@ namespace Katsu
     class QuotePrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             std::vector<std::string> parameters{};
             return std::make_unique<QuoteExpr>(
                 token.span,
                 parameters,
-                std::make_unique<NameExpr>(
-                    token.span, token
-                ) /* body */
+                std::make_unique<NameExpr>(token.span, token) /* body */
             );
         }
     };
@@ -314,10 +294,8 @@ namespace Katsu
     class BackslashPrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             std::vector<Token> param_tokens{};
             std::vector<std::string> parameters{};
@@ -339,20 +317,17 @@ namespace Katsu
             spans.push_back(body->span);
             spans.push_back(rsquare.span);
 
-            return std::make_unique<QuoteExpr>(
-                SourceSpan::combine(spans),
-                parameters, std::move(body)
-            );
+            return std::make_unique<QuoteExpr>(SourceSpan::combine(spans),
+                                               parameters,
+                                               std::move(body));
         }
     };
 
     class LiteralPrefixParselet : public PrefixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    const Token& token) override
         {
             return std::make_unique<LiteralExpr>(token.span, token);
         }
@@ -361,16 +336,12 @@ namespace Katsu
     class NameInfixParselet : public InfixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            std::unique_ptr<Expr> left,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    std::unique_ptr<Expr> left, const Token& token) override
         {
-            return std::make_unique<UnaryMessageExpr>(
-                SourceSpan::combine({left->span, token.span}),
-                std::move(left) /* target */,
-                token /* message */
+            return std::make_unique<UnaryMessageExpr>(SourceSpan::combine({left->span, token.span}),
+                                                      std::move(left) /* target */,
+                                                      token /* message */
             );
         }
 
@@ -383,18 +354,16 @@ namespace Katsu
     class MessageInfixParselet : public InfixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            std::unique_ptr<Expr> left,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    std::unique_ptr<Expr> left, const Token& token) override
         {
             std::vector<Token> messages{token};
             std::vector<std::unique_ptr<Expr>> args{};
             args.push_back(parser.parse(stream, static_cast<int>(Precedence::N_ARY_MESSAGE) + 1));
             while (stream.current_has_type(TokenType::MESSAGE)) {
                 messages.push_back(stream.consume());
-                args.push_back(parser.parse(stream, static_cast<int>(Precedence::N_ARY_MESSAGE) + 1));
+                args.push_back(
+                    parser.parse(stream, static_cast<int>(Precedence::N_ARY_MESSAGE) + 1));
             }
 
             std::vector<SourceSpan> spans{};
@@ -406,12 +375,10 @@ namespace Katsu
                 spans.push_back(arg->span);
             }
 
-            return std::make_unique<NAryMessageExpr>(
-                SourceSpan::combine(spans),
-                std::move(left) /* target */,
-                messages,
-                std::move(args)
-            );
+            return std::make_unique<NAryMessageExpr>(SourceSpan::combine(spans),
+                                                     std::move(left) /* target */,
+                                                     messages,
+                                                     std::move(args));
         }
 
         int precedence(const Token& token) override
@@ -423,30 +390,31 @@ namespace Katsu
     class SequencingInfixParselet : public InfixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            std::unique_ptr<Expr> left,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    std::unique_ptr<Expr> left, const Token& token) override
         {
             std::vector<std::unique_ptr<Expr>> sequence{};
-            SourceSpan left_span = left->span; // We're moving `left` into `sequence`, so take a picture.
+            // We're moving `left` into `sequence`, so take a picture.
+            SourceSpan left_span = left->span;
             sequence.push_back(std::move(left));
 
             std::vector<Token> separators{token};
 
             const auto parse_next_expr_or_trailing_semicolon = [&stream, &parser, &sequence]() {
-                // Hack: allow trailing semicolon. Check for a following token that cannot be a prefix.
+                // Hack: allow trailing semicolon. Check for a following token that cannot be a
+                // prefix.
                 Token token = stream.peek();
                 if (token.type == TokenType::RPAREN || token.type == TokenType::RCURLY ||
                     token.type == TokenType::RSQUARE || token.type == TokenType::END) {
                     return;
                 }
-                sequence.push_back(parser.parse(stream, static_cast<int>(Precedence::SEQUENCING) + 1));
+                sequence.push_back(
+                    parser.parse(stream, static_cast<int>(Precedence::SEQUENCING) + 1));
             };
 
             parse_next_expr_or_trailing_semicolon();
-            while (stream.current_has_type(TokenType::SEMICOLON) || stream.current_has_type(TokenType::NEWLINE)) {
+            while (stream.current_has_type(TokenType::SEMICOLON) ||
+                   stream.current_has_type(TokenType::NEWLINE)) {
                 separators.push_back(stream.consume());
                 parse_next_expr_or_trailing_semicolon();
             }
@@ -460,10 +428,7 @@ namespace Katsu
                 spans.push_back(sep.span);
             }
 
-            return std::make_unique<SequenceExpr>(
-                SourceSpan::combine(spans),
-                std::move(sequence)
-            );
+            return std::make_unique<SequenceExpr>(SourceSpan::combine(spans), std::move(sequence));
         }
 
         int precedence(const Token& token) override
@@ -475,11 +440,8 @@ namespace Katsu
     class OperatorInfixParselet : public InfixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            std::unique_ptr<Expr> left,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    std::unique_ptr<Expr> left, const Token& token) override
         {
             if (token.type != TokenType::OPERATOR) {
                 throw std::runtime_error("wrong token type");
@@ -488,30 +450,31 @@ namespace Katsu
             const auto& prec_it = this->infix_precedence.find(std::get<std::string>(token.value));
             if (prec_it == this->infix_precedence.end()) {
                 std::stringstream ss;
-                ss << "Missing infix precedence for operator '" << std::get<std::string>(token.value) << ".";
+                ss << "Missing infix precedence for operator '"
+                   << std::get<std::string>(token.value) << ".";
                 throw parse_error(ss.str(), token.span);
             }
 
-            const auto& assoc_it = this->infix_associativity.find(std::get<std::string>(token.value));
+            const auto& assoc_it =
+                this->infix_associativity.find(std::get<std::string>(token.value));
             if (assoc_it == this->infix_associativity.end()) {
                 std::stringstream ss;
-                ss << "Missing infix associativity for operator '" << std::get<std::string>(token.value) << ".";
+                ss << "Missing infix associativity for operator '"
+                   << std::get<std::string>(token.value) << ".";
                 throw parse_error(ss.str(), token.span);
             }
 
             int op_prec = static_cast<int>(prec_it->second);
             Associativity op_assoc = assoc_it->second;
 
-            std::unique_ptr<Expr> right = parser.parse(stream,
-                op_assoc == Associativity::LEFT ? op_prec : (op_prec - 1)
-            );
+            std::unique_ptr<Expr> right =
+                parser.parse(stream, op_assoc == Associativity::LEFT ? op_prec : (op_prec - 1));
 
             return std::make_unique<BinaryOpExpr>(
                 SourceSpan::combine({left->span, token.span, right->span}),
                 token /* op */,
                 std::move(left),
-                std::move(right)
-            );
+                std::move(right));
         }
 
         int precedence(const Token& token) override
@@ -523,7 +486,8 @@ namespace Katsu
             const auto& prec_it = this->infix_precedence.find(std::get<std::string>(token.value));
             if (prec_it == this->infix_precedence.end()) {
                 std::stringstream ss;
-                ss << "Missing infix precedence for operator '" << std::get<std::string>(token.value) << ".";
+                ss << "Missing infix precedence for operator '"
+                   << std::get<std::string>(token.value) << ".";
                 throw parse_error(ss.str(), token.span);
             }
 
@@ -538,51 +502,49 @@ namespace Katsu
         };
 
         std::unordered_map<std::string, Precedence> infix_precedence{
-            { "=",      Precedence::ASSIGNMENT },
-            { "~",      Precedence::CONCATENATION },
-            { "and",    Precedence::AND },
-            { "or",     Precedence::OR },
-            { "==",     Precedence::COMPARISON },
-            { "!=",     Precedence::COMPARISON },
-            { "<",      Precedence::COMPARISON },
-            { "<=",     Precedence::COMPARISON },
-            { ">",      Precedence::COMPARISON },
-            { ">=",     Precedence::COMPARISON },
-            { "+",      Precedence::SUM_DIFFERENCE },
-            { "-",      Precedence::SUM_DIFFERENCE },
-            { "*",      Precedence::PRODUCT },
-            { "/",      Precedence::DIVISION },
+            {"=",   Precedence::ASSIGNMENT    },
+            {"~",   Precedence::CONCATENATION },
+            {"and", Precedence::AND           },
+            {"or",  Precedence::OR            },
+            {"==",  Precedence::COMPARISON    },
+            {"!=",  Precedence::COMPARISON    },
+            {"<",   Precedence::COMPARISON    },
+            {"<=",  Precedence::COMPARISON    },
+            {">",   Precedence::COMPARISON    },
+            {">=",  Precedence::COMPARISON    },
+            {"+",   Precedence::SUM_DIFFERENCE},
+            {"-",   Precedence::SUM_DIFFERENCE},
+            {"*",   Precedence::PRODUCT       },
+            {"/",   Precedence::DIVISION      },
         };
 
         std::unordered_map<std::string, Associativity> infix_associativity{
-            { "=",      Associativity::RIGHT },
-            { "~",      Associativity::LEFT },
-            { "and",    Associativity::LEFT },
-            { "or",     Associativity::LEFT },
-            { "==",     Associativity::LEFT },
-            { "!=",     Associativity::LEFT },
-            { "<",      Associativity::LEFT },
-            { "<=",     Associativity::LEFT },
-            { ">",      Associativity::LEFT },
-            { ">=",     Associativity::LEFT },
-            { "+",      Associativity::LEFT },
-            { "-",      Associativity::LEFT },
-            { "*",      Associativity::LEFT },
-            { "/",      Associativity::LEFT },
+            {"=",   Associativity::RIGHT},
+            {"~",   Associativity::LEFT },
+            {"and", Associativity::LEFT },
+            {"or",  Associativity::LEFT },
+            {"==",  Associativity::LEFT },
+            {"!=",  Associativity::LEFT },
+            {"<",   Associativity::LEFT },
+            {"<=",  Associativity::LEFT },
+            {">",   Associativity::LEFT },
+            {">=",  Associativity::LEFT },
+            {"+",   Associativity::LEFT },
+            {"-",   Associativity::LEFT },
+            {"*",   Associativity::LEFT },
+            {"/",   Associativity::LEFT },
         };
     };
 
     class CommaInfixParselet : public InfixParselet
     {
     public:
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            std::unique_ptr<Expr> left,
-            const Token& token) override
+        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                    std::unique_ptr<Expr> left, const Token& token) override
         {
             std::vector<std::unique_ptr<Expr>> components{};
-            SourceSpan left_span = left->span; // We're moving `left` into `components`, so take a picture.
+            // We're moving `left` into `components`, so take a picture.
+            SourceSpan left_span = left->span;
             components.push_back(std::move(left));
 
             std::vector<Token> separators{token};
@@ -612,10 +574,8 @@ namespace Katsu
                 spans.push_back(sep.span);
             }
 
-            return std::make_unique<SequenceExpr>(
-                SourceSpan::combine(spans),
-                std::move(components)
-            );
+            return std::make_unique<SequenceExpr>(SourceSpan::combine(spans),
+                                                  std::move(components));
         }
 
         int precedence(const Token& token) override

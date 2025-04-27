@@ -3,8 +3,8 @@
 #include <map>
 #include <stdexcept>
 
-#include "lexer.h"
 #include "ast.h"
+#include "lexer.h"
 
 namespace Katsu
 {
@@ -24,20 +24,15 @@ namespace Katsu
     class PrefixParselet
     {
     public:
-        virtual std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            const Token& token) = 0;
+        virtual std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                            const Token& token) = 0;
     };
 
     class InfixParselet
     {
     public:
-        virtual std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            const PrattParser& parser,
-            std::unique_ptr<Expr> left,
-            const Token& token) = 0;
+        virtual std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
+                                            std::unique_ptr<Expr> left, const Token& token) = 0;
 
         virtual int precedence(const Token& token) = 0;
     };
@@ -51,10 +46,8 @@ namespace Katsu
         {}
 
         // Precondition: stream still has a remaining token other than NEWLINE and END.
-        std::unique_ptr<Expr> parse(
-            TokenStream& stream,
-            int precedence = 0,
-            bool is_toplevel = false) const;
+        std::unique_ptr<Expr> parse(TokenStream& stream, int precedence = 0,
+                                    bool is_toplevel = false) const;
 
         void add_parselet(TokenType type, PrefixParselet& parselet);
         void add_parselet(TokenType type, InfixParselet& parselet);

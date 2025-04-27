@@ -9,7 +9,7 @@ void usage()
     std::cerr << "Usage: ./katsu <source.katsu>\n";
 }
 
-int main(int argc, char **argv)
+int main(int argc, char** argv)
 {
     if (argc != 2) {
         usage();
@@ -24,9 +24,9 @@ int main(int argc, char **argv)
     } catch (Katsu::parse_error e) {
         std::cerr << "Parse error: " << e.what() << "\n";
         std::cerr << "at "
-            << "<" << *e.span.file.path << "> ("
-            << e.span.start.line + 1 << ":" << e.span.start.column + 1 << " to "
-            << e.span.end.line + 1 << ":" << e.span.end.column + 1 << ")\n";
+                  << "<" << *e.span.file.path << "> (" << e.span.start.line + 1 << ":"
+                  << e.span.start.column + 1 << " to " << e.span.end.line + 1 << ":"
+                  << e.span.end.column + 1 << ")\n";
     }
     return EXIT_SUCCESS;
 }

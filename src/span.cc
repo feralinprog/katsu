@@ -36,6 +36,6 @@ namespace Katsu
             }
         }
 
-        return SourceSpan { .file = file, .start = min, .end = max };
+        return SourceSpan{.file = file, .start = min, .end = max};
     }
 };

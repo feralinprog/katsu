@@ -11,7 +11,9 @@ namespace Katsu
     {
         SourceSpan span;
 
-        Expr(SourceSpan _span) : span(_span) {}
+        Expr(SourceSpan _span)
+            : span(_span)
+        {}
 
         // nullptr if no sequence components (default!).
         virtual std::vector<std::unique_ptr<Expr>>* sequence_components();
@@ -35,7 +37,8 @@ namespace Katsu
         std::unique_ptr<Expr> left;
         std::unique_ptr<Expr> right;
 
-        BinaryOpExpr(SourceSpan _span, Token _op, std::unique_ptr<Expr> _left, std::unique_ptr<Expr> _right)
+        BinaryOpExpr(SourceSpan _span, Token _op, std::unique_ptr<Expr> _left,
+                     std::unique_ptr<Expr> _right)
             : Expr(_span)
             , op(_op)
             , left(std::move(_left))
@@ -81,7 +84,8 @@ namespace Katsu
         std::vector<Token> messages;
         std::vector<std::unique_ptr<Expr>> args;
 
-        NAryMessageExpr(SourceSpan _span, std::optional<std::unique_ptr<Expr>> _target, std::vector<Token> _messages, std::vector<std::unique_ptr<Expr>> _args)
+        NAryMessageExpr(SourceSpan _span, std::optional<std::unique_ptr<Expr>> _target,
+                        std::vector<Token> _messages, std::vector<std::unique_ptr<Expr>> _args)
             : Expr(_span)
             , target(std::move(_target))
             , messages(_messages)
@@ -104,7 +108,8 @@ namespace Katsu
         std::vector<std::string> parameters;
         std::unique_ptr<Expr> body;
 
-        QuoteExpr(SourceSpan _span, std::vector<std::string> _parameters, std::unique_ptr<Expr> _body)
+        QuoteExpr(SourceSpan _span, std::vector<std::string> _parameters,
+                  std::unique_ptr<Expr> _body)
             : Expr(_span)
             , parameters(_parameters)
             , body(std::move(_body))
