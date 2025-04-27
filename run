@@ -21,6 +21,12 @@ test ()
     out/test $@
 }
 
+_valgrind ()
+{
+    echo "================== VALGRIND =================="
+    valgrind -s --leak-check=full --error-exitcode=2 out/katsu $@
+}
+
 katsu ()
 {
     echo "================== RUNNING =================="
@@ -30,6 +36,7 @@ katsu ()
 if [ $# -eq 0 ]; then
     build
     test
+    valgrind
     katsu
     exit 0
 fi
@@ -38,6 +45,7 @@ case "$1" in
     f|format)       shift; format ;;
     b|build)        shift; build ;;
     t|test)         shift; build; test $@ ;;
+    v|valgrind)     shift; build; _valgrind $@ ;;
     k|katsu|r|run)  shift; build; katsu $@ ;;
     "")                    build; katsu ;;
     *)
