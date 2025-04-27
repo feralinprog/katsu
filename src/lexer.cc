@@ -203,7 +203,9 @@ namespace Katsu
 
     Token TokenStream::peek()
     {
-        return this->condense().value_or(this->current.value());
+        this->condense();
+        // condense() should have ensured that there is a current token available.
+        return this->lookahead[0];
     }
 
     bool TokenStream::current_has_type(TokenType type)
@@ -213,46 +215,46 @@ namespace Katsu
 
     Token TokenStream::consume()
     {
-        std::optional<Token> maybe_newline = this->condense();
-        if (maybe_newline.has_value()) {
-            return *maybe_newline;
-        }
+        this->condense();
         // condense() should have ensured that there is a current token available.
-        Token token = this->current.value();
-        this->current = this->lexer.next();
+        Token token = this->lookahead[0];
+        this->lookahead.pop_front();
         return token;
     }
 
-    std::optional<Token> TokenStream::consume(TokenType expected_type)
-    {
-        Token token = this->consume();
-        if (token.type != expected_type) {
-            return std::nullopt;
-        }
-        return token;
-    }
-
-    std::optional<Token> TokenStream::condense()
+    void TokenStream::condense()
     {
         // Prime the pump, if needed.
-        if (!this->current.has_value()) {
-            this->current = this->lexer.next();
-        }
+        this->pump();
         // Skip whitespace / comment.
-        while (this->current->type == TokenType::WHITESPACE ||
-               this->current->type == TokenType::COMMENT) {
-            this->current = this->lexer.next();
+        while (this->lookahead[0].type == TokenType::WHITESPACE ||
+               this->lookahead[0].type == TokenType::COMMENT) {
+            this->lookahead.pop_front();
+            this->pump();
         }
         // Condense newlines.
-        if (this->current->type == TokenType::NEWLINE) {
-            Token initial_newline = *this->current;
-            while (this->current->type == TokenType::WHITESPACE ||
-                this->current->type == TokenType::COMMENT ||
-                this->current->type == TokenType::NEWLINE) {
-                this->current = this->lexer.next();
+        if (this->lookahead[0].type == TokenType::NEWLINE) {
+            // Keep this NEWLINE prefix, and skip following tokens until there's a
+            // non-whitespace-or-newline.
+            // TODO: really should just handle this as part of some internal state,
+            // without collecting further tokens. Should remember that the last
+            // token was a newline, and then _next_ time we peek / consume we should
+            // skip whitespace / comments / newlines.
+            if (this->lookahead.size() < 2) {
+                this->lookahead.push_back(this->lexer.next());
             }
-            return initial_newline;
+            while (this->lookahead[1].type == TokenType::WHITESPACE ||
+                this->lookahead[1].type == TokenType::COMMENT ||
+                this->lookahead[1].type == TokenType::NEWLINE) {
+                this->lookahead[1] = this->lexer.next();
+            }
         }
-        return std::nullopt;
+    }
+
+    void TokenStream::pump()
+    {
+        if (this->lookahead.empty()) {
+            this->lookahead.push_back(this->lexer.next());
+        }
     }
 };

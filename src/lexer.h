@@ -1,46 +1,13 @@
 #pragma once
 
+#include <deque>
 #include <optional>
-#include <variant>
 
 #include "span.h"
+#include "token.h"
 
 namespace Katsu
 {
-    enum class TokenType
-    {
-        END,        // end of source
-        ERROR,
-        SEMICOLON,
-        NEWLINE,
-        WHITESPACE,
-        COMMENT,
-        LPAREN,     // (
-        RPAREN,     // )
-        LCURLY,     // {
-        RCURLY,     // }
-        LSQUARE,    // [
-        RSQUARE,    // ]
-        COMMA,      // ,
-        NAME,       // same as operator, except operators have different character set
-        MESSAGE,    // <name/operator>: or <name/operator>.
-        SYMBOL,     // :<name/operator>
-        QUOTE,      // '<name>
-        BACKSLASH,  // \ (as stated on the tin)
-        OPERATOR,   // same as names, but limited character set
-        INTEGER,
-        STRING,
-    };
-
-    using TokenValue = std::variant<std::string, long long, std::monostate>;
-
-    struct Token
-    {
-        SourceSpan span;
-        TokenType type;
-        TokenValue value;
-    };
-
     class Lexer
     {
     public:
@@ -75,7 +42,7 @@ namespace Katsu
     public:
         TokenStream(Lexer& _lexer)
             : lexer(_lexer)
-            , current()
+            , lookahead{}
         {}
 
         Token peek();
@@ -83,18 +50,19 @@ namespace Katsu
         bool current_has_type(TokenType type);
 
         Token consume();
-        std::optional<Token> consume(TokenType expected_type);
 
     private:
         // Skip WHITESPACE / COMMENT tokens, and also condense multiple NEWLINE tokens
         // (after whitespace skipping) into a single one.
-        // Returns a single condensed NEWLINE token, if available; else std::nullopt.
-        std::optional<Token> condense();
+        void condense();
+
+        // Ensure there is at least one token in the lookahead.
+        void pump();
 
         // Token source.
         Lexer& lexer;
 
-        // Current token, or std::nullopt if the token pump has not been primed yet.
-        std::optional<Token> current;
+        // Queue of tokens we have available from the lexer.
+        std::deque<Token> lookahead;
     };
 };

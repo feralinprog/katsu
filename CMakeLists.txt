@@ -9,8 +9,12 @@ project(Katsu
 # Single library (libkatsudon.a) available for static linking
 # for both a main executable and tests.
 add_library(katsudon STATIC
-  src/katsu.cc
+  src/span.cc
+  src/token.cc
   src/lexer.cc
+  src/ast.cc
+  src/parser.cc
+  src/katsu.cc
 )
 target_include_directories(katsudon PUBLIC src/)
 
