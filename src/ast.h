@@ -7,6 +7,8 @@
 
 namespace Katsu
 {
+    class ExprVisitor;
+
     struct Expr
     {
         SourceSpan span;
@@ -14,6 +16,8 @@ namespace Katsu
         Expr(SourceSpan _span)
             : span(_span)
         {}
+
+        virtual void accept(ExprVisitor& visitor) = 0;
 
         // nullptr if no sequence components (default!).
         virtual std::vector<std::unique_ptr<Expr>>* sequence_components();
@@ -29,6 +33,8 @@ namespace Katsu
             , op(_op)
             , arg(std::move(_arg))
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct BinaryOpExpr : public Expr
@@ -44,6 +50,8 @@ namespace Katsu
             , left(std::move(_left))
             , right(std::move(_right))
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct NameExpr : public Expr
@@ -54,6 +62,8 @@ namespace Katsu
             : Expr(_span)
             , name(_name)
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct LiteralExpr : public Expr
@@ -64,6 +74,8 @@ namespace Katsu
             : Expr(_span)
             , literal(_literal)
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct UnaryMessageExpr : public Expr
@@ -76,6 +88,8 @@ namespace Katsu
             , target(std::move(_target))
             , message(_message)
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct NAryMessageExpr : public Expr
@@ -91,6 +105,8 @@ namespace Katsu
             , messages(_messages)
             , args(std::move(_args))
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct ParenExpr : public Expr
@@ -101,6 +117,8 @@ namespace Katsu
             : Expr(_span)
             , inner(std::move(_inner))
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct QuoteExpr : public Expr
@@ -114,6 +132,8 @@ namespace Katsu
             , parameters(_parameters)
             , body(std::move(_body))
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct DataExpr : public Expr
@@ -124,6 +144,8 @@ namespace Katsu
             : Expr(_span)
             , components(std::move(_components))
         {}
+
+        void accept(ExprVisitor& visitor) override;
     };
 
     struct SequenceExpr : public Expr
@@ -134,6 +156,8 @@ namespace Katsu
             : Expr(_span)
             , components(std::move(_components))
         {}
+
+        void accept(ExprVisitor& visitor) override;
 
         std::vector<std::unique_ptr<Expr>>* sequence_components() override;
     };
@@ -146,5 +170,23 @@ namespace Katsu
             : Expr(_span)
             , components(std::move(_components))
         {}
+
+        void accept(ExprVisitor& visitor) override;
+    };
+
+    class ExprVisitor
+    {
+    public:
+        virtual void visit(UnaryOpExpr& expr) = 0;
+        virtual void visit(BinaryOpExpr& expr) = 0;
+        virtual void visit(NameExpr& expr) = 0;
+        virtual void visit(LiteralExpr& expr) = 0;
+        virtual void visit(UnaryMessageExpr& expr) = 0;
+        virtual void visit(NAryMessageExpr& expr) = 0;
+        virtual void visit(ParenExpr& expr) = 0;
+        virtual void visit(QuoteExpr& expr) = 0;
+        virtual void visit(DataExpr& expr) = 0;
+        virtual void visit(SequenceExpr& expr) = 0;
+        virtual void visit(TupleExpr& expr) = 0;
     };
 };
