@@ -36,7 +36,7 @@ katsu ()
 if [ $# -eq 0 ]; then
     build
     test
-    valgrind
+    _valgrind
     katsu
     exit 0
 fi
