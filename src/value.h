@@ -7,17 +7,22 @@ namespace Katsu
 {
     /*
      * Values are 64-bit tagged representations of various objects in Katsu:
+     * (inline:)
      * - small integers (fixnums)
+     * - small floating-pointing numbers (float32)
      * - booleans
-     * - tuples
-     * - vectors
-     * - strings
-     * - closures
-     * - type values
-     * - dataclass instances
+     * - null singleton
+     * (aggregate:)
+     * - objects
+     *   - tuples
+     *   - vectors
+     *   - strings
+     *   - closures
+     *   - type values
+     *   - dataclass instances
      *
-     * Some small objects (e.g. fixnums, bools, null) are stored inline; others are represented as
-     * tagged pointers to the actual contents (subclasses of ValueContents) elsewhere in memory that
+     * Some small objects (e.g. fixnums, bools, etc.) are stored inline; others are represented as
+     * tagged pointers to the actual contents (subclasses of Object) elsewhere in memory that
      * is managed by the garbage collector.
      *
      * Functions / methods are mostly implemented in the header here to support inlining.
@@ -25,20 +30,31 @@ namespace Katsu
 
     enum class Tag
     {
+        // inline:
         FIXNUM,
+        FLOAT,
         BOOL,
         _NULL,
-        TUPLE,
-        VECTOR,
-        STRING,
-        CLOSURE,
-        TYPE,
-        INSTANCE,
+
+        // aggregate:
+        OBJECT,
 
         NUM_TAGS
     };
 
-    const std::size_t TAG_BITS = 4;
+    static const char* tag_str(Tag tag)
+    {
+        switch (tag) {
+            case Tag::FIXNUM: return "fixnum";
+            case Tag::FLOAT: return "float";
+            case Tag::BOOL: return "bool";
+            case Tag::_NULL: return "null";
+            case Tag::OBJECT: return "object";
+            default: return "!unknown!";
+        }
+    }
+
+    const std::size_t TAG_BITS = 3;
     const std::size_t INLINE_BITS = 64 - TAG_BITS;
     const uint64_t TAG_MASK = (1LL << TAG_BITS) - 1;
     static_assert(static_cast<int>(Tag::NUM_TAGS) <= (1 << TAG_BITS));
@@ -49,24 +65,25 @@ namespace Katsu
     const uint64_t FIXNUM_MASK = ~(TAG_MASK << INLINE_BITS);
     static_assert((FIXNUM_MASK << TAG_BITS) + TAG_MASK == UINT64_MAX);
 
+    // Number of bits of alignment for a Value* to be on a Value boundary,
+    // i.e. log2(sizeof(Value)).
+    const size_t VALUE_PTR_BITS = 3;
+
     // Template declaration here, since it's used in `value()` below. Specializations are defined
     // later.
     struct Value;
     template <typename T> T static_value(Value value);
 
     // Forward declarations for helper functions:
-    struct Tuple;
-    struct Vector;
-    struct String;
-    struct Closure;
-    struct Type;
-    struct DataclassInstance;
+    struct Object;
 
     // Singleton as effectively a named replacement for std::monostate.
     struct Null
     {
     };
 
+
+    // TODO: convenience function for the pattern .value<Object*>()->object<*>();
     struct Value
     {
     private:
@@ -89,14 +106,25 @@ namespace Katsu
             return tagged >> TAG_BITS;
         }
         // Calculate the primary value from the tagged representation.
-        // T must be (a pointer to) one of the ValueContents subclasses below, or else
+        // T must be one of:
         // * int64_t for fixnum
+        // * float for float
         // * bool for bool
         // * Null for null
+        // * Object* for object
         // Throws if the desired value type (T) does not match the tag.
         template <typename T> T value() const
         {
             return static_value<T>(*this);
+        }
+
+        inline bool is_inline() const
+        {
+            return this->tag() <= Tag::_NULL;
+        }
+        inline bool is_ref() const
+        {
+            return !this->is_inline();
         }
 
         static Value fixnum(int64_t num)
@@ -110,6 +138,10 @@ namespace Katsu
             // 64-bit integer.
             return Value(Tag::FIXNUM, static_cast<uint64_t>(num) & FIXNUM_MASK);
         }
+        static Value _float(float val)
+        {
+            return Value(Tag::FLOAT, *reinterpret_cast<uint64_t*>(&val));
+        }
         static Value _bool(bool val)
         {
             return Value(Tag::BOOL, val ? 1 : 0);
@@ -118,96 +150,195 @@ namespace Katsu
         {
             return Value(Tag::_NULL, 0);
         }
-        static Value tuple(Tuple* tuple)
+        static Value object(Object* object)
         {
-            uint64_t raw = reinterpret_cast<uint64_t>(tuple);
+            uint64_t raw = reinterpret_cast<uint64_t>(object);
             if ((raw & TAG_MASK) != 0) {
-                throw std::invalid_argument("tuple pointer is not TAG_BITS-aligned");
+                throw std::invalid_argument("object pointer is not TAG_BITS-aligned");
             }
-            return Value(Tag::TUPLE, raw >> TAG_BITS);
-        }
-        static Value vector(Vector* vector)
-        {
-            uint64_t raw = reinterpret_cast<uint64_t>(vector);
-            if (raw & TAG_MASK != 0) {
-                throw std::invalid_argument("vector pointer is not TAG_BITS-aligned");
-            }
-            return Value(Tag::VECTOR, raw >> TAG_BITS);
-        }
-        static Value string(String* string)
-        {
-            uint64_t raw = reinterpret_cast<uint64_t>(string);
-            if (raw & TAG_MASK != 0) {
-                throw std::invalid_argument("string pointer is not TAG_BITS-aligned");
-            }
-            return Value(Tag::STRING, raw >> TAG_BITS);
-        }
-        static Value closure(Closure* closure)
-        {
-            uint64_t raw = reinterpret_cast<uint64_t>(closure);
-            if (raw & TAG_MASK != 0) {
-                throw std::invalid_argument("closure pointer is not TAG_BITS-aligned");
-            }
-            return Value(Tag::CLOSURE, raw >> TAG_BITS);
-        }
-        static Value type(Type* type)
-        {
-            uint64_t raw = reinterpret_cast<uint64_t>(type);
-            if (raw & TAG_MASK != 0) {
-                throw std::invalid_argument("type pointer is not TAG_BITS-aligned");
-            }
-            return Value(Tag::TYPE, raw >> TAG_BITS);
-        }
-        static Value data_inst(DataclassInstance* inst)
-        {
-            uint64_t raw = reinterpret_cast<uint64_t>(inst);
-            if (raw & TAG_MASK != 0) {
-                throw std::invalid_argument("dataclass instance pointer is not TAG_BITS-aligned");
-            }
-            return Value(Tag::INSTANCE, raw >> TAG_BITS);
+            return Value(Tag::OBJECT, raw >> TAG_BITS);
         }
     };
+    static_assert(sizeof(Value*) <= sizeof(Value));
+    static_assert((1 << VALUE_PTR_BITS) == sizeof(Value*));
 
-    class alignas(1 << TAG_BITS) ValueContents
+    enum class ObjectTag
     {
-        ValueContents(const ValueContents&) = delete;
-        ValueContents(const ValueContents&&) = delete;
+        TUPLE,
+        VECTOR,
+        STRING,
+        CLOSURE,
+        TYPE,
+        INSTANCE,
     };
 
-    struct Tuple : public ValueContents
+    static const char* object_tag_str(ObjectTag tag)
     {
+        switch (tag) {
+            case ObjectTag::TUPLE: return "tuple";
+            case ObjectTag::VECTOR: return "vector";
+            case ObjectTag::STRING: return "string";
+            case ObjectTag::CLOSURE: return "closure";
+            case ObjectTag::TYPE: return "type";
+            case ObjectTag::INSTANCE: return "instance";
+            default: return "!unknown!";
+        }
+    }
+
+    // Template declaration here, since it's used in `object()` below. Specializations are defined
+    // later.
+    struct Object;
+    template <typename T> T static_object(Object& object);
+
+    class alignas(1 << TAG_BITS) Object
+    {
+        Object(const Object&) = delete;
+        Object(const Object&&) = delete;
+
+        // Every aggregate object has a header to record information that the GC requires even
+        // without possession of an OBJECT Value pointing to this object.
+        // Header format:
+        // - bit 0: forwarding pointer (1) or not (0)
+        // - if a forwarding pointer:
+        //   - bits 1-63: forwarding pointer (shifted 1)
+        // - if normal object:
+        //   - bits 1-63: ObjectTag   (TODO: lots of unused space here...)
+        uint64_t header;
+
+    public:
+        inline uint64_t raw_header() const
+        {
+            return this->header;
+        }
+        inline void set_forwarding(void* p)
+        {
+            const uint64_t raw = reinterpret_cast<uint64_t>(p);
+            if ((raw & 0x1) != 0) {
+                throw std::logic_error("forwarding pointer is not aligned");
+            }
+            this->header = raw | 0x1LL;
+        }
+        inline void set_object(ObjectTag tag)
+        {
+            this->header = static_cast<uint64_t>(tag) << 1;
+        }
+
+        inline bool is_forwarding() const
+        {
+            return (this->header & 0x1) != 0;
+        }
+        inline bool is_object() const
+        {
+            return !this->is_forwarding();
+        }
+
+        inline void* forwarding() const
+        {
+            if (!this->is_forwarding()) {
+                throw std::logic_error("not a forwarding pointer");
+            }
+            return reinterpret_cast<void*>(this->header & ~0x1LL);
+        }
+        inline ObjectTag tag() const
+        {
+            if (!this->is_object()) {
+                throw std::logic_error("not an object");
+            }
+            return static_cast<ObjectTag>(this->header >> 1);
+        }
+
+        template <typename T> T object() const
+        {
+            return static_object<T>(*const_cast<Object*>(this));
+        }
+
+        // TODO: do another templated fn for size()
+    };
+
+    struct Tuple : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::TUPLE;
+
         Value v_length; // fixnum
-        Value* components()
+        inline Value* components()
         {
-            return &v_length + 1;
+            return &this->v_length + 1;
+        }
+
+        // Size in bytes.
+        inline uint64_t size() const
+        {
+            int64_t length = this->v_length.value<int64_t>();
+            if (length < 0) {
+                throw std::runtime_error("tuple has negative length");
+            }
+            return (2 + length) * sizeof(Value);
         }
     };
+    static_assert(sizeof(Tuple) == 2 * sizeof(Value));
 
-    struct Vector : public ValueContents
+    struct Vector : public Object
     {
+        static const ObjectTag CLASS_TAG = ObjectTag::VECTOR;
+
         Value v_length; // fixnum
-        Value* components()
+        inline Value* components()
         {
-            return &v_length + 1;
+            return &this->v_length + 1;
+        }
+
+        // Size in bytes.
+        inline uint64_t size() const
+        {
+            int64_t length = this->v_length.value<int64_t>();
+            if (length < 0) {
+                throw std::runtime_error("vector has negative length");
+            }
+            return (2 + length) * sizeof(Value);
         }
     };
+    static_assert(sizeof(Vector) == 2 * sizeof(Value));
 
-    struct String : public ValueContents
+    struct String : public Object
     {
+        static const ObjectTag CLASS_TAG = ObjectTag::STRING;
+
         Value v_length; // fixnum
-        uint8_t* contents()
+        inline uint8_t* contents()
         {
-            return reinterpret_cast<uint8_t*>(&v_length + 1);
+            return reinterpret_cast<uint8_t*>(&this->v_length + 1);
+        }
+
+        // Size in bytes.
+        inline uint64_t size() const
+        {
+            int64_t length = this->v_length.value<int64_t>();
+            if (length < 0) {
+                throw std::runtime_error("string has negative length");
+            }
+            return 2 * sizeof(Value) + length;
         }
     };
+    static_assert(sizeof(String) == 2 * sizeof(Value));
 
-    struct Closure : public ValueContents
+    struct Closure : public Object
     {
+        static const ObjectTag CLASS_TAG = ObjectTag::CLOSURE;
+
         // TODO
-    };
 
-    struct Type : public ValueContents
+        // Size in bytes.
+        uint64_t size() const
+        {
+            return sizeof(Value);
+        }
+    };
+    static_assert(sizeof(Closure) == sizeof(Value));
+
+    struct Type : public Object
     {
+        static const ObjectTag CLASS_TAG = ObjectTag::TYPE;
+
         Value v_name;  // string
         Value v_bases; // vector (of types)
         // Can user-defined types inherit from this?
@@ -219,22 +350,55 @@ namespace Katsu
         Value v_kind; // fixnum
         // If dataclass type (else null):
         Value v_slots; // vector (of strings)
-    };
 
-    struct DataclassInstance : public ValueContents
+        // Size in bytes.
+        uint64_t size() const
+        {
+            return 8 * sizeof(Value);
+        }
+    };
+    static_assert(sizeof(Type) == 8 * sizeof(Value));
+
+    struct DataclassInstance : public Object
     {
-        // The number of slots is determined by the dataclass, e.g. via
-        // v_type.value<Type*>()->v_slots.value<Vector*>->v_length.value<uint64_t>().
+        static const ObjectTag CLASS_TAG = ObjectTag::INSTANCE;
+
+        // The number of slots is determined by the referenced dataclass.
 
         Value v_type; // type (must be dataclass)
         Value* slots()
         {
             return &v_type + 1;
         }
+
+        inline Type* _class() const
+        {
+            return this->v_type.value<Object*>()->object<Type*>();
+        }
+
+        inline int64_t num_slots() const
+        {
+            // TODO: this can totally be cached in object header.
+            int64_t n = this->_class()
+                            ->v_slots.value<Object*>()
+                            ->object<Vector*>()
+                            ->v_length.value<int64_t>();
+            if (n < 0) {
+                throw std::runtime_error("dataclass has negative slot count");
+            }
+            return n;
+        }
+
+        // Size in bytes.
+        uint64_t size() const
+        {
+            return (2 + this->num_slots()) * sizeof(Value);
+        }
     };
+    static_assert(sizeof(DataclassInstance) == 2 * sizeof(Value));
 
     // Specializations for static_value():
-    template <> int64_t static_value<int64_t>(Value value)
+    template <> inline int64_t static_value<int64_t>(Value value)
     {
         if (value.tag() != Tag::FIXNUM) {
             throw std::runtime_error("expected fixnum");
@@ -245,60 +409,77 @@ namespace Katsu
         uint64_t extended = (raw >> (INLINE_BITS - 1)) ? (raw | ~FIXNUM_MASK) : raw;
         return static_cast<int64_t>(extended);
     }
-    template <> bool static_value<bool>(Value value)
+    template <> inline float static_value<float>(Value value)
+    {
+        if (value.tag() != Tag::FLOAT) {
+            throw std::runtime_error("expected float");
+        }
+        uint64_t raw_value = value.raw_value();
+        return *reinterpret_cast<float*>(&raw_value);
+    }
+    template <> inline bool static_value<bool>(Value value)
     {
         if (value.tag() != Tag::BOOL) {
             throw std::runtime_error("expected bool");
         }
         return value.raw_value() != 0;
     }
-    template <> Null static_value<Null>(Value value)
+    template <> inline Null static_value<Null>(Value value)
     {
         if (value.tag() != Tag::_NULL) {
             throw std::runtime_error("expected null");
         }
         return Null{};
     }
-    template <> Tuple* static_value<Tuple*>(Value value)
+    template <> inline Object* static_value<Object*>(Value value)
     {
-        if (value.tag() != Tag::TUPLE) {
+        if (value.tag() != Tag::OBJECT) {
+            throw std::runtime_error("expected object");
+        }
+        return reinterpret_cast<Object*>(value.raw_value() << TAG_BITS);
+    }
+
+    // Specializations for static_object():
+    template <> inline Tuple* static_object<Tuple*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::TUPLE) {
             throw std::runtime_error("expected tuple");
         }
-        return reinterpret_cast<Tuple*>(value.raw_value() << TAG_BITS);
+        return reinterpret_cast<Tuple*>(&object);
     }
-    template <> Vector* static_value<Vector*>(Value value)
+    template <> inline Vector* static_object<Vector*>(Object& object)
     {
-        if (value.tag() != Tag::VECTOR) {
+        if (object.tag() != ObjectTag::VECTOR) {
             throw std::runtime_error("expected vector");
         }
-        return reinterpret_cast<Vector*>(value.raw_value() << TAG_BITS);
+        return reinterpret_cast<Vector*>(&object);
     }
-    template <> String* static_value<String*>(Value value)
+    template <> inline String* static_object<String*>(Object& object)
     {
-        if (value.tag() != Tag::STRING) {
+        if (object.tag() != ObjectTag::STRING) {
             throw std::runtime_error("expected string");
         }
-        return reinterpret_cast<String*>(value.raw_value() << TAG_BITS);
+        return reinterpret_cast<String*>(&object);
     }
-    template <> Closure* static_value<Closure*>(Value value)
+    template <> inline Closure* static_object<Closure*>(Object& object)
     {
-        if (value.tag() != Tag::CLOSURE) {
+        if (object.tag() != ObjectTag::CLOSURE) {
             throw std::runtime_error("expected closure");
         }
-        return reinterpret_cast<Closure*>(value.raw_value() << TAG_BITS);
+        return reinterpret_cast<Closure*>(&object);
     }
-    template <> Type* static_value<Type*>(Value value)
+    template <> inline Type* static_object<Type*>(Object& object)
     {
-        if (value.tag() != Tag::TYPE) {
+        if (object.tag() != ObjectTag::TYPE) {
             throw std::runtime_error("expected type");
         }
-        return reinterpret_cast<Type*>(value.raw_value() << TAG_BITS);
+        return reinterpret_cast<Type*>(&object);
     }
-    template <> DataclassInstance* static_value<DataclassInstance*>(Value value)
+    template <> inline DataclassInstance* static_object<DataclassInstance*>(Object& object)
     {
-        if (value.tag() != Tag::INSTANCE) {
+        if (object.tag() != ObjectTag::INSTANCE) {
             throw std::runtime_error("expected dataclass instance");
         }
-        return reinterpret_cast<DataclassInstance*>(value.raw_value() << TAG_BITS);
+        return reinterpret_cast<DataclassInstance*>(&object);
     }
 };

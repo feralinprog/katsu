@@ -1,0 +1,74 @@
+#include "gc.h"
+#include <catch2/catch_test_macros.hpp>
+
+using namespace Katsu;
+
+TEST_CASE("align_up", "[gc]")
+{
+    CHECK(align_up(0, 0) == 0);
+    CHECK(align_up(1, 0) == 1);
+    CHECK(align_up(2, 0) == 2);
+
+    CHECK(align_up(0, 1) == 0);
+    CHECK(align_up(1, 1) == 2);
+    CHECK(align_up(2, 1) == 2);
+    CHECK(align_up(3, 1) == 4);
+    CHECK(align_up(4, 1) == 4);
+    CHECK(align_up(5, 1) == 6);
+    CHECK(align_up(6, 1) == 6);
+
+    CHECK(align_up(0, 2) == 0);
+    CHECK(align_up(1, 2) == 4);
+    CHECK(align_up(2, 2) == 4);
+    CHECK(align_up(3, 2) == 4);
+    CHECK(align_up(4, 2) == 4);
+    CHECK(align_up(5, 2) == 8);
+    CHECK(align_up(6, 2) == 8);
+    CHECK(align_up(7, 2) == 8);
+    CHECK(align_up(8, 2) == 8);
+    CHECK(align_up(9, 2) == 12);
+    CHECK(align_up(10, 2) == 12);
+    CHECK(align_up(11, 2) == 12);
+    CHECK(align_up(12, 2) == 12);
+}
+
+namespace Katsu
+{
+    uint8_t* TESTONLY_get_mem(GC& gc)
+    {
+        return gc.mem;
+    }
+}
+
+TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
+{
+    GC gc(12 * sizeof(Value));
+
+    Tuple* a = gc.alloc<Tuple>(sizeof(Object) + 5 * sizeof(Value));
+    REQUIRE(reinterpret_cast<uint8_t*>(a) == TESTONLY_get_mem(gc) + 0);
+    Vector* b = gc.alloc<Vector>(sizeof(Object) + 5 * sizeof(Value));
+    REQUIRE(reinterpret_cast<uint8_t*>(b) == TESTONLY_get_mem(gc) + 48);
+
+    // Add only `b` to the roots.
+    b->v_length = Value::fixnum(4);
+    b->components()[0] = Value::_float(1.0);
+    b->components()[1] = Value::_float(2.0);
+    b->components()[2] = Value::_float(3.0);
+    b->components()[3] = Value::_float(4.0);
+    Value root_b = Value::object(b);
+    gc.roots.push_back(&root_b);
+
+    String* c;
+    REQUIRE_NOTHROW(c = gc.alloc<String>(sizeof(String) + 1));
+    REQUIRE(reinterpret_cast<uint8_t*>(root_b.value<Object*>()) == TESTONLY_get_mem(gc) + 0);
+    REQUIRE(reinterpret_cast<uint8_t*>(c) == TESTONLY_get_mem(gc) + 48);
+
+    // Keep `c` around via another root.
+    c->v_length = Value::fixnum(1);
+    Value root_c = Value::object(c);
+    gc.roots.push_back(&root_c);
+
+    REQUIRE_THROWS_AS(
+        gc._alloc_raw(12 * sizeof(Value) - sizeof(Object) - 5 * sizeof(Value) - sizeof(String)),
+        std::bad_alloc);
+}

@@ -14,6 +14,7 @@ add_library(katsudon STATIC
   src/lexer.cc
   src/ast.cc
   src/parser.cc
+  src/gc.cc
   src/katsu.cc
 )
 target_include_directories(katsudon PUBLIC src/)
@@ -36,6 +37,7 @@ FetchContent_MakeAvailable(Catch2)
 # Unit tests.
 add_executable(test
   src/value_test.cc
+  src/gc_test.cc
   src/katsu_test.cc
 )
 target_link_libraries(test PRIVATE
