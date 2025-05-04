@@ -30,8 +30,8 @@ method: [(n: Number) recurse] does: [
 2 recurse
 
 method: [sum: a and: b and: c] does: [
-    let: x =: a + b
-    let: y =: x + c
+    let: x = a + b
+    let: y = x + c
     y
 ] :: { +inline }
 print: (sum: 1 and: 2 and: 3)
@@ -55,11 +55,10 @@ method: [if: cond then: body] does: [ "blah" ]
 if: 2 > 1 then: [ print: "good: 2 > 1" ]
 if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 
-let: a =: 5
+mut: a = 5
 print: a
-'a = 10
+set-a: 10
 print: a
-# '
 
 # +inline tells the compiler that this should be strictly inlined at every call site
 # +tail-recursive is more of an optimization hint; it tells the compiler to expect this method body
@@ -76,20 +75,20 @@ method: [while: (cond: Quote) do: (body: Quote)] does: [
 ] :: { +inline }
 
 method: [test-while] does: [
-    let: i =: 10
+    mut: i = 10
     while: [i > 0] do: [
         print: i
-        i = i - 1
+        set-i: i - 1
         print: i
     ]
 ]
 test-while
 
 method: [from: low to<: high do: (body: Quote)] does: [
-    let: i =: low
+    mut: i = low
     while: [i < high] do: [
         body call: i
-        'i = i + 1 # '
+        set-i: i + 1
     ]
 ]
 from: 0 to<: 10 do: \i [
@@ -103,22 +102,22 @@ print: - 5
 print: (1 + 3 * 6 / 2 * 3) == 4
 
 method: [vec each: action] does: [
-    let: i =: 0
+    mut: i = 0
     while: [i < vec length] do: [
         action call: (vec at: i)
-        'i = i + 1 # '
+        set-i: i + 1
     ]
 ]
 
 method: [vec each-reversed: action] does: [
-    let: i =: vec length - 1
+    mut: i = vec length - 1
     while: [i >= 0] do: [
         action call: (vec at: i)
-        'i = i - 1 # '
+        set-i: i - 1
     ]
 ]
 
-let: data =: {
+let: data = {
     { 1; 2; 3 }
     { 4; 5; }
     { 6; }
@@ -134,7 +133,7 @@ print: data
 data append: "last elem"
 print: data
 
-let: other =: { "more"; "data" }
+let: other = { "more"; "data" }
 method: [prefix extend: suffix] does: [
     suffix each: \v [prefix append: v]
 ]
@@ -143,14 +142,14 @@ data extend: other
 print: data
 
 #method: [length] does: [
-#    let: count =: 0
-#    self each: [ 'count = count + 1 ]
+#    mut: count = 0
+#    self each: [ set-count: count + 1 ]
 #    count
 #]
 print: data length
 
 method: [vec map: f] does: [
-    let: new-vec =: {}
+    let: new-vec = {}
     vec each: \v [new-vec append: (f call: v)]
     new-vec
 ]
@@ -159,8 +158,8 @@ data each: [print]
 print: (data map: [length])
 
 method: [vec from: initial-value accumulate: f] does: [
-    let: cur =: initial-value
-    vec each: \v ['cur = f call*: (cur, v)] # '
+    mut: cur = initial-value
+    vec each: \v [set-cur: (f call*: (cur, v))]
     cur
 ]
 print: ((data map: [length]) from: 0 accumulate: \sum-so-far current-value [
@@ -206,13 +205,13 @@ print: \cc [nonlocal-return-test: cc] call/cc + 10
 # since in that case, the current continuation includes the `cc call:`, whereas
 # when evaluating at the top level, the current continuation only goes to the end
 # of the top-level sequence component, i.e. the `print: ...`.
-let: cc =: null
-print: "result is: " ~ ['cc = it; null] call/cc >string # '
+mut: cc = null
+print: "result is: " ~ [set-cc: it; null] call/cc >string
 cc call: 5
 cc call: 10
 
 data: :Point has: { :x; :y }
-let: p =: (Point x: 5 y: 10)
+let: p = (Point x: 5 y: 10)
 print: p
 print: p .x
 print: p .y
@@ -234,9 +233,9 @@ method: [(p: Point) +: (q: Point)] does: [
     Point x: (p .x + q .x) y: (p .y + q .y)
 ]
 
-let: p3 =: (Point3D x: 5 y: 10 z: 15)
-let: q =: (Point x: 3 y: 2)
-let: q3 =: (Point3D x: 3 y: 2 z: 1)
+let: p3 = (Point3D x: 5 y: 10 z: 15)
+let: q = (Point x: 3 y: 2)
+let: q3 = (Point3D x: 3 y: 2 z: 1)
 p + q
 p + q3
 p3 + q
@@ -256,11 +255,11 @@ method: [while-with-break: cond do: body] does: [
     ] call/cc
 ]
 
-let: i =: 0
+mut: i = 0
 while-with-break: [t] do: \break [
     print: i
     if: i == 5 then: [break call: "result of break"]
-    'i = i + 1 # '
+    set-i: i + 1
 ]
 
 method: [while-with-break-and-continue: cond do: body] does: [
@@ -273,9 +272,9 @@ method: [while-with-break-and-continue: cond do: body] does: [
     ] call/cc
 ]
 
-'i = 0 # '
+set-i: 0
 while-with-break-and-continue: [t] do: \break continue [
-    'i = i + 1 # '
+    set-i: i + 1
     print: i
     if: i == 3 then: [continue call: "result of continue"]
     if: i == 5 then: [break call: "result of break"]
@@ -305,15 +304,15 @@ method: [receiver switch: (options: Vector)] does: [
     \ret [
         options each: \option [
             assert: [option length == 2]
-            let: condition =: (option at: 0)
-            let: response =: (option at: 1)
+            let: condition = (option at: 0)
+            let: response = (option at: 1)
             if: (condition call: receiver) then: [ret call: (response call: receiver)]
         ]
         signal: (SwitchFallThrough message: "no switch conditions matched; fell through")
     ] call/rc
 ]
 
-'i = 5 # '
+set-i: = 5
 switch: {
     #{ [test]; [response]; :blah }
     { [(i / 2) * 2 == i]; [print: "i is even"] }
@@ -326,7 +325,7 @@ switch: {
 1234 cleanup: [ print: "cleaning up from 1234" ]
 
 [
-    let: result =: \ret [
+    let: result = \ret [
         print: "before return"
         1 + (ret call: "<the result>")
         print: "after return"
@@ -356,8 +355,8 @@ method: [bottom: return] does: [
 print: \ret [bottom: ret] call/rc
 
 [
-    let: rc-handle =: null
-    \rc ['rc-handle = rc] call/rc # '
+    mut: rc-handle = null
+    \rc [set-rc-handle: rc] call/rc
     print: rc-handle
     # This raises an error now.
     #print: (rc-handle call: 5)
@@ -410,10 +409,10 @@ none then: [print] else: [print: "none"]
 #   at:
 mixin: :Sequence
 method: [(seq: Sequence) each: (action: Quote)] does: [
-    let: i =: 0
+    mut: i = 0
     while: [i < seq length] do: [
         action call: (seq at: i)
-        'i = i + 1 # '
+        set-i: i + 1
     ]
 ]
 
@@ -486,12 +485,12 @@ method: [(a: Assoc) extend: (b: Assoc)] does: [
 ]
 
 method: [(a: Assoc) keys] does: [
-    let: keys-vec =: {}
+    let: keys-vec = {}
     a each-entry: \entry [ keys-vec append: entry .key ]
     keys-vec
 ]
 
-let: m =: (assoc: { { 1; "one" }; { 2; "two" } })
+let: m = (assoc: { { 1; "one" }; { 2; "two" } })
 m
 m has: 1
 m has: 2
@@ -510,7 +509,7 @@ m
 # TODO: remove these. May need to add proper modules which have lookups resolved at the end.
 defer-method: :get:
 
-let: namestack =: { assoc: {} }
+let: namestack = { assoc: {} }
 method: [push-scope: (vars: Assoc)] does: [namestack append: vars]
 method: [pop-scope] does: [namestack pop]
 method: [scope has-var: (var: Symbol)] does: [ scope has: var ]
@@ -544,7 +543,7 @@ print: :x get
 
 # Stack of list-of-pairs, where each pair holds a predicate quote
 # and a handler quote.
-let: handler-stack =: {}
+let: handler-stack = {}
 method: [(body: Quote) with-handlers: (handlers: Vector)] does: [
     handler-stack append: handlers
     body cleanup: [handler-stack pop]
@@ -558,8 +557,8 @@ method: [value matches-condition?: condition] does: [ condition == value ]
 method: [(handlers: Vector) call-handler*: condition] does: [
     \ret [
         handlers each: [
-            let: predicate =: (it at: 0)
-            let: handler =: (it at: 1)
+            let: predicate = (it at: 0)
+            let: handler = (it at: 1)
             if: (predicate matches-condition?: condition) then: [ret call: (handler call: condition)]
         ]
         null
@@ -567,7 +566,7 @@ method: [(handlers: Vector) call-handler*: condition] does: [
 ]
 
 # Stack of assocs (from symbol to restart quote).
-let: restart-stack =: {}
+let: restart-stack = {}
 method: [(body: Quote) with-restarts: (restarts: Assoc)] does: [
     restart-stack append: restarts
     body cleanup: [restart-stack pop]
@@ -587,7 +586,7 @@ method: [(restart: Symbol) invoke-restart] does: [
 ]
 
 method: [all-active-restarts] does: [
-    let: restarts =: (assoc: {})
+    let: restarts = (assoc: {})
     restart-stack each-reversed: [restarts extend: it]
     restarts
 ]
@@ -595,16 +594,16 @@ method: [all-active-restarts] does: [
 method: [signal: condition] does: [
     \ret [
         handler-stack each-reversed: [
-            if: not (let: handler-result =: (it call-handler*: condition)) Null? then: [
+            if: not (let: handler-result = (it call-handler*: condition)) Null? then: [
                 ret call: handler-result
             ]
         ]
         # No handlers resolved the condition. Ask the user if they want to select a restart instead.
-        let: restarts =: all-active-restarts
-        let: restart-keys =: restarts keys
-        let: idx =: (query-user-for-restart: restart-keys condition: condition)
+        let: restarts = all-active-restarts
+        let: restart-keys = restarts keys
+        let: idx = (query-user-for-restart: restart-keys condition: condition)
         if: idx Number? then: [
-            let: selected-restart =: (restart-keys at: idx)
+            let: selected-restart = (restart-keys at: idx)
             ret call: (selected-restart invoke-restart)
         ]
         # User didn't select any of the restarts; fall back to a panic.
