@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <stdexcept>
 
@@ -140,7 +141,7 @@ namespace Katsu
         }
         static Value _float(float val)
         {
-            return Value(Tag::FLOAT, *reinterpret_cast<uint64_t*>(&val));
+            return Value(Tag::FLOAT, std::bit_cast<uint32_t>(val));
         }
         static Value _bool(bool val)
         {
@@ -414,7 +415,9 @@ namespace Katsu
             throw std::runtime_error("expected float");
         }
         uint64_t raw_value = value.raw_value();
-        return *reinterpret_cast<float*>(&raw_value);
+        // Narrowing is ok here; raw_value should have upper 32 bits zeroized.
+        uint32_t raw_float = raw_value;
+        return std::bit_cast<float>(raw_float);
     }
     template <> inline bool static_value<bool>(Value value)
     {
