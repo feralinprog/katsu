@@ -28,6 +28,7 @@ test ()
 _valgrind ()
 {
     echo "================== VALGRIND =================="
+    # TODO: need to build within asan...
     valgrind -s --leak-check=full --error-exitcode=2 out/katsu $@
 }
 
