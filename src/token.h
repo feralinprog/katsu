@@ -26,7 +26,6 @@ namespace Katsu
         NAME,      // same as operator, except operators have different character set
         MESSAGE,   // <name/operator>: or <name/operator>.
         SYMBOL,    // :<name/operator>
-        QUOTE,     // '<name>
         BACKSLASH, // \ (as stated on the tin)
         OPERATOR,  // same as names, but limited character set
         INTEGER,

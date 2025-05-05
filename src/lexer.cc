@@ -154,11 +154,6 @@ namespace Katsu
                     }
                 }
 
-                // Quotes:
-                if (word[0] == '\'' && word != "'") {
-                    return make_token(TokenType::QUOTE, word.substr(1, word.size() - 1));
-                }
-
                 // Operators:
                 bool all_op_chars = true;
                 for (char c : word) {

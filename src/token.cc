@@ -21,7 +21,6 @@ namespace Katsu
             case TokenType::NAME: s << "NAME"; break;
             case TokenType::MESSAGE: s << "MESSAGE"; break;
             case TokenType::SYMBOL: s << "SYMBOL"; break;
-            case TokenType::QUOTE: s << "QUOTE"; break;
             case TokenType::BACKSLASH: s << "BACKSLASH"; break;
             case TokenType::OPERATOR: s << "OPERATOR"; break;
             case TokenType::INTEGER: s << "INTEGER"; break;

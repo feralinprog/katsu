@@ -271,21 +271,6 @@ namespace Katsu
         }
     };
 
-    class QuotePrefixParselet : public PrefixParselet
-    {
-    public:
-        std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
-                                    const Token& token) override
-        {
-            std::vector<std::string> parameters{};
-            return std::make_unique<QuoteExpr>(
-                token.span,
-                parameters,
-                std::make_unique<NameExpr>(token.span, token) /* body */
-            );
-        }
-    };
-
     class BackslashPrefixParselet : public PrefixParselet
     {
     public:
@@ -592,7 +577,6 @@ namespace Katsu
         LSquarePrefixParselet lsquare_prefix_parselet{};
         LCurlyPrefixParselet lcurly_prefix_parselet{};
         NamePrefixParselet name_prefix_parselet{};
-        QuotePrefixParselet quote_prefix_parselet{};
         BackslashPrefixParselet backslash_prefix_parselet{};
         LiteralPrefixParselet literal_prefix_parselet{};
 
@@ -615,7 +599,6 @@ namespace Katsu
         parser->add_parselet(TokenType::LSQUARE, parser->lsquare_prefix_parselet);
         parser->add_parselet(TokenType::LCURLY, parser->lcurly_prefix_parselet);
         parser->add_parselet(TokenType::NAME, parser->name_prefix_parselet);
-        parser->add_parselet(TokenType::QUOTE, parser->quote_prefix_parselet);
         parser->add_parselet(TokenType::BACKSLASH, parser->backslash_prefix_parselet);
         parser->add_parselet(TokenType::STRING, parser->literal_prefix_parselet);
         parser->add_parselet(TokenType::INTEGER, parser->literal_prefix_parselet);
