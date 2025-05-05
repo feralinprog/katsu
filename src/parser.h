@@ -24,6 +24,8 @@ namespace Katsu
     class PrefixParselet
     {
     public:
+        virtual ~PrefixParselet() = default;
+
         virtual std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
                                             const Token& token) = 0;
     };
@@ -31,6 +33,8 @@ namespace Katsu
     class InfixParselet
     {
     public:
+        virtual ~InfixParselet() = default;
+
         virtual std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
                                             std::unique_ptr<Expr> left, const Token& token) = 0;
 
@@ -44,6 +48,8 @@ namespace Katsu
             : prefix_parselets{}
             , infix_parselets{}
         {}
+
+        virtual ~PrattParser() = default;
 
         // Precondition: stream still has a remaining token other than NEWLINE and END.
         std::unique_ptr<Expr> parse(TokenStream& stream, int precedence = 0,

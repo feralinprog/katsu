@@ -17,6 +17,8 @@ namespace Katsu
             : span(_span)
         {}
 
+        virtual ~Expr() = default;
+
         virtual void accept(ExprVisitor& visitor) = 0;
 
         // nullptr if no sequence components (default!).

@@ -571,21 +571,21 @@ namespace Katsu
     struct DefaultParser : public PrattParser
     {
         // Prefix parselets:
-        OperatorPrefixParselet operator_prefix_parselet{};
-        MessagePrefixParselet message_prefix_parselet{};
-        LParenPrefixParselet lparen_prefix_parselet{};
-        LSquarePrefixParselet lsquare_prefix_parselet{};
-        LCurlyPrefixParselet lcurly_prefix_parselet{};
-        NamePrefixParselet name_prefix_parselet{};
-        BackslashPrefixParselet backslash_prefix_parselet{};
-        LiteralPrefixParselet literal_prefix_parselet{};
+        OperatorPrefixParselet operator_prefix_parselet;
+        MessagePrefixParselet message_prefix_parselet;
+        LParenPrefixParselet lparen_prefix_parselet;
+        LSquarePrefixParselet lsquare_prefix_parselet;
+        LCurlyPrefixParselet lcurly_prefix_parselet;
+        NamePrefixParselet name_prefix_parselet;
+        BackslashPrefixParselet backslash_prefix_parselet;
+        LiteralPrefixParselet literal_prefix_parselet;
 
         // Infix parselets:
-        NameInfixParselet name_infix_parselet{};
-        MessageInfixParselet message_infix_parselet{};
-        SequencingInfixParselet sequencing_infix_parselet{};
-        OperatorInfixParselet operator_infix_parselet{};
-        CommaInfixParselet comma_infix_parselet{};
+        NameInfixParselet name_infix_parselet;
+        MessageInfixParselet message_infix_parselet;
+        SequencingInfixParselet sequencing_infix_parselet;
+        OperatorInfixParselet operator_infix_parselet;
+        CommaInfixParselet comma_infix_parselet;
     };
 
     std::unique_ptr<PrattParser> make_default_parser()
