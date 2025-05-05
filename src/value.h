@@ -205,7 +205,6 @@ namespace Katsu
         //   - bits 1-63: ObjectTag   (TODO: lots of unused space here...)
         uint64_t header;
 
-    public:
         inline uint64_t raw_header() const
         {
             return this->header;
