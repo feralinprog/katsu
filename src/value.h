@@ -187,10 +187,9 @@ namespace Katsu
 
     // Template declaration here, since it's used in `object()` below. Specializations are defined
     // later.
-    struct Object;
     template <typename T> T static_object(Object& object);
 
-    class alignas(1 << TAG_BITS) Object
+    struct alignas(1 << TAG_BITS) Object
     {
         Object(const Object&) = delete;
         Object(const Object&&) = delete;
