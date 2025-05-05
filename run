@@ -2,6 +2,9 @@
 
 set -e
 
+CMAKE_GEN_FLAGS="-DCMAKE_CXX_COMPILER=clang++ -DCMAKE_CXX_STANDARD=17"
+CMAKE_BUILD_FLAGS=""
+
 format ()
 {
     echo "================== FORMATTING =================="
@@ -11,8 +14,8 @@ format ()
 build ()
 {
     echo "================== BUILDING =================="
-    cmake -S . -B out
-    cmake --build out
+    cmake $CMAKE_GEN_FLAGS -S . -B out
+    cmake $CMAKE_BUILD_FLAGS --build out
 }
 
 test ()
