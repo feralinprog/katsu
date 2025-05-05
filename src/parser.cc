@@ -117,10 +117,10 @@ namespace Katsu
     enum class Precedence
     {
         SEQUENCING = 10,
-        // TODO: delete assignment?
-        ASSIGNMENT = 20,
 
-        N_ARY_MESSAGE = 50,
+        N_ARY_MESSAGE = 30,
+
+        ASSIGNMENT = 50,
 
         COMMA = 70,
 
