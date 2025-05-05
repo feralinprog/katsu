@@ -431,7 +431,7 @@ namespace Katsu
             if (prec_it == this->infix_precedence.end()) {
                 std::stringstream ss;
                 ss << "Missing infix precedence for operator '"
-                   << std::get<std::string>(token.value) << ".";
+                   << std::get<std::string>(token.value) << "'.";
                 throw parse_error(ss.str(), token.span);
             }
 
@@ -440,7 +440,7 @@ namespace Katsu
             if (assoc_it == this->infix_associativity.end()) {
                 std::stringstream ss;
                 ss << "Missing infix associativity for operator '"
-                   << std::get<std::string>(token.value) << ".";
+                   << std::get<std::string>(token.value) << "'.";
                 throw parse_error(ss.str(), token.span);
             }
 
@@ -467,7 +467,7 @@ namespace Katsu
             if (prec_it == this->infix_precedence.end()) {
                 std::stringstream ss;
                 ss << "Missing infix precedence for operator '"
-                   << std::get<std::string>(token.value) << ".";
+                   << std::get<std::string>(token.value) << "'.";
                 throw parse_error(ss.str(), token.span);
             }
 
