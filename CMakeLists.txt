@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 3.15...4.0)
 
+add_compile_options(-fsanitize=address -Wall -Wno-unused-function -Werror)
+add_link_options(-fsanitize=address)
+
 project(Katsu
   VERSION 0.0
   DESCRIPTION "Katsu Language"
