@@ -1,0 +1,12 @@
+# constant definition
+let: var = value
+# variable definition
+mut: var = value
+# reassign variable
+set-var: value
+# expression-form function definition
+fn: [signature] = body-expr
+# block-form function definition
+fn: [signature] does: [ body-expr blah ]
+
+set-n: calc: 5 with: 10
