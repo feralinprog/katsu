@@ -94,10 +94,10 @@ namespace Katsu
             ExprPrinter indented(depth + 1);
             e.inner->accept(indented);
         }
-        void visit(QuoteExpr& e) override
+        void visit(BlockExpr& e) override
         {
             prefix();
-            std::cout << "quote";
+            std::cout << "block";
             for (const std::string& param : e.parameters) {
                 std::cout << " " << param;
             }

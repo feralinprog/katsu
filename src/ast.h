@@ -121,12 +121,12 @@ namespace Katsu
         void accept(ExprVisitor& visitor) override;
     };
 
-    struct QuoteExpr : public Expr
+    struct BlockExpr : public Expr
     {
         std::vector<std::string> parameters;
         std::unique_ptr<Expr> body;
 
-        QuoteExpr(SourceSpan _span, std::vector<std::string> _parameters,
+        BlockExpr(SourceSpan _span, std::vector<std::string> _parameters,
                   std::unique_ptr<Expr> _body)
             : Expr(_span)
             , parameters(_parameters)
@@ -184,7 +184,7 @@ namespace Katsu
         virtual void visit(UnaryMessageExpr& expr) = 0;
         virtual void visit(NAryMessageExpr& expr) = 0;
         virtual void visit(ParenExpr& expr) = 0;
-        virtual void visit(QuoteExpr& expr) = 0;
+        virtual void visit(BlockExpr& expr) = 0;
         virtual void visit(DataExpr& expr) = 0;
         virtual void visit(SequenceExpr& expr) = 0;
         virtual void visit(TupleExpr& expr) = 0;

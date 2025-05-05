@@ -30,7 +30,7 @@ namespace Katsu
     {
         visitor.visit(*this);
     }
-    void QuoteExpr::accept(ExprVisitor& visitor)
+    void BlockExpr::accept(ExprVisitor& visitor)
     {
         visitor.visit(*this);
     }

@@ -218,15 +218,10 @@ namespace Katsu
             std::unique_ptr<Expr> body = parser.parse(stream, 0 /* precedence */);
             Token rsquare = expect(stream, TokenType::RSQUARE);
             std::vector<std::string> parameters{};
-            return std::make_unique<QuoteExpr>(
+            return std::make_unique<BlockExpr>(
                 SourceSpan::combine({token.span, body->span, rsquare.span}),
                 parameters,
                 std::move(body));
-            // body = parser.parse(stream, precedence=0)
-            // rparen = stream.consume(TokenType.RSQUARE)
-            // return QuoteExpr(
-            //     span=combine_spans(token.span, body.span, rparen.span), parameters=[], body=body
-            // )
         }
     };
 
@@ -317,7 +312,7 @@ namespace Katsu
             spans.push_back(body->span);
             spans.push_back(rsquare.span);
 
-            return std::make_unique<QuoteExpr>(SourceSpan::combine(spans),
+            return std::make_unique<BlockExpr>(SourceSpan::combine(spans),
                                                parameters,
                                                std::move(body));
         }
