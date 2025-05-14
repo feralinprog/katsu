@@ -18,6 +18,7 @@ add_library(katsudon STATIC
   src/ast.cc
   src/parser.cc
   src/gc.cc
+  src/vm.cc
   src/katsu.cc
 )
 target_include_directories(katsudon PUBLIC src/)
@@ -42,6 +43,7 @@ add_executable(test
   src/lexer_test.cc
   src/value_test.cc
   src/gc_test.cc
+  src/vm_test.cc
   src/katsu_test.cc
 )
 target_link_libraries(test PRIVATE
