@@ -38,4 +38,13 @@ namespace Katsu
 
         return SourceSpan{.file = file, .start = min, .end = max};
     }
+
+    bool operator==(const SourceLocation& a, const SourceLocation& b)
+    {
+        return a.index == b.index && a.line == b.line && a.column == b.column;
+    }
+    bool operator!=(const SourceLocation& a, const SourceLocation& b)
+    {
+        return !(a == b);
+    }
 };

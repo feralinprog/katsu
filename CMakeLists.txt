@@ -39,6 +39,7 @@ FetchContent_MakeAvailable(Catch2)
 
 # Unit tests.
 add_executable(test
+  src/lexer_test.cc
   src/value_test.cc
   src/gc_test.cc
   src/katsu_test.cc

@@ -26,6 +26,9 @@ namespace Katsu
         int column;
     };
 
+    bool operator==(const SourceLocation& a, const SourceLocation& b);
+    bool operator!=(const SourceLocation& a, const SourceLocation& b);
+
     // Represents a contiguous portion of a SourceFile as a location interval [start, end).
     struct SourceSpan
     {
