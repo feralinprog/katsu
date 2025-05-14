@@ -44,9 +44,9 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
 {
     GC gc(12 * sizeof(Value));
 
-    Tuple* a = gc.alloc<Tuple>(sizeof(Object) + 5 * sizeof(Value));
+    Tuple* a = gc.alloc<Tuple>(4);
     REQUIRE(reinterpret_cast<uint8_t*>(a) == TESTONLY_get_mem(gc) + 0);
-    Vector* b = gc.alloc<Vector>(sizeof(Object) + 5 * sizeof(Value));
+    Vector* b = gc.alloc<Vector>(4);
     REQUIRE(reinterpret_cast<uint8_t*>(b) == TESTONLY_get_mem(gc) + 48);
 
     // Add only `b` to the roots.

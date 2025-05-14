@@ -34,12 +34,14 @@ namespace Katsu
 
         ~GC();
 
-        // TODO: this will break in weird ways if the returned buffer is not immediately initialized
-        // as an Object* with a valid header. Update this to take the object tag and total bytes
-        // size and return the populated Object*?
-        template <typename T> T* alloc(uint64_t size)
+        // T must be a subtype of Object.
+        // The (variadic) arguments are directly passed to T::size(...).
+        // For instance, alloc<Vector>(n) would allocate a vector of length n (and size being
+        // sizeof(Vector) + n * sizeof(Value)).
+        template <typename T, typename... S> T* alloc(S... size_args)
         {
             static_assert(!std::is_same_v<Object, T> && std::is_base_of_v<Object, T>);
+            uint64_t size = T::size(size_args...);
             auto obj = reinterpret_cast<Object*>(this->_alloc_raw(size));
             obj->set_object(T::CLASS_TAG);
             return reinterpret_cast<T*>(obj);

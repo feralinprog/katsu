@@ -202,6 +202,9 @@ namespace Katsu
     // later.
     template <typename T> T static_object(Object& object);
 
+    // TODO: add functions to verify basic invariants of objects (for instance, v_length >= 0),
+    // and call this from GC when in a debug mode, on every object traced.
+
     struct alignas(1 << TAG_BITS) Object
     {
         Object(const Object&) = delete;
@@ -273,15 +276,11 @@ namespace Katsu
         Value v_ref; // should be Object, could be anything really
 
         // Size in bytes.
-        // TODO: just use e.g. sizeof(Ref), and change the rest too.
-        // TODO: static version that can be used for allocation? (must take in arguments for e.g.
-        // tuple)
-        inline uint64_t size() const
+        static inline uint64_t size()
         {
-            return 2 * sizeof(Value);
+            return sizeof(Ref);
         }
     };
-    static_assert(sizeof(Ref) == 2 * sizeof(Value));
 
     struct Tuple : public Object
     {
@@ -296,16 +295,16 @@ namespace Katsu
         }
 
         // Size in bytes.
+        static inline uint64_t size(int64_t length)
+        {
+            return sizeof(Tuple) + length * sizeof(Value);
+        }
         inline uint64_t size() const
         {
             int64_t length = this->v_length.value<int64_t>();
-            if (length < 0) {
-                throw std::runtime_error("tuple has negative length");
-            }
-            return (2 + length) * sizeof(Value);
+            return Tuple::size(length);
         }
     };
-    static_assert(sizeof(Tuple) == 2 * sizeof(Value));
 
     struct Vector : public Object
     {
@@ -318,16 +317,16 @@ namespace Katsu
         }
 
         // Size in bytes.
+        static inline uint64_t size(int64_t length)
+        {
+            return sizeof(Vector) + length * sizeof(Value);
+        }
         inline uint64_t size() const
         {
             int64_t length = this->v_length.value<int64_t>();
-            if (length < 0) {
-                throw std::runtime_error("vector has negative length");
-            }
-            return (2 + length) * sizeof(Value);
+            return Vector::size(length);
         }
     };
-    static_assert(sizeof(Vector) == 2 * sizeof(Value));
 
     struct Module : public Object
     {
@@ -350,16 +349,16 @@ namespace Katsu
         }
 
         // Size in bytes.
+        static inline uint64_t size(int64_t length)
+        {
+            return sizeof(Module) + length * sizeof(Entry);
+        }
         inline uint64_t size() const
         {
             int64_t length = this->v_length.value<int64_t>();
-            if (length < 0) {
-                throw std::runtime_error("module has negative length");
-            }
-            return (3 + length) * sizeof(Entry);
+            return Module::size(length);
         }
     };
-    static_assert(sizeof(Module) == 3 * sizeof(Value));
 
     struct String : public Object
     {
@@ -372,16 +371,16 @@ namespace Katsu
         }
 
         // Size in bytes.
+        static inline uint64_t size(int64_t length)
+        {
+            return sizeof(String) + length /* * sizeof(uint8_t) */;
+        }
         inline uint64_t size() const
         {
             int64_t length = this->v_length.value<int64_t>();
-            if (length < 0) {
-                throw std::runtime_error("string has negative length");
-            }
-            return 2 * sizeof(Value) + length;
+            return String::size(length);
         }
     };
-    static_assert(sizeof(String) == 2 * sizeof(Value));
 
     struct Code : public Object
     {
@@ -399,12 +398,11 @@ namespace Katsu
         // TODO: source span per bytecode
 
         // Size in bytes.
-        uint64_t size() const
+        static inline uint64_t size()
         {
-            return 7 * sizeof(Value);
+            return sizeof(Code);
         }
     };
-    static_assert(sizeof(Code) == 7 * sizeof(Value));
 
     struct Closure : public Object
     {
@@ -414,12 +412,11 @@ namespace Katsu
         Value v_upregs; // Vector
 
         // Size in bytes.
-        uint64_t size() const
+        static inline uint64_t size()
         {
-            return 3 * sizeof(Value);
+            return sizeof(Closure);
         }
     };
-    static_assert(sizeof(Closure) == 3 * sizeof(Value));
 
     // Pointer to a function which takes an array of Values, calculates a result, and returns it.
     // The input values may be temporary locations in a call frame; copy them before calling into
@@ -441,12 +438,11 @@ namespace Katsu
         NativeHandler native_handler; // optional (nullptr)
 
         // Size in bytes.
-        uint64_t size() const
+        static inline uint64_t size()
         {
-            return 6 * sizeof(Value);
+            return sizeof(Method);
         }
     };
-    static_assert(sizeof(Method) == 6 * sizeof(Value));
 
     struct MultiMethod : public Object
     {
@@ -459,12 +455,11 @@ namespace Katsu
         Value v_attributes; // Vector
 
         // Size in bytes.
-        uint64_t size() const
+        static inline uint64_t size()
         {
-            return 4 * sizeof(Value);
+            return sizeof(MultiMethod);
         }
     };
-    static_assert(sizeof(MultiMethod) == 4 * sizeof(Value));
 
     struct Type : public Object
     {
@@ -483,12 +478,11 @@ namespace Katsu
         Value v_slots; // vector (of strings)
 
         // Size in bytes.
-        uint64_t size() const
+        static inline uint64_t size()
         {
-            return 8 * sizeof(Value);
+            return sizeof(Type);
         }
     };
-    static_assert(sizeof(Type) == 8 * sizeof(Value));
 
     struct DataclassInstance : public Object
     {
@@ -521,12 +515,20 @@ namespace Katsu
         }
 
         // Size in bytes.
-        uint64_t size() const
+        static inline uint64_t size(int64_t num_slots)
         {
-            return (2 + this->num_slots()) * sizeof(Value);
+            return sizeof(DataclassInstance) + num_slots * sizeof(Value);
+        }
+        static inline uint64_t size(Type* _class)
+        {
+            return DataclassInstance::size(
+                _class->v_slots.value<Object*>()->object<Vector*>()->v_length.value<int64_t>());
+        }
+        inline uint64_t size() const
+        {
+            return DataclassInstance::size(this->_class());
         }
     };
-    static_assert(sizeof(DataclassInstance) == 2 * sizeof(Value));
 
     // Specializations for static_value():
     template <> inline int64_t static_value<int64_t>(Value value)

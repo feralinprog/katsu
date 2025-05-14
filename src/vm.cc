@@ -195,7 +195,7 @@ namespace Katsu
             }
             case BytecodeOp::MAKE_TUPLE: {
                 auto num_components = arg().value<int64_t>();
-                auto tuple = this->gc.alloc<Tuple>(sizeof(Tuple) + num_components * sizeof(Value));
+                auto tuple = this->gc.alloc<Tuple>(num_components);
                 this->current_frame->data_depth -= num_components;
                 for (int i = 0; i < num_components; i++) {
                     Value* component =
@@ -210,7 +210,7 @@ namespace Katsu
             }
             case BytecodeOp::MAKE_VECTOR: {
                 auto num_components = arg().value<int64_t>();
-                auto vec = this->gc.alloc<Vector>(sizeof(Tuple) + num_components * sizeof(Value));
+                auto vec = this->gc.alloc<Vector>(num_components);
                 this->current_frame->data_depth -= num_components;
                 for (int i = 0; i < num_components; i++) {
                     Value* component =
@@ -232,11 +232,10 @@ namespace Katsu
                                      ->v_length.value<int64_t>();
                 }
 
-                Vector* _upregs =
-                    this->gc.alloc<Vector>(sizeof(Vector) + num_upregs * sizeof(Value));
+                Vector* _upregs = this->gc.alloc<Vector>(num_upregs);
                 Root upregs(this->gc, Value::object(_upregs));
 
-                Closure* closure = this->gc.alloc<Closure>(sizeof(Closure));
+                Closure* closure = this->gc.alloc<Closure>();
                 // Don't need to add the closure as a root; we're done with allocation.
                 // Also pull out _upregs again for convenience; it could have moved during closure
                 // allocation.
