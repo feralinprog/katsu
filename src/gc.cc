@@ -6,13 +6,16 @@
 namespace Katsu
 {
     GC::GC(uint64_t size)
+        : root_providers{}
+        , roots{}
+        , mem(nullptr)
+        , size(0)
+        , mem_opp(nullptr)
+        , spot(0)
     {
         if ((size & TAG_MASK) != 0) {
             throw std::invalid_argument("size must be TAG_BITS-aligned");
         }
-
-        this->mem = nullptr;
-        this->mem_opp = nullptr;
 
         this->mem = reinterpret_cast<uint8_t*>(aligned_alloc(1 << TAG_BITS, size));
         if (!this->mem) {
@@ -24,8 +27,6 @@ namespace Katsu
         if (!this->mem_opp) {
             throw std::bad_alloc();
         }
-
-        this->spot = 0;
     }
 
     GC::~GC()
@@ -127,15 +128,23 @@ namespace Katsu
             }
         };
 
-        for (Value* root : this->roots) {
-            // There shouldn't be any inline roots, but we don't really guard against it.
+        const auto add_root = [&move_obj](Value* root) {
 #if DEBUG_GC_LOG
             std::cout << "GC: adding root @" << root << "\n";
 #endif
-            if (root->is_inline()) {
-                continue;
+            if (!root->is_inline()) {
+                move_obj(root);
             }
-            move_obj(root);
+        };
+
+        std::function<void(Value*)> add_root_fn = add_root;
+        for (RootProvider* provider : this->root_providers) {
+            provider->visit_roots(add_root_fn);
+        }
+
+        for (Value* root : this->roots) {
+            // There shouldn't be any inline roots, but we don't really guard against it.
+            add_root(root);
         }
 
         uint8_t* queue = this->mem_opp;

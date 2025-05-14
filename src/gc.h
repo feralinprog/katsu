@@ -1,6 +1,7 @@
 #pragma once
 
 #include "value.h"
+#include <functional>
 #include <vector>
 
 #define DEBUG_GC_LOG (0)
@@ -18,6 +19,12 @@ namespace Katsu
         const uint64_t mask_n = (1ll << alignment_bits) - 1;
         return (x + mask_n) & ~mask_n;
     }
+
+    class RootProvider
+    {
+    public:
+        virtual void visit_roots(std::function<void(Value*)>& visitor) = 0;
+    };
 
     class GC
     {
@@ -89,8 +96,10 @@ namespace Katsu
             return allocation;
         }
 
+        std::vector<RootProvider*> root_providers;
         // (Pointers to) object values indicating any GC roots, i.e. entry points to the graph
-        // of live objects.
+        // of live objects. This is intended more for ephemeral extra roots that are not covered
+        // already by the root_providers.
         std::vector<Value*> roots;
 
     private:
@@ -107,5 +116,48 @@ namespace Katsu
         uint64_t spot;
 
         friend uint8_t* TESTONLY_get_mem(GC& gc);
+    };
+
+    class Root
+    {
+    public:
+        Root(GC& _gc, Value&& value)
+            : gc(&_gc)
+            , root(value)
+        {
+            gc->roots.push_back(&this->root);
+            value = Value::null();
+        }
+
+        Root(Root&) = delete;
+
+        Root(Root&& from)
+            : gc(from.gc)
+            , root(from.root)
+        {
+            from.gc = nullptr;
+            from.root = Value::null();
+        }
+
+        ~Root()
+        {
+            if (this->gc) {
+                this->gc->roots.pop_back();
+            }
+        }
+
+        operator Value()
+        {
+            return this->root;
+        }
+
+        Value& get()
+        {
+            return this->root;
+        }
+
+    private:
+        GC* gc;
+        Value root;
     };
 };
