@@ -157,6 +157,12 @@ namespace Katsu
 #endif
             uint64_t obj_size;
             switch (obj->tag()) {
+                case ObjectTag::REF: {
+                    auto v = obj->object<Ref*>();
+                    move_value(&v->v_ref);
+                    obj_size = v->size();
+                    break;
+                }
                 case ObjectTag::TUPLE: {
                     auto v = obj->object<Tuple*>();
                     int64_t length = v->v_length.value<int64_t>();
@@ -175,15 +181,56 @@ namespace Katsu
                     obj_size = v->size();
                     break;
                 }
+                case ObjectTag::MODULE: {
+                    auto v = obj->object<Module*>();
+                    move_value(&v->v_base);
+                    int64_t length = v->v_length.value<int64_t>();
+                    for (int64_t i = 0; i < length; i++) {
+                        Module::Entry& entry = v->entries()[i];
+                        move_value(&entry.key);
+                        move_value(&entry.value);
+                    }
+                    obj_size = v->size();
+                    break;
+                }
                 case ObjectTag::STRING: {
                     // No internal values to move.
                     auto v = obj->object<String*>();
                     obj_size = v->size();
                     break;
                 }
+                case ObjectTag::CODE: {
+                    auto v = obj->object<Code*>();
+                    move_value(&v->v_module);
+                    move_value(&v->v_num_regs);
+                    move_value(&v->v_num_data);
+                    move_value(&v->v_upreg_map);
+                    move_value(&v->v_insts);
+                    move_value(&v->v_args);
+                    obj_size = v->size();
+                    break;
+                }
                 case ObjectTag::CLOSURE: {
-                    // TODO
                     auto v = obj->object<Closure*>();
+                    move_value(&v->v_code);
+                    move_value(&v->v_upregs);
+                    obj_size = v->size();
+                    break;
+                }
+                case ObjectTag::METHOD: {
+                    auto v = obj->object<Method*>();
+                    move_value(&v->v_param_matchers);
+                    move_value(&v->v_return_type);
+                    move_value(&v->v_code);
+                    move_value(&v->v_attributes);
+                    obj_size = v->size();
+                    break;
+                }
+                case ObjectTag::MULTIMETHOD: {
+                    auto v = obj->object<MultiMethod*>();
+                    move_value(&v->v_name);
+                    move_value(&v->v_methods);
+                    move_value(&v->v_attributes);
                     obj_size = v->size();
                     break;
                 }

@@ -83,6 +83,8 @@ namespace Katsu
     {
     };
 
+    // TODO: create related generic types which are guaranteed to have the right tag?
+    // Like TaggedValue<int64_t>, guaranteed to be a fixnum.
 
     // TODO: convenience function for the pattern .value<Object*>()->object<*>();
     struct Value
@@ -165,10 +167,15 @@ namespace Katsu
 
     enum class ObjectTag
     {
+        REF,
         TUPLE,
         VECTOR,
+        MODULE,
         STRING,
+        CODE,
         CLOSURE,
+        METHOD,
+        MULTIMETHOD,
         TYPE,
         INSTANCE,
     };
@@ -176,10 +183,15 @@ namespace Katsu
     static const char* object_tag_str(ObjectTag tag)
     {
         switch (tag) {
+            case ObjectTag::REF: return "ref";
             case ObjectTag::TUPLE: return "tuple";
             case ObjectTag::VECTOR: return "vector";
+            case ObjectTag::MODULE: return "module";
             case ObjectTag::STRING: return "string";
+            case ObjectTag::CODE: return "code";
             case ObjectTag::CLOSURE: return "closure";
+            case ObjectTag::METHOD: return "method";
+            case ObjectTag::MULTIMETHOD: return "multimethod";
             case ObjectTag::TYPE: return "type";
             case ObjectTag::INSTANCE: return "instance";
             default: return "!unknown!";
@@ -254,10 +266,29 @@ namespace Katsu
         // TODO: do another templated fn for size()
     };
 
+    struct Ref : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::REF;
+
+        Value v_ref; // should be Object, could be anything really
+
+        // Size in bytes.
+        // TODO: just use e.g. sizeof(Ref), and change the rest too.
+        // TODO: static version that can be used for allocation? (must take in arguments for e.g.
+        // tuple)
+        inline uint64_t size() const
+        {
+            return 2 * sizeof(Value);
+        }
+    };
+    static_assert(sizeof(Ref) == 2 * sizeof(Value));
+
     struct Tuple : public Object
     {
         static const ObjectTag CLASS_TAG = ObjectTag::TUPLE;
 
+        // TODO: replace Value with uint64_t for lengths..?
+        // not sure the flexibility is actually useful here.
         Value v_length; // fixnum
         inline Value* components()
         {
@@ -298,6 +329,38 @@ namespace Katsu
     };
     static_assert(sizeof(Vector) == 2 * sizeof(Value));
 
+    struct Module : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::MODULE;
+
+        // Currently implemented as associative array.
+        // TODO: use a more optimal data structure.
+        struct Entry
+        {
+            Value key;   // String
+            Value value; // anything
+        };
+        static_assert(sizeof(Entry) == 2 * sizeof(Value));
+
+        Value v_base;   // Module or Null
+        Value v_length; // fixnum
+        inline Entry* entries()
+        {
+            return reinterpret_cast<Entry*>(&this->v_length + 1);
+        }
+
+        // Size in bytes.
+        inline uint64_t size() const
+        {
+            int64_t length = this->v_length.value<int64_t>();
+            if (length < 0) {
+                throw std::runtime_error("module has negative length");
+            }
+            return (3 + length) * sizeof(Entry);
+        }
+    };
+    static_assert(sizeof(Module) == 3 * sizeof(Value));
+
     struct String : public Object
     {
         static const ObjectTag CLASS_TAG = ObjectTag::STRING;
@@ -320,19 +383,88 @@ namespace Katsu
     };
     static_assert(sizeof(String) == 2 * sizeof(Value));
 
-    struct Closure : public Object
+    struct Code : public Object
     {
-        static const ObjectTag CLASS_TAG = ObjectTag::CLOSURE;
+        static const ObjectTag CLASS_TAG = ObjectTag::CODE;
 
-        // TODO
+        Value v_module;    // Module
+        Value v_num_regs;  // fixnum
+        Value v_num_data;  // fixnum
+        Value v_upreg_map; // Null for methods; Vector (of fixnum) for closures
+        // TODO: byte array inline?
+        Value v_insts; // Vector of fixnums
+        // TODO: arg array inline?
+        Value v_args; // Vector (of arbitrary values)
+        // TODO: source span for the source of the bytecode (e.g. closure or method definition)
+        // TODO: source span per bytecode
 
         // Size in bytes.
         uint64_t size() const
         {
-            return sizeof(Value);
+            return 7 * sizeof(Value);
         }
     };
-    static_assert(sizeof(Closure) == sizeof(Value));
+    static_assert(sizeof(Code) == 7 * sizeof(Value));
+
+    struct Closure : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::CLOSURE;
+
+        Value v_code;   // Code
+        Value v_upregs; // Vector
+
+        // Size in bytes.
+        uint64_t size() const
+        {
+            return 3 * sizeof(Value);
+        }
+    };
+    static_assert(sizeof(Closure) == 3 * sizeof(Value));
+
+    // Pointer to a function which takes an array of Values, calculates a result, and returns it.
+    // The input values may be temporary locations in a call frame; copy them before calling into
+    // any VM functionality. Furthermore, the input values may not be GC roots; add them as roots
+    // before using any GC functionality (which may induce a collection).
+    class VM;
+    typedef Value (*NativeHandler)(VM&, int64_t, Value*);
+    // typedef Value *IntrinsicHandler(int64_t, Value*);
+
+    struct Method : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::METHOD;
+
+        Value v_param_matchers; // TODO how to represent this?? vector of any / type / value
+        Value v_return_type;    // Type or Null
+        Value v_code;           // Code, or Null if referring to a native method
+        // Arbitrary extra values attached by user.
+        Value v_attributes;           // Vector
+        NativeHandler native_handler; // optional (nullptr)
+
+        // Size in bytes.
+        uint64_t size() const
+        {
+            return 6 * sizeof(Value);
+        }
+    };
+    static_assert(sizeof(Method) == 6 * sizeof(Value));
+
+    struct MultiMethod : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::MULTIMETHOD;
+
+        // Just for debugging / logging.
+        Value v_name;    // String
+        Value v_methods; // Vector of Method
+        // Arbitrary extra values attached by user.
+        Value v_attributes; // Vector
+
+        // Size in bytes.
+        uint64_t size() const
+        {
+            return 4 * sizeof(Value);
+        }
+    };
+    static_assert(sizeof(MultiMethod) == 4 * sizeof(Value));
 
     struct Type : public Object
     {
@@ -441,6 +573,13 @@ namespace Katsu
     }
 
     // Specializations for static_object():
+    template <> inline Ref* static_object<Ref*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::REF) {
+            throw std::runtime_error("expected ref");
+        }
+        return reinterpret_cast<Ref*>(&object);
+    }
     template <> inline Tuple* static_object<Tuple*>(Object& object)
     {
         if (object.tag() != ObjectTag::TUPLE) {
@@ -455,6 +594,13 @@ namespace Katsu
         }
         return reinterpret_cast<Vector*>(&object);
     }
+    template <> inline Module* static_object<Module*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::MODULE) {
+            throw std::runtime_error("expected module");
+        }
+        return reinterpret_cast<Module*>(&object);
+    }
     template <> inline String* static_object<String*>(Object& object)
     {
         if (object.tag() != ObjectTag::STRING) {
@@ -462,12 +608,33 @@ namespace Katsu
         }
         return reinterpret_cast<String*>(&object);
     }
+    template <> inline Code* static_object<Code*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::CODE) {
+            throw std::runtime_error("expected code");
+        }
+        return reinterpret_cast<Code*>(&object);
+    }
     template <> inline Closure* static_object<Closure*>(Object& object)
     {
         if (object.tag() != ObjectTag::CLOSURE) {
             throw std::runtime_error("expected closure");
         }
         return reinterpret_cast<Closure*>(&object);
+    }
+    template <> inline Method* static_object<Method*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::METHOD) {
+            throw std::runtime_error("expected method");
+        }
+        return reinterpret_cast<Method*>(&object);
+    }
+    template <> inline MultiMethod* static_object<MultiMethod*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::MULTIMETHOD) {
+            throw std::runtime_error("expected multimethod");
+        }
+        return reinterpret_cast<MultiMethod*>(&object);
     }
     template <> inline Type* static_object<Type*>(Object& object)
     {
@@ -479,7 +646,7 @@ namespace Katsu
     template <> inline DataclassInstance* static_object<DataclassInstance*>(Object& object)
     {
         if (object.tag() != ObjectTag::INSTANCE) {
-            throw std::runtime_error("expected dataclass instance");
+            throw std::runtime_error("expected instance");
         }
         return reinterpret_cast<DataclassInstance*>(&object);
     }

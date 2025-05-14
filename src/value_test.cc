@@ -66,6 +66,19 @@ TEST_CASE("object tagging/untagging", "[value]")
     free(aligned);
 }
 
+// Curried pair type.
+template <typename A> struct Pair
+{
+    template <typename B> struct And
+    {
+        using T1 = A;
+        using T2 = B;
+    };
+};
+
+#define PAIR_LEFT(T) Pair<T>::And
+#define PAIR_RIGHT(T) T
+
 // Generic helper to create an example Value of any given tag.
 template <typename T> Value make();
 template <> Value make<int64_t>()
@@ -91,19 +104,6 @@ template <> Value make<Object*>()
 
 #define EACH_TYPE(F) (F(int64_t), F(bool), F(Null), F(Object*))
 
-// Curried pair type.
-template <typename A> struct Pair
-{
-    template <typename B> struct And
-    {
-        using T1 = A;
-        using T2 = B;
-    };
-};
-
-#define PAIR_LEFT(T) Pair<T>::And
-#define PAIR_RIGHT(T) T
-
 TEMPLATE_PRODUCT_TEST_CASE("tags keep track of underlying value type", "[value]",
                            EACH_TYPE(PAIR_LEFT), EACH_TYPE(PAIR_RIGHT))
 {
@@ -115,9 +115,9 @@ TEMPLATE_PRODUCT_TEST_CASE("tags keep track of underlying value type", "[value]"
     if (std::is_same<T1, T2>::value) {
         CHECK_NOTHROW(v.value<T2>());
     } else {
-        CHECK_THROWS_MATCHES(v.value<T2>(),
-                             std::runtime_error,
-                             MessageMatches(StartsWith("expected ")));
+        std::stringstream ss;
+        ss << "expected " << tag_str(make<T2>().tag());
+        CHECK_THROWS_MATCHES(v.value<T2>(), std::runtime_error, Message(ss.str()));
     }
 }
 
@@ -156,96 +156,48 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     free(&obj);
 }
 
-TEST_CASE("object() helper checks object tags", "[object]")
+#define EACH_OBJECT(F) \
+    (F(Ref),           \
+     F(Tuple),         \
+     F(Vector),        \
+     F(Module),        \
+     F(String),        \
+     F(Code),          \
+     F(Closure),       \
+     F(Method),        \
+     F(MultiMethod),   \
+     F(Type),          \
+     F(DataclassInstance))
+
+TEMPLATE_PRODUCT_TEST_CASE("object() helper checks object tags", "[object]", EACH_OBJECT(PAIR_LEFT),
+                           EACH_OBJECT(PAIR_RIGHT))
 {
+    using T1 = typename TestType::T1;
+    using T2 = typename TestType::T2;
+
     Object& obj = *reinterpret_cast<Object*>(malloc(sizeof(Object)));
+    REQUIRE_NOTHROW(obj.set_object(T1::CLASS_TAG));
 
-    {
-        REQUIRE_NOTHROW(obj.set_object(ObjectTag::TUPLE));
-        CHECK(obj.object<Tuple*>() == reinterpret_cast<Tuple*>(&obj));
-        CHECK_THROWS_MATCHES(obj.object<Vector*>(), std::runtime_error, Message("expected vector"));
-        CHECK_THROWS_MATCHES(obj.object<String*>(), std::runtime_error, Message("expected string"));
-        CHECK_THROWS_MATCHES(obj.object<Closure*>(),
-                             std::runtime_error,
-                             Message("expected closure"));
-        CHECK_THROWS_MATCHES(obj.object<Type*>(), std::runtime_error, Message("expected type"));
-        CHECK_THROWS_MATCHES(obj.object<DataclassInstance*>(),
-                             std::runtime_error,
-                             Message("expected dataclass instance"));
-    }
-
-    {
-        REQUIRE_NOTHROW(obj.set_object(ObjectTag::VECTOR));
-        CHECK_THROWS_MATCHES(obj.object<Tuple*>(), std::runtime_error, Message("expected tuple"));
-        CHECK(obj.object<Vector*>() == reinterpret_cast<Vector*>(&obj));
-        CHECK_THROWS_MATCHES(obj.object<String*>(), std::runtime_error, Message("expected string"));
-        CHECK_THROWS_MATCHES(obj.object<Closure*>(),
-                             std::runtime_error,
-                             Message("expected closure"));
-        CHECK_THROWS_MATCHES(obj.object<Type*>(), std::runtime_error, Message("expected type"));
-        CHECK_THROWS_MATCHES(obj.object<DataclassInstance*>(),
-                             std::runtime_error,
-                             Message("expected dataclass instance"));
-    }
-
-    {
-        REQUIRE_NOTHROW(obj.set_object(ObjectTag::STRING));
-        CHECK_THROWS_MATCHES(obj.object<Tuple*>(), std::runtime_error, Message("expected tuple"));
-        CHECK_THROWS_MATCHES(obj.object<Vector*>(), std::runtime_error, Message("expected vector"));
-        CHECK(obj.object<String*>() == reinterpret_cast<String*>(&obj));
-        CHECK_THROWS_MATCHES(obj.object<Closure*>(),
-                             std::runtime_error,
-                             Message("expected closure"));
-        CHECK_THROWS_MATCHES(obj.object<Type*>(), std::runtime_error, Message("expected type"));
-        CHECK_THROWS_MATCHES(obj.object<DataclassInstance*>(),
-                             std::runtime_error,
-                             Message("expected dataclass instance"));
-    }
-
-    {
-        REQUIRE_NOTHROW(obj.set_object(ObjectTag::CLOSURE));
-        CHECK_THROWS_MATCHES(obj.object<Tuple*>(), std::runtime_error, Message("expected tuple"));
-        CHECK_THROWS_MATCHES(obj.object<Vector*>(), std::runtime_error, Message("expected vector"));
-        CHECK_THROWS_MATCHES(obj.object<String*>(), std::runtime_error, Message("expected string"));
-        CHECK(obj.object<Closure*>() == reinterpret_cast<Closure*>(&obj));
-        CHECK_THROWS_MATCHES(obj.object<Type*>(), std::runtime_error, Message("expected type"));
-        CHECK_THROWS_MATCHES(obj.object<DataclassInstance*>(),
-                             std::runtime_error,
-                             Message("expected dataclass instance"));
-    }
-
-    {
-        REQUIRE_NOTHROW(obj.set_object(ObjectTag::TYPE));
-        CHECK_THROWS_MATCHES(obj.object<Tuple*>(), std::runtime_error, Message("expected tuple"));
-        CHECK_THROWS_MATCHES(obj.object<Vector*>(), std::runtime_error, Message("expected vector"));
-        CHECK_THROWS_MATCHES(obj.object<String*>(), std::runtime_error, Message("expected string"));
-        CHECK_THROWS_MATCHES(obj.object<Closure*>(),
-                             std::runtime_error,
-                             Message("expected closure"));
-        CHECK(obj.object<Type*>() == reinterpret_cast<Type*>(&obj));
-        CHECK_THROWS_MATCHES(obj.object<DataclassInstance*>(),
-                             std::runtime_error,
-                             Message("expected dataclass instance"));
-    }
-
-    {
-        REQUIRE_NOTHROW(obj.set_object(ObjectTag::INSTANCE));
-        CHECK_THROWS_MATCHES(obj.object<Tuple*>(), std::runtime_error, Message("expected tuple"));
-        CHECK_THROWS_MATCHES(obj.object<Vector*>(), std::runtime_error, Message("expected vector"));
-        CHECK_THROWS_MATCHES(obj.object<String*>(), std::runtime_error, Message("expected string"));
-        CHECK_THROWS_MATCHES(obj.object<Closure*>(),
-                             std::runtime_error,
-                             Message("expected closure"));
-        CHECK_THROWS_MATCHES(obj.object<Type*>(), std::runtime_error, Message("expected type"));
-        CHECK(obj.object<DataclassInstance*>() == reinterpret_cast<DataclassInstance*>(&obj));
+    if (std::is_same<T1, T2>::value) {
+        CHECK(obj.object<T2*>() == reinterpret_cast<T2*>(&obj));
+    } else {
+        // TODO: check full error message
+        std::stringstream ss;
+        ss << "expected " << object_tag_str(T2::CLASS_TAG);
+        CHECK_THROWS_MATCHES(obj.object<T2*>(), std::runtime_error, Message(ss.str()));
     }
 
     free(&obj);
 }
 
+// TODO: test functions of Ref
 // TODO: test functions of Tuple
 // TODO: test functions of Vector
+// TODO: test functions of Module
 // TODO: test functions of String
+// TODO: test functions of Code
 // TODO: test functions of Closure
+// TODO: test functions of Method
+// TODO: test functions of MultiMethod
 // TODO: test functions of Type
 // TODO: test functions of DataclassInstance
