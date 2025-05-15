@@ -65,6 +65,11 @@ namespace Katsu
             if (!obj->is_forwarding()) {
                 uint64_t obj_size;
                 switch (obj->tag()) {
+                    case ObjectTag::REF: {
+                        auto v = obj->object<Ref*>();
+                        obj_size = v->size();
+                        break;
+                    }
                     case ObjectTag::TUPLE: {
                         auto v = obj->object<Tuple*>();
                         obj_size = v->size();
@@ -75,13 +80,33 @@ namespace Katsu
                         obj_size = v->size();
                         break;
                     }
+                    case ObjectTag::MODULE: {
+                        auto v = obj->object<Module*>();
+                        obj_size = v->size();
+                        break;
+                    }
                     case ObjectTag::STRING: {
                         auto v = obj->object<String*>();
                         obj_size = v->size();
                         break;
                     }
+                    case ObjectTag::CODE: {
+                        auto v = obj->object<Code*>();
+                        obj_size = v->size();
+                        break;
+                    }
                     case ObjectTag::CLOSURE: {
                         auto v = obj->object<Closure*>();
+                        obj_size = v->size();
+                        break;
+                    }
+                    case ObjectTag::METHOD: {
+                        auto v = obj->object<Method*>();
+                        obj_size = v->size();
+                        break;
+                    }
+                    case ObjectTag::MULTIMETHOD: {
+                        auto v = obj->object<MultiMethod*>();
                         obj_size = v->size();
                         break;
                     }
