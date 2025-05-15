@@ -89,7 +89,7 @@ namespace Katsu
                 // There is only a single frame in the call stack; check if we're done.
                 bool finished_instructions =
                     this->current_frame->inst_spot == frame_insts->v_length.value<int64_t>();
-                bool no_cleanup = this->current_frame->v_cleanup.tag() != Tag::_NULL;
+                bool no_cleanup = this->current_frame->v_cleanup.tag() == Tag::_NULL;
                 if (finished_instructions && no_cleanup) {
                     Value return_value = this->current_frame->data()[0];
                     this->current_frame = nullptr;
