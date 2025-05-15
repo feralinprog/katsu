@@ -161,6 +161,15 @@ namespace Katsu
             }
             return Value(Tag::OBJECT, raw >> TAG_BITS);
         }
+
+        inline bool operator==(const Value& other) const
+        {
+            return other.tagged == this->tagged;
+        }
+        inline bool operator!=(const Value& other) const
+        {
+            return !(*this == other);
+        }
     };
     static_assert(sizeof(Value*) <= sizeof(Value));
     static_assert((1 << VALUE_PTR_BITS) == sizeof(Value*));
