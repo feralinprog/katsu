@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "vm.h"
+#include <cstring>
 
 using namespace Katsu;
 
@@ -17,6 +18,7 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     VM vm(gc, 10 * 1024);
 
     // Perform a simple LOAD_VALUE.
+
     Module* module = gc.alloc<Module>(0);
     Root r_module(gc, Value::object(module));
     module->v_base = Value::null();
@@ -49,9 +51,79 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     CHECK(result == Value::fixnum(1234));
 }
 
+Value test__fixnum_add(VM& vm, int64_t num_args, Value* args)
+{
+    REQUIRE(num_args == 2);
+    REQUIRE(args[0].tag() == Tag::FIXNUM);
+    REQUIRE(args[1].tag() == Tag::FIXNUM);
+    return Value::fixnum(args[0].value<int64_t>() + args[1].value<int64_t>());
+}
+
 TEST_CASE("VM executes a native invocation", "[vm]")
 {
     GC gc(1024 * 1024);
     VM vm(gc, 10 * 1024);
-    // TODO
+
+    // Perform an INVOKE op to add two fixnums.
+
+    String* method_name = gc.alloc<String>(strlen("+:"));
+    Root r_method_name(gc, Value::object(method_name));
+    method_name->v_length = Value::fixnum(strlen("+:"));
+    memcpy(method_name->contents(), "+:", strlen("+:"));
+
+    Method* method = gc.alloc<Method>();
+    Root r_method(gc, Value::object(method));
+    method->v_param_matchers = Value::null(); // TODO
+    method->v_return_type = Value::null();
+    method->v_code = Value::null();       // native!
+    method->v_attributes = Value::null(); // TODO should be vector
+    method->native_handler = &test__fixnum_add;
+
+    Vector* methods = gc.alloc<Vector>(1);
+    Root r_methods(gc, Value::object(methods));
+    methods->v_length = Value::fixnum(1);
+    methods->components()[0] = r_method.get();
+
+    MultiMethod* multimethod = gc.alloc<MultiMethod>();
+    Root r_multimethod(gc, Value::object(multimethod));
+    multimethod->v_name = r_method_name.get();
+    multimethod->v_methods = r_methods.get();
+    multimethod->v_attributes = Value::null(); // TODO should be vector
+
+    Module* module = gc.alloc<Module>(1);
+    Root r_module(gc, Value::object(module));
+    module->v_base = Value::null();
+    module->v_length = Value::fixnum(1);
+    module->entries()[0].key = r_method_name.get();
+    module->entries()[0].value = r_multimethod.get();
+
+    Vector* insts = gc.alloc<Vector>(3);
+    Root r_insts(gc, Value::object(insts));
+    insts->v_length = Value::fixnum(3);
+    insts->components()[0] = Value::fixnum(BytecodeOp::LOAD_VALUE);
+    insts->components()[1] = Value::fixnum(BytecodeOp::LOAD_VALUE);
+    insts->components()[2] = Value::fixnum(BytecodeOp::INVOKE);
+
+    Vector* args = gc.alloc<Vector>(4);
+    Root r_args(gc, Value::object(args));
+    args->v_length = Value::fixnum(4);
+    // LOAD_VALUE: 5
+    args->components()[0] = Value::fixnum(5);
+    // LOAD_VALUE: 10
+    args->components()[1] = Value::fixnum(10);
+    // INVOKE: +: with two args
+    args->components()[2] = r_method_name.get();
+    args->components()[3] = Value::fixnum(2);
+
+    Code* code = gc.alloc<Code>();
+    Root r_code(gc, Value::object(code));
+    code->v_module = r_module.get();
+    code->v_num_regs = Value::fixnum(1);
+    code->v_num_data = Value::fixnum(1);
+    code->v_upreg_map = Value::null();
+    code->v_insts = r_insts.get();
+    code->v_args = r_args.get();
+
+    Value result = vm.eval_toplevel(Value::object(code));
+    CHECK(result == Value::fixnum(15));
 }
