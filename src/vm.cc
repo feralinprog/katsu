@@ -172,11 +172,18 @@ namespace Katsu
                 break;
             }
             case BytecodeOp::LOAD_MODULE: {
-                // TODO
+                push(module_lookup(this->current_frame->v_module,
+                                   arg().value<Object*>()->object<String*>()));
+                shift_inst();
+                shift_arg();
                 break;
             }
             case BytecodeOp::STORE_MODULE: {
-                // TODO
+                Value& slot = module_lookup(this->current_frame->v_module,
+                                            arg().value<Object*>()->object<String*>());
+                slot = pop();
+                shift_inst();
+                shift_arg();
                 break;
             }
             case BytecodeOp::INVOKE: {
@@ -266,7 +273,7 @@ namespace Katsu
         }
     }
 
-    Value VM::module_lookup(Value v_module, String* name)
+    Value& VM::module_lookup(Value v_module, String* name)
     {
         int64_t name_length = name->v_length.value<int64_t>();
         // TODO: check against size_t?

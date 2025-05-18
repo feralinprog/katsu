@@ -164,7 +164,7 @@ namespace Katsu
         void single_step();
 
         // Look up the method_name in the module, following v_base until null.
-        static Value module_lookup(Value v_module, String* name);
+        static Value& module_lookup(Value v_module, String* name);
 
         // Invoke a value (which could be a closure or multimethod) with some arguments. The
         // arguments may be just past the end of the current frame's data stack.
