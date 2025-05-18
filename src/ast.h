@@ -179,6 +179,8 @@ namespace Katsu
     class ExprVisitor
     {
     public:
+        virtual ~ExprVisitor() = default;
+
         virtual void visit(UnaryOpExpr& expr) = 0;
         virtual void visit(BinaryOpExpr& expr) = 0;
         virtual void visit(NameExpr& expr) = 0;
