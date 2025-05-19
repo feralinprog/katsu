@@ -4,8 +4,12 @@
 #include <functional>
 #include <vector>
 
+// Enable logging from the GC.
 #define DEBUG_GC_LOG (0)
+// Have the GC fill all new allocations with a fixed byte pattern.
 #define DEBUG_GC_FILL (1)
+// Have the GC perform a collection on every allocation. This is incredibly slow but quickly finds
+// bugs where consumers forgot to add a GC root.
 #define DEBUG_GC_COLLECT_EVERY_ALLOC (0)
 
 #if DEBUG_GC_LOG
