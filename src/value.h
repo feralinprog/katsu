@@ -319,21 +319,22 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::VECTOR;
 
-        Value v_length; // fixnum
+        Value v_capacity; // fixnum
+        Value v_length;   // fixnum
         inline Value* components()
         {
             return &this->v_length + 1;
         }
 
         // Size in bytes.
-        static inline uint64_t size(int64_t length)
+        static inline uint64_t size(int64_t capacity)
         {
-            return sizeof(Vector) + length * sizeof(Value);
+            return sizeof(Vector) + capacity * sizeof(Value);
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.value<int64_t>();
-            return Vector::size(length);
+            int64_t capacity = this->v_capacity.value<int64_t>();
+            return Vector::size(capacity);
         }
     };
 

@@ -40,7 +40,7 @@ namespace Katsu
 
         // T must be a subtype of Object.
         // The (variadic) arguments are directly passed to T::size(...).
-        // For instance, alloc<Vector>(n) would allocate a vector of length n (and size being
+        // For instance, alloc<Vector>(n) would allocate a vector of capacity n (and size being
         // sizeof(Vector) + n * sizeof(Value)).
         template <typename T, typename... S> T* alloc(S... size_args)
         {

@@ -218,6 +218,8 @@ namespace Katsu
             case BytecodeOp::MAKE_VECTOR: {
                 auto num_components = arg().value<int64_t>();
                 auto vec = this->gc.alloc<Vector>(num_components);
+                vec->v_capacity = Value::fixnum(num_components);
+                vec->v_length = Value::fixnum(num_components);
                 this->current_frame->data_depth -= num_components;
                 for (int i = 0; i < num_components; i++) {
                     Value* component =
@@ -240,6 +242,8 @@ namespace Katsu
                 }
 
                 Vector* _upregs = this->gc.alloc<Vector>(num_upregs);
+                _upregs->v_capacity = Value::fixnum(num_upregs);
+                _upregs->v_length = Value::fixnum(num_upregs);
                 Root upregs(this->gc, Value::object(_upregs));
 
                 Closure* closure = this->gc.alloc<Closure>();
