@@ -45,11 +45,11 @@ namespace Katsu
             throw std::logic_error("shouldn't already have a call frame if eval-ing at top level");
         }
 
-        Root code(this->gc, std::move(v_code));
+        Root r_code(this->gc, std::move(v_code));
         int64_t code_num_regs =
-            code.get().value<Object*>()->object<Code*>()->v_num_regs.value<int64_t>();
+            r_code.get().value<Object*>()->object<Code*>()->v_num_regs.value<int64_t>();
         int64_t code_num_data =
-            code.get().value<Object*>()->object<Code*>()->v_num_data.value<int64_t>();
+            r_code.get().value<Object*>()->object<Code*>()->v_num_data.value<int64_t>();
         if (code_num_regs < 0) {
             throw std::logic_error("num_regs is negative");
         }
@@ -70,7 +70,7 @@ namespace Katsu
         std::memset(next_frame_mem, 0x1234ABCD, next_frame_size);
 
         auto frame = reinterpret_cast<Frame*>(next_frame_mem);
-        frame->v_code = code;
+        frame->v_code = r_code.get();
         frame->inst_spot = 0;
         frame->arg_spot = 0;
         frame->num_regs = code_num_regs;
@@ -79,7 +79,7 @@ namespace Katsu
         frame->v_cleanup = Value::null();
         frame->is_cleanup = false;
         frame->return_id = 0; // TODO
-        frame->v_module = code.get().value<Object*>()->object<Code*>()->v_module;
+        frame->v_module = r_code.get().value<Object*>()->object<Code*>()->v_module;
         this->current_frame = frame;
 
         while (true) {
@@ -91,9 +91,9 @@ namespace Katsu
                     this->current_frame->inst_spot == frame_insts->v_length.value<int64_t>();
                 bool no_cleanup = this->current_frame->v_cleanup.tag() == Tag::_NULL;
                 if (finished_instructions && no_cleanup) {
-                    Value return_value = this->current_frame->data()[0];
+                    Value v_return_value = this->current_frame->data()[0];
                     this->current_frame = nullptr;
-                    return return_value;
+                    return v_return_value;
                 }
             }
             single_step();
@@ -110,11 +110,11 @@ namespace Katsu
             this->current_frame->data()[this->current_frame->data_depth++] = value;
         };
         auto pop = [this]() -> Value {
-            Value* top = &this->current_frame->data()[this->current_frame->data_depth];
-            Value popped = *top;
-            *top = Value::null();
+            Value* v_top = &this->current_frame->data()[this->current_frame->data_depth];
+            Value v_popped = *v_top;
+            *v_top = Value::null();
             this->current_frame->data_depth--;
-            return popped;
+            return v_popped;
         };
 
         auto arg = [this, frame_args](int offset = 0) -> Value {
@@ -187,15 +187,15 @@ namespace Katsu
                 break;
             }
             case BytecodeOp::INVOKE: {
-                Value method = module_lookup(this->current_frame->v_module,
-                                             arg(+0).value<Object*>()->object<String*>());
+                Value v_method = module_lookup(this->current_frame->v_module,
+                                               arg(+0).value<Object*>()->object<String*>());
                 int64_t num_args = arg(+1).value<int64_t>();
                 this->current_frame->data_depth -= num_args;
 
                 shift_inst();
                 shift_arg(2);
 
-                this->invoke(method,
+                this->invoke(v_method,
                              num_args,
                              this->current_frame->data() + this->current_frame->data_depth);
                 break;
@@ -241,19 +241,19 @@ namespace Katsu
                                      ->v_length.value<int64_t>();
                 }
 
-                Vector* _upregs = this->gc.alloc<Vector>(num_upregs);
-                _upregs->v_capacity = Value::fixnum(num_upregs);
-                _upregs->v_length = Value::fixnum(num_upregs);
-                Root upregs(this->gc, Value::object(_upregs));
+                Vector* upregs = this->gc.alloc<Vector>(num_upregs);
+                upregs->v_capacity = Value::fixnum(num_upregs);
+                upregs->v_length = Value::fixnum(num_upregs);
+                Root r_upregs(this->gc, Value::object(upregs));
 
                 Closure* closure = this->gc.alloc<Closure>();
                 // Don't need to add the closure as a root; we're done with allocation.
                 // Also pull out _upregs again for convenience; it could have moved during closure
                 // allocation.
-                _upregs = upregs.get().value<Object*>()->object<Vector*>();
+                upregs = r_upregs.get().value<Object*>()->object<Vector*>();
 
                 closure->v_code = arg();
-                closure->v_upregs = upregs.get();
+                closure->v_upregs = r_upregs.get();
 
                 // Copy from the current stack frame registers into the closure's upregs.
                 Vector* upreg_map = arg()
@@ -263,7 +263,7 @@ namespace Katsu
                                         ->object<Vector*>();
                 for (int64_t i = 0; i < upreg_map->v_length.value<int64_t>(); i++) {
                     int64_t src = upreg_map->components()[i].value<int64_t>();
-                    _upregs->components()[i] = this->current_frame->regs()[src];
+                    upregs->components()[i] = this->current_frame->regs()[src];
                 }
 
                 push(Value::object(closure));
@@ -287,7 +287,7 @@ namespace Katsu
             int64_t num_entries = module->v_length.value<int64_t>();
             for (int64_t i = 0; i < num_entries; i++) {
                 Module::Entry& entry = module->entries()[i];
-                String* entry_name = entry.key.value<Object*>()->object<String*>();
+                String* entry_name = entry.v_key.value<Object*>()->object<String*>();
                 if (entry_name->v_length.value<int64_t>() != name_length) {
                     continue;
                 }
@@ -295,7 +295,7 @@ namespace Katsu
                     continue;
                 }
                 // Match!
-                return entry.value;
+                return entry.v_value;
             }
             v_module = module->v_base;
         }
@@ -325,11 +325,11 @@ namespace Katsu
             if (!method->native_handler) {
                 throw std::logic_error("method must have v_code or a native_handler");
             }
-            Value result = method->native_handler(*this, num_args, args);
+            Value v_result = method->native_handler(*this, num_args, args);
             auto push = [this](Value value) -> void {
                 this->current_frame->data()[this->current_frame->data_depth++] = value;
             };
-            push(result);
+            push(v_result);
         } else {
             // Bytecode body.
             Code* code = method->v_code.value<Object*>()->object<Code*>();

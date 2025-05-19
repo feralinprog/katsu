@@ -45,12 +45,12 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     code->v_insts = r_insts.get();
     code->v_args = r_args.get();
 
-    Value result = vm.eval_toplevel(Value::object(code));
-    CHECK(result == Value::fixnum(1234));
+    Value v_result = vm.eval_toplevel(Value::object(code));
+    CHECK(v_result == Value::fixnum(1234));
 
     // Evaluate again -- VM should be able to handle this easily.
-    result = vm.eval_toplevel(Value::object(code));
-    CHECK(result == Value::fixnum(1234));
+    v_result = vm.eval_toplevel(Value::object(code));
+    CHECK(v_result == Value::fixnum(1234));
 }
 
 Value test__fixnum_add(VM& vm, int64_t num_args, Value* args)
@@ -97,8 +97,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Root r_module(gc, Value::object(module));
     module->v_base = Value::null();
     module->v_length = Value::fixnum(1);
-    module->entries()[0].key = r_method_name.get();
-    module->entries()[0].value = r_multimethod.get();
+    module->entries()[0].v_key = r_method_name.get();
+    module->entries()[0].v_value = r_multimethod.get();
 
     Vector* insts = gc.alloc<Vector>(3);
     Root r_insts(gc, Value::object(insts));
@@ -129,6 +129,6 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     code->v_insts = r_insts.get();
     code->v_args = r_args.get();
 
-    Value result = vm.eval_toplevel(Value::object(code));
-    CHECK(result == Value::fixnum(15));
+    Value v_result = vm.eval_toplevel(Value::object(code));
+    CHECK(v_result == Value::fixnum(15));
 }

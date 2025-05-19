@@ -212,8 +212,8 @@ namespace Katsu
                     int64_t length = v->v_length.value<int64_t>();
                     for (int64_t i = 0; i < length; i++) {
                         Module::Entry& entry = v->entries()[i];
-                        move_value(&entry.key);
-                        move_value(&entry.value);
+                        move_value(&entry.v_key);
+                        move_value(&entry.v_value);
                     }
                     obj_size = v->size();
                     break;

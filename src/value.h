@@ -346,8 +346,8 @@ namespace Katsu
         // TODO: use a more optimal data structure.
         struct Entry
         {
-            Value key;   // String
-            Value value; // anything
+            Value v_key;   // String
+            Value v_value; // anything
         };
         static_assert(sizeof(Entry) == 2 * sizeof(Value));
 
