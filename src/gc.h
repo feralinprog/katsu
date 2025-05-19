@@ -6,7 +6,7 @@
 
 #define DEBUG_GC_LOG (0)
 #define DEBUG_GC_FILL (1)
-#define DEBUG_GC_EVERY_ALLOC (0)
+#define DEBUG_GC_COLLECT_EVERY_ALLOC (0)
 
 #if DEBUG_GC_LOG
 #include <iostream>
@@ -68,7 +68,7 @@ namespace Katsu
 
             uint64_t remaining = this->size - this->spot;
 
-#if DEBUG_GC_EVERY_ALLOC
+#if DEBUG_GC_COLLECT_EVERY_ALLOC
             {
 #else
             if (size > remaining) [[unlikely]] {

@@ -43,7 +43,7 @@ namespace Katsu
 TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
 {
     // The test verifies that the GC collects when expected -- when not collecting on every alloc.
-    if (DEBUG_GC_EVERY_ALLOC) {
+    if (DEBUG_GC_COLLECT_EVERY_ALLOC) {
         SKIP();
     }
 
