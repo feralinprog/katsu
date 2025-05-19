@@ -28,7 +28,7 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     Root r_insts(gc, Value::object(insts));
     insts->v_capacity = Value::fixnum(1);
     insts->v_length = Value::fixnum(1);
-    insts->components()[0] = Value::fixnum(BytecodeOp::LOAD_VALUE);
+    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
 
     Vector* args = gc.alloc<Vector>(1);
     Root r_args(gc, Value::object(args));
@@ -104,9 +104,9 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Root r_insts(gc, Value::object(insts));
     insts->v_capacity = Value::fixnum(3);
     insts->v_length = Value::fixnum(3);
-    insts->components()[0] = Value::fixnum(BytecodeOp::LOAD_VALUE);
-    insts->components()[1] = Value::fixnum(BytecodeOp::LOAD_VALUE);
-    insts->components()[2] = Value::fixnum(BytecodeOp::INVOKE);
+    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
+    insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
+    insts->components()[2] = Value::fixnum(OpCode::INVOKE);
 
     Vector* args = gc.alloc<Vector>(4);
     Root r_args(gc, Value::object(args));

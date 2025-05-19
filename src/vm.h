@@ -90,7 +90,7 @@ namespace Katsu
      *   registers and access pattern via e.g. load_reg/load_ref)
      */
 
-    enum BytecodeOp
+    enum OpCode
     {
         LOAD_REG,
         STORE_REG,

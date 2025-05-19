@@ -135,19 +135,19 @@ namespace Katsu
 
         int64_t inst = frame_insts->components()[this->current_frame->inst_spot].value<int64_t>();
         switch (inst) {
-            case BytecodeOp::LOAD_REG: {
+            case OpCode::LOAD_REG: {
                 push(this->current_frame->regs()[arg().value<int64_t>()]);
                 shift_inst();
                 shift_arg();
                 break;
             }
-            case BytecodeOp::STORE_REG: {
+            case OpCode::STORE_REG: {
                 this->current_frame->regs()[arg().value<int64_t>()] = pop();
                 shift_inst();
                 shift_arg();
                 break;
             }
-            case BytecodeOp::LOAD_REF: {
+            case OpCode::LOAD_REF: {
                 push(this->current_frame->regs()[arg().value<int64_t>()]
                          .value<Object*>()
                          ->object<Ref*>()
@@ -156,7 +156,7 @@ namespace Katsu
                 shift_arg();
                 break;
             }
-            case BytecodeOp::STORE_REF: {
+            case OpCode::STORE_REF: {
                 this->current_frame->regs()[arg().value<int64_t>()]
                     .value<Object*>()
                     ->object<Ref*>()
@@ -165,20 +165,20 @@ namespace Katsu
                 shift_arg();
                 break;
             }
-            case BytecodeOp::LOAD_VALUE: {
+            case OpCode::LOAD_VALUE: {
                 push(arg());
                 shift_inst();
                 shift_arg();
                 break;
             }
-            case BytecodeOp::LOAD_MODULE: {
+            case OpCode::LOAD_MODULE: {
                 push(module_lookup(this->current_frame->v_module,
                                    arg().value<Object*>()->object<String*>()));
                 shift_inst();
                 shift_arg();
                 break;
             }
-            case BytecodeOp::STORE_MODULE: {
+            case OpCode::STORE_MODULE: {
                 Value& slot = module_lookup(this->current_frame->v_module,
                                             arg().value<Object*>()->object<String*>());
                 slot = pop();
@@ -186,7 +186,7 @@ namespace Katsu
                 shift_arg();
                 break;
             }
-            case BytecodeOp::INVOKE: {
+            case OpCode::INVOKE: {
                 Value v_method = module_lookup(this->current_frame->v_module,
                                                arg(+0).value<Object*>()->object<String*>());
                 int64_t num_args = arg(+1).value<int64_t>();
@@ -200,7 +200,7 @@ namespace Katsu
                              this->current_frame->data() + this->current_frame->data_depth);
                 break;
             }
-            case BytecodeOp::MAKE_TUPLE: {
+            case OpCode::MAKE_TUPLE: {
                 auto num_components = arg().value<int64_t>();
                 auto tuple = this->gc.alloc<Tuple>(num_components);
                 this->current_frame->data_depth -= num_components;
@@ -215,7 +215,7 @@ namespace Katsu
                 shift_arg();
                 break;
             }
-            case BytecodeOp::MAKE_VECTOR: {
+            case OpCode::MAKE_VECTOR: {
                 auto num_components = arg().value<int64_t>();
                 auto vec = this->gc.alloc<Vector>(num_components);
                 vec->v_capacity = Value::fixnum(num_components);
@@ -232,7 +232,7 @@ namespace Katsu
                 shift_arg();
                 break;
             }
-            case BytecodeOp::MAKE_CLOSURE: {
+            case OpCode::MAKE_CLOSURE: {
                 int64_t num_upregs;
                 {
                     Code* code = arg().value<Object*>()->object<Code*>();
