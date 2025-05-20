@@ -11,6 +11,12 @@
 // Have the GC perform a collection on every allocation. This is incredibly slow but quickly finds
 // bugs where consumers forgot to add a GC root.
 #define DEBUG_GC_COLLECT_EVERY_ALLOC (0)
+// Have the GC allocate a new semispace to migrate all live objects to, on each collection. Usual
+// behavior is to cycle between two semispaces. This can also help finding bugs where consumers
+// forgot to add a GC root, particularly with ASAN enabled, as any pointers to dead GC objects will
+// eventually (or nearly immediately, if DEBUG_GC_COLLECT_EVERY_ALLOC is also enabled!) point to
+// `free`d memory.
+#define DEBUG_GC_NEW_SEMISPACE (0)
 
 #if DEBUG_GC_LOG
 #include <iostream>

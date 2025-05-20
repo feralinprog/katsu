@@ -291,6 +291,14 @@ namespace Katsu
         // We've copied all objects from `mem` to `mem_opp`. Now swap spaces so `mem` is the primary
         // again.
         std::swap(this->mem, this->mem_opp);
+#if DEBUG_GC_NEW_SEMISPACE
+        uint8_t* old_mem_opp = this->mem_opp;
+        this->mem_opp = reinterpret_cast<uint8_t*>(aligned_alloc(1 << TAG_BITS, size));
+        if (!this->mem_opp) {
+            throw std::bad_alloc();
+        }
+        free(old_mem_opp);
+#endif
         this->spot = queue - this->mem;
 #if DEBUG_GC_LOG
         std::cout << "GC: finished collection - mem " << reinterpret_cast<void*>(this->mem)
