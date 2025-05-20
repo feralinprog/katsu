@@ -10,17 +10,17 @@ using namespace Katsu;
 TEST_CASE("fixnum tagging/untagging", "[value]")
 {
     // Simple cases:
-    CHECK(Value::fixnum(0).value<int64_t>() == 0);
-    CHECK(Value::fixnum(-1).value<int64_t>() == -1);
-    CHECK(Value::fixnum(1).value<int64_t>() == 1);
-    CHECK(Value::fixnum(10).value<int64_t>() == 10);
-    CHECK(Value::fixnum(-10).value<int64_t>() == -10);
+    CHECK(Value::fixnum(0).fixnum() == 0);
+    CHECK(Value::fixnum(-1).fixnum() == -1);
+    CHECK(Value::fixnum(1).fixnum() == 1);
+    CHECK(Value::fixnum(10).fixnum() == 10);
+    CHECK(Value::fixnum(-10).fixnum() == -10);
 
     // Edge cases:
-    CHECK(Value::fixnum(FIXNUM_MAX).value<int64_t>() == FIXNUM_MAX);
-    CHECK(Value::fixnum(FIXNUM_MIN).value<int64_t>() == FIXNUM_MIN);
-    CHECK(Value::fixnum(FIXNUM_MAX - 1).value<int64_t>() == FIXNUM_MAX - 1);
-    CHECK(Value::fixnum(FIXNUM_MIN + 1).value<int64_t>() == FIXNUM_MIN + 1);
+    CHECK(Value::fixnum(FIXNUM_MAX).fixnum() == FIXNUM_MAX);
+    CHECK(Value::fixnum(FIXNUM_MIN).fixnum() == FIXNUM_MIN);
+    CHECK(Value::fixnum(FIXNUM_MAX - 1).fixnum() == FIXNUM_MAX - 1);
+    CHECK(Value::fixnum(FIXNUM_MIN + 1).fixnum() == FIXNUM_MIN + 1);
     CHECK_THROWS_AS(Value::fixnum(FIXNUM_MAX + 1), std::out_of_range);
     CHECK_THROWS_AS(Value::fixnum(FIXNUM_MIN - 1), std::out_of_range);
     CHECK_THROWS_AS(Value::fixnum(INT64_MAX), std::out_of_range);
@@ -34,14 +34,14 @@ TEST_CASE("fixnum tagging/untagging", "[value]")
 
 TEST_CASE("float tagging/untagging", "[value]")
 {
-    CHECK(Value::_float(0.0f).value<float>() == 0.0f);
-    CHECK(Value::_float(1.234f).value<float>() == 1.234f);
+    CHECK(Value::_float(0.0f)._float() == 0.0f);
+    CHECK(Value::_float(1.234f)._float() == 1.234f);
 }
 
 TEST_CASE("bool tagging/untagging", "[value]")
 {
-    CHECK(Value::_bool(true).value<bool>() == true);
-    CHECK(Value::_bool(false).value<bool>() == false);
+    CHECK(Value::_bool(true)._bool() == true);
+    CHECK(Value::_bool(false)._bool() == false);
 }
 
 TEST_CASE("null tagging/untagging", "[value]")
@@ -53,7 +53,7 @@ TEST_CASE("object tagging/untagging", "[value]")
 {
     // Note: already aligned due to definition of Object.
     Object* aligned = reinterpret_cast<Object*>(aligned_alloc(1 << TAG_BITS, sizeof(Object)));
-    CHECK(Value::object(aligned).value<Object*>() == aligned);
+    CHECK(Value::object(aligned).object() == aligned);
 
     // Test all possible misalignments:
     for (uint64_t offset = 1; offset < (1 << TAG_BITS); offset++) {
@@ -128,12 +128,6 @@ TEST_CASE("inline vs. non-inline tags", "[value]")
     CHECK(make<bool>().is_inline());
     CHECK(make<Null>().is_inline());
     CHECK_FALSE(make<Object*>().is_inline());
-
-    CHECK_FALSE(make<int64_t>().is_ref());
-    CHECK_FALSE(make<float>().is_ref());
-    CHECK_FALSE(make<bool>().is_ref());
-    CHECK_FALSE(make<Null>().is_ref());
-    CHECK(make<Object*>().is_ref());
 }
 
 TEST_CASE("object header distinguishes forwarding vs. reference types", "[object]")

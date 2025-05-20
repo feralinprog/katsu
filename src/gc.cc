@@ -51,7 +51,7 @@ namespace Katsu
 
         // Input *node must be an object reference (Tag::OBJECT).
         const auto move_obj = [&to](Value* node) -> void {
-            auto obj = node->value<Object*>();
+            auto obj = node->object();
             // Follow the existing forwarding pointer if it exists; otherwise copy the object
             // and install a forwarding pointer.
 #if DEBUG_GC_LOG
@@ -190,7 +190,7 @@ namespace Katsu
                 }
                 case ObjectTag::TUPLE: {
                     auto v = obj->object<Tuple*>();
-                    int64_t length = v->v_length.value<int64_t>();
+                    int64_t length = v->v_length.fixnum();
                     for (int64_t i = 0; i < length; i++) {
                         move_value(&v->components()[i]);
                     }
@@ -199,7 +199,7 @@ namespace Katsu
                 }
                 case ObjectTag::VECTOR: {
                     auto v = obj->object<Vector*>();
-                    int64_t length = v->v_length.value<int64_t>();
+                    int64_t length = v->v_length.fixnum();
                     for (int64_t i = 0; i < length; i++) {
                         move_value(&v->components()[i]);
                     }
@@ -209,7 +209,7 @@ namespace Katsu
                 case ObjectTag::MODULE: {
                     auto v = obj->object<Module*>();
                     move_value(&v->v_base);
-                    int64_t length = v->v_length.value<int64_t>();
+                    int64_t length = v->v_length.fixnum();
                     for (int64_t i = 0; i < length; i++) {
                         Module::Entry& entry = v->entries()[i];
                         move_value(&entry.v_key);
@@ -274,9 +274,9 @@ namespace Katsu
                 case ObjectTag::INSTANCE: {
                     auto v = obj->object<DataclassInstance*>();
                     // TODO: deduplicate slot-count lookup.
-                    auto type = v->v_type.value<Object*>()->object<Type*>();
-                    auto type_slots = type->v_slots.value<Object*>()->object<Vector*>();
-                    int64_t num_slots = type_slots->v_length.value<int64_t>();
+                    auto type = v->v_type.obj_type();
+                    auto type_slots = type->v_slots.obj_vector();
+                    int64_t num_slots = type_slots->v_length.fixnum();
                     for (int64_t i = 0; i < num_slots; i++) {
                         move_value(&v->slots()[i]);
                     }

@@ -65,7 +65,7 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
 
     String* c;
     REQUIRE_NOTHROW(c = gc.alloc<String>(sizeof(String) + 1));
-    REQUIRE(reinterpret_cast<uint8_t*>(root_b.get().value<Object*>()) == TESTONLY_get_mem(gc) + 0);
+    REQUIRE(reinterpret_cast<uint8_t*>(root_b.get().object()) == TESTONLY_get_mem(gc) + 0);
     REQUIRE(reinterpret_cast<uint8_t*>(c) == TESTONLY_get_mem(gc) + 56);
 
     // Keep `c` around via another root.

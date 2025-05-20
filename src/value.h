@@ -15,10 +15,15 @@ namespace Katsu
      * - null singleton
      * (aggregate:)
      * - objects
+     *   - mutable object references
      *   - tuples
      *   - vectors
+     *   - modules (environments)
      *   - strings
+     *   - code templates / definitions
      *   - closures
+     *   - methods
+     *   - multimethods
      *   - type values
      *   - dataclass instances
      *
@@ -75,104 +80,10 @@ namespace Katsu
     struct Value;
     template <typename T> T static_value(Value value);
 
-    // Forward declarations for helper functions:
-    struct Object;
-
     // Singleton as effectively a named replacement for std::monostate.
     struct Null
     {
     };
-
-    // TODO: create related generic types which are guaranteed to have the right tag?
-    // Like TaggedValue<int64_t>, guaranteed to be a fixnum.
-
-    // TODO: convenience function for the pattern .value<Object*>()->object<*>();
-    struct Value
-    {
-    private:
-        uint64_t tagged;
-
-        // Does not perform any bounds checks on `tag` or `value`.
-        Value(Tag tag, uint64_t value)
-            : tagged((value << TAG_BITS) | static_cast<uint64_t>(tag))
-        {}
-
-    public:
-        // Calculate the tag from the tagged representation.
-        Tag tag() const
-        {
-            return static_cast<Tag>(tagged & TAG_MASK);
-        }
-        // Calculate the primary value in a raw form from the tagged representation.
-        uint64_t raw_value() const
-        {
-            return tagged >> TAG_BITS;
-        }
-        // Calculate the primary value from the tagged representation.
-        // T must be one of:
-        // * int64_t for fixnum
-        // * float for float
-        // * bool for bool
-        // * Null for null
-        // * Object* for object
-        // Throws if the desired value type (T) does not match the tag.
-        template <typename T> T value() const
-        {
-            return static_value<T>(*this);
-        }
-
-        inline bool is_inline() const
-        {
-            return this->tag() <= Tag::_NULL;
-        }
-        inline bool is_ref() const
-        {
-            return !this->is_inline();
-        }
-
-        static Value fixnum(int64_t num)
-        {
-            if (num < FIXNUM_MIN || num > FIXNUM_MAX) {
-                throw std::out_of_range(
-                    "input is too large an integer to be represented as a fixnum");
-            }
-            // The input is encoded in 64-bit 2s-complement; to produce INLINE_BITS-bit
-            // 2s-complement instead, mask off the upper INLINE_BITS number of bits as an unsigned
-            // 64-bit integer.
-            return Value(Tag::FIXNUM, static_cast<uint64_t>(num) & FIXNUM_MASK);
-        }
-        static Value _float(float val)
-        {
-            return Value(Tag::FLOAT, std::bit_cast<uint32_t>(val));
-        }
-        static Value _bool(bool val)
-        {
-            return Value(Tag::BOOL, val ? 1 : 0);
-        }
-        static Value null()
-        {
-            return Value(Tag::_NULL, 0);
-        }
-        static Value object(Object* object)
-        {
-            uint64_t raw = reinterpret_cast<uint64_t>(object);
-            if ((raw & TAG_MASK) != 0) {
-                throw std::invalid_argument("object pointer is not TAG_BITS-aligned");
-            }
-            return Value(Tag::OBJECT, raw >> TAG_BITS);
-        }
-
-        inline bool operator==(const Value& other) const
-        {
-            return other.tagged == this->tagged;
-        }
-        inline bool operator!=(const Value& other) const
-        {
-            return !(*this == other);
-        }
-    };
-    static_assert(sizeof(Value*) <= sizeof(Value));
-    static_assert((1 << VALUE_PTR_BITS) == sizeof(Value*));
 
     enum class ObjectTag
     {
@@ -209,6 +120,7 @@ namespace Katsu
 
     // Template declaration here, since it's used in `object()` below. Specializations are defined
     // later.
+    struct Object;
     template <typename T> T static_object(Object& object);
 
     // TODO: add functions to verify basic invariants of objects (for instance, v_length >= 0),
@@ -278,6 +190,232 @@ namespace Katsu
         // TODO: do another templated fn for size()
     };
 
+    // Forward declarations for helper functions:
+    struct Ref;
+    struct Tuple;
+    struct Vector;
+    struct Module;
+    struct String;
+    struct Code;
+    struct Closure;
+    struct Method;
+    struct MultiMethod;
+    struct Type;
+    struct DataclassInstance;
+
+    // TODO: create related generic types which are guaranteed to have the right tag?
+    // Like TaggedValue<int64_t>, guaranteed to be a fixnum.
+
+    struct Value
+    {
+    private:
+        uint64_t tagged;
+
+        // Does not perform any bounds checks on `tag` or `value`.
+        Value(Tag tag, uint64_t value)
+            : tagged((value << TAG_BITS) | static_cast<uint64_t>(tag))
+        {}
+
+    public:
+        // Calculate the tag from the tagged representation.
+        Tag tag() const
+        {
+            return static_cast<Tag>(tagged & TAG_MASK);
+        }
+        // Calculate the primary value in a raw form from the tagged representation.
+        uint64_t raw_value() const
+        {
+            return tagged >> TAG_BITS;
+        }
+        // Calculate the primary value from the tagged representation.
+        // T must be one of:
+        // * int64_t for fixnum
+        // * float for float
+        // * bool for bool
+        // * Null for null
+        // * Object* for object
+        // Throws if the desired value type (T) does not match the tag.
+        template <typename T> T value() const
+        {
+            return static_value<T>(*this);
+        }
+
+        inline bool is_inline() const
+        {
+            return this->tag() <= Tag::_NULL;
+        }
+
+        bool is_fixnum() const
+        {
+            return this->tag() == Tag::FIXNUM;
+        }
+        bool is_float() const
+        {
+            return this->tag() == Tag::FLOAT;
+        }
+        bool is_bool() const
+        {
+            return this->tag() == Tag::BOOL;
+        }
+        bool is_null() const
+        {
+            return this->tag() == Tag::_NULL;
+        }
+        bool is_object() const
+        {
+            return this->tag() == Tag::OBJECT;
+        }
+        bool is_obj_ref() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::REF;
+        }
+        bool is_obj_tuple() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::TUPLE;
+        }
+        bool is_obj_vector() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::VECTOR;
+        }
+        bool is_obj_module() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::MODULE;
+        }
+        bool is_obj_string() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::STRING;
+        }
+        bool is_obj_code() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::CODE;
+        }
+        bool is_obj_closure() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::CLOSURE;
+        }
+        bool is_obj_method() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::METHOD;
+        }
+        bool is_obj_multimethod() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::MULTIMETHOD;
+        }
+        bool is_obj_type() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::TYPE;
+        }
+        bool is_obj_instance() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::INSTANCE;
+        }
+
+        int64_t fixnum() const
+        {
+            return this->value<int64_t>();
+        }
+        float _float() const
+        {
+            return this->value<float>();
+        }
+        bool _bool() const
+        {
+            return this->value<bool>();
+        }
+        // No point to a _null() function... just use is_null().
+        Object* object() const
+        {
+            return this->value<Object*>();
+        }
+        Ref* obj_ref() const
+        {
+            return this->object()->object<Ref*>();
+        }
+        Tuple* obj_tuple() const
+        {
+            return this->object()->object<Tuple*>();
+        }
+        Vector* obj_vector() const
+        {
+            return this->object()->object<Vector*>();
+        }
+        Module* obj_module() const
+        {
+            return this->object()->object<Module*>();
+        }
+        String* obj_string() const
+        {
+            return this->object()->object<String*>();
+        }
+        Code* obj_code() const
+        {
+            return this->object()->object<Code*>();
+        }
+        Closure* obj_closure() const
+        {
+            return this->object()->object<Closure*>();
+        }
+        Method* obj_method() const
+        {
+            return this->object()->object<Method*>();
+        }
+        MultiMethod* obj_multimethod() const
+        {
+            return this->object()->object<MultiMethod*>();
+        }
+        Type* obj_type() const
+        {
+            return this->object()->object<Type*>();
+        }
+        DataclassInstance* obj_instance() const
+        {
+            return this->object()->object<DataclassInstance*>();
+        }
+
+        static Value fixnum(int64_t num)
+        {
+            if (num < FIXNUM_MIN || num > FIXNUM_MAX) {
+                throw std::out_of_range(
+                    "input is too large an integer to be represented as a fixnum");
+            }
+            // The input is encoded in 64-bit 2s-complement; to produce INLINE_BITS-bit
+            // 2s-complement instead, mask off the upper INLINE_BITS number of bits as an unsigned
+            // 64-bit integer.
+            return Value(Tag::FIXNUM, static_cast<uint64_t>(num) & FIXNUM_MASK);
+        }
+        static Value _float(float val)
+        {
+            return Value(Tag::FLOAT, std::bit_cast<uint32_t>(val));
+        }
+        static Value _bool(bool val)
+        {
+            return Value(Tag::BOOL, val ? 1 : 0);
+        }
+        static Value null()
+        {
+            return Value(Tag::_NULL, 0);
+        }
+        static Value object(Object* object)
+        {
+            uint64_t raw = reinterpret_cast<uint64_t>(object);
+            if ((raw & TAG_MASK) != 0) {
+                throw std::invalid_argument("object pointer is not TAG_BITS-aligned");
+            }
+            return Value(Tag::OBJECT, raw >> TAG_BITS);
+        }
+
+        inline bool operator==(const Value& other) const
+        {
+            return other.tagged == this->tagged;
+        }
+        inline bool operator!=(const Value& other) const
+        {
+            return !(*this == other);
+        }
+    };
+    static_assert(sizeof(Value*) <= sizeof(Value));
+    static_assert((1 << VALUE_PTR_BITS) == sizeof(Value*));
+
     struct Ref : public Object
     {
         static const ObjectTag CLASS_TAG = ObjectTag::REF;
@@ -310,7 +448,7 @@ namespace Katsu
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.value<int64_t>();
+            int64_t length = this->v_length.fixnum();
             return Tuple::size(length);
         }
     };
@@ -333,7 +471,7 @@ namespace Katsu
         }
         inline uint64_t size() const
         {
-            int64_t capacity = this->v_capacity.value<int64_t>();
+            int64_t capacity = this->v_capacity.fixnum();
             return Vector::size(capacity);
         }
     };
@@ -365,7 +503,7 @@ namespace Katsu
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.value<int64_t>();
+            int64_t length = this->v_length.fixnum();
             return Module::size(length);
         }
     };
@@ -387,7 +525,7 @@ namespace Katsu
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.value<int64_t>();
+            int64_t length = this->v_length.fixnum();
             return String::size(length);
         }
     };
@@ -508,16 +646,13 @@ namespace Katsu
 
         inline Type* _class() const
         {
-            return this->v_type.value<Object*>()->object<Type*>();
+            return this->v_type.obj_type();
         }
 
         inline int64_t num_slots() const
         {
             // TODO: this can totally be cached in object header.
-            int64_t n = this->_class()
-                            ->v_slots.value<Object*>()
-                            ->object<Vector*>()
-                            ->v_length.value<int64_t>();
+            int64_t n = this->_class()->v_slots.obj_vector()->v_length.fixnum();
             if (n < 0) {
                 throw std::runtime_error("dataclass has negative slot count");
             }
@@ -531,8 +666,7 @@ namespace Katsu
         }
         static inline uint64_t size(Type* _class)
         {
-            return DataclassInstance::size(
-                _class->v_slots.value<Object*>()->object<Vector*>()->v_length.value<int64_t>());
+            return DataclassInstance::size(_class->v_slots.obj_vector()->v_length.fixnum());
         }
         inline uint64_t size() const
         {

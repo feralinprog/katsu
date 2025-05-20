@@ -56,9 +56,9 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
 Value test__fixnum_add(VM& vm, int64_t num_args, Value* args)
 {
     REQUIRE(num_args == 2);
-    REQUIRE(args[0].tag() == Tag::FIXNUM);
-    REQUIRE(args[1].tag() == Tag::FIXNUM);
-    return Value::fixnum(args[0].value<int64_t>() + args[1].value<int64_t>());
+    REQUIRE(args[0].is_fixnum());
+    REQUIRE(args[1].is_fixnum());
+    return Value::fixnum(args[0].fixnum() + args[1].fixnum());
 }
 
 TEST_CASE("VM executes a native invocation", "[vm]")
