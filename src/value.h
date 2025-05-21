@@ -433,23 +433,20 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::TUPLE;
 
-        // TODO: replace Value with uint64_t for lengths..?
-        // not sure the flexibility is actually useful here.
-        Value v_length; // fixnum
+        uint64_t length;
         inline Value* components()
         {
-            return &this->v_length + 1;
+            return reinterpret_cast<Value*>(&this->length + 1);
         }
 
         // Size in bytes.
-        static inline uint64_t size(int64_t length)
+        static inline uint64_t size(uint64_t length)
         {
             return sizeof(Tuple) + length * sizeof(Value);
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.fixnum();
-            return Tuple::size(length);
+            return Tuple::size(this->length);
         }
     };
 
@@ -457,22 +454,21 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::VECTOR;
 
-        Value v_capacity; // fixnum
-        Value v_length;   // fixnum
+        uint64_t capacity;
+        uint64_t length;
         inline Value* components()
         {
-            return &this->v_length + 1;
+            return reinterpret_cast<Value*>(&this->length + 1);
         }
 
         // Size in bytes.
-        static inline uint64_t size(int64_t capacity)
+        static inline uint64_t size(uint64_t capacity)
         {
             return sizeof(Vector) + capacity * sizeof(Value);
         }
         inline uint64_t size() const
         {
-            int64_t capacity = this->v_capacity.fixnum();
-            return Vector::size(capacity);
+            return Vector::size(this->capacity);
         }
     };
 
@@ -489,22 +485,21 @@ namespace Katsu
         };
         static_assert(sizeof(Entry) == 2 * sizeof(Value));
 
-        Value v_base;   // Module or Null
-        Value v_length; // fixnum
+        Value v_base; // Module or Null
+        uint64_t length;
         inline Entry* entries()
         {
-            return reinterpret_cast<Entry*>(&this->v_length + 1);
+            return reinterpret_cast<Entry*>(&this->length + 1);
         }
 
         // Size in bytes.
-        static inline uint64_t size(int64_t length)
+        static inline uint64_t size(uint64_t length)
         {
             return sizeof(Module) + length * sizeof(Entry);
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.fixnum();
-            return Module::size(length);
+            return Module::size(this->length);
         }
     };
 
@@ -512,21 +507,20 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::STRING;
 
-        Value v_length; // fixnum
+        uint64_t length;
         inline uint8_t* contents()
         {
-            return reinterpret_cast<uint8_t*>(&this->v_length + 1);
+            return reinterpret_cast<uint8_t*>(&this->length + 1);
         }
 
         // Size in bytes.
-        static inline uint64_t size(int64_t length)
+        static inline uint64_t size(uint64_t length)
         {
             return sizeof(String) + length /* * sizeof(uint8_t) */;
         }
         inline uint64_t size() const
         {
-            int64_t length = this->v_length.fixnum();
-            return String::size(length);
+            return String::size(this->length);
         }
     };
 
@@ -534,9 +528,9 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::CODE;
 
-        Value v_module;    // Module
-        Value v_num_regs;  // fixnum
-        Value v_num_data;  // fixnum
+        Value v_module; // Module
+        uint32_t num_regs;
+        uint32_t num_data;
         Value v_upreg_map; // Null for methods; Vector (of fixnum) for closures
         // TODO: byte array inline?
         Value v_insts; // Vector of fixnums
@@ -613,17 +607,22 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::TYPE;
 
-        Value v_name;  // string
-        Value v_bases; // vector (of types)
+        enum class Kind
+        {
+            MIXIN = 0,
+            DATACLASS = 1,
+        };
+
+        Value v_name;  // String
+        Value v_bases; // Vector (of Types)
         // Can user-defined types inherit from this?
-        Value v_sealed; // bool
+        bool sealed;
         // C3 linearization.
-        Value v_linearization; // vector (of types)
-        Value v_subtypes;      // vector (of types)
-        // 0 -> mixin, 1 -> dataclass
-        Value v_kind; // fixnum
+        Value v_linearization; // Vector (of Types)
+        Value v_subtypes;      // Vector (of Types)
+        Kind kind;
         // If dataclass type (else null):
-        Value v_slots; // vector (of strings)
+        Value v_slots; // Vector (of Strings)
 
         // Size in bytes.
         static inline uint64_t size()
@@ -652,11 +651,7 @@ namespace Katsu
         inline int64_t num_slots() const
         {
             // TODO: this can totally be cached in object header.
-            int64_t n = this->_class()->v_slots.obj_vector()->v_length.fixnum();
-            if (n < 0) {
-                throw std::runtime_error("dataclass has negative slot count");
-            }
-            return n;
+            return this->_class()->v_slots.obj_vector()->length;
         }
 
         // Size in bytes.
@@ -666,7 +661,7 @@ namespace Katsu
         }
         static inline uint64_t size(Type* _class)
         {
-            return DataclassInstance::size(_class->v_slots.obj_vector()->v_length.fixnum());
+            return DataclassInstance::size(_class->v_slots.obj_vector()->length);
         }
         inline uint64_t size() const
         {

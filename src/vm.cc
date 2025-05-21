@@ -46,14 +46,8 @@ namespace Katsu
         }
 
         Root r_code(this->gc, std::move(v_code));
-        int64_t code_num_regs = r_code.get().obj_code()->v_num_regs.fixnum();
-        int64_t code_num_data = r_code.get().obj_code()->v_num_data.fixnum();
-        if (code_num_regs < 0) {
-            throw std::logic_error("num_regs is negative");
-        }
-        if (code_num_data < 0) {
-            throw std::logic_error("num_data is negative");
-        }
+        uint32_t code_num_regs = r_code.get().obj_code()->num_regs;
+        uint32_t code_num_data = r_code.get().obj_code()->num_data;
 
         // auto next_frame_mem =
         // reinterpret_cast<uint8_t*>(align_up(reinterpret_cast<uint64_t>(this->current_frame),
@@ -85,8 +79,7 @@ namespace Katsu
             Vector* frame_insts = frame_code->v_insts.obj_vector();
             if (reinterpret_cast<uint8_t*>(this->current_frame) == this->call_stack_mem) {
                 // There is only a single frame in the call stack; check if we're done.
-                bool finished_instructions =
-                    this->current_frame->inst_spot == frame_insts->v_length.fixnum();
+                bool finished_instructions = this->current_frame->inst_spot == frame_insts->length;
                 bool no_cleanup = this->current_frame->v_cleanup.is_null();
                 if (finished_instructions && no_cleanup) {
                     Value v_return_value = this->current_frame->data()[0];
@@ -122,7 +115,7 @@ namespace Katsu
         auto shift_inst = [this]() -> void { this->current_frame->inst_spot++; };
         auto shift_arg = [this](int count = 1) -> void { this->current_frame->arg_spot += count; };
 
-        int64_t num_insts = frame_insts->v_length.fixnum();
+        uint64_t num_insts = frame_insts->length;
         if (this->current_frame->inst_spot == num_insts) {
             // TODO: unwind frame and/or invoke cleanup
         }
@@ -191,9 +184,11 @@ namespace Katsu
             }
             case OpCode::MAKE_TUPLE: {
                 auto num_components = arg().fixnum();
+                // TODO: check >= 0
                 auto tuple = this->gc.alloc<Tuple>(num_components);
+                tuple->length = num_components;
                 this->current_frame->data_depth -= num_components;
-                for (int i = 0; i < num_components; i++) {
+                for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
                         &this->current_frame->data()[this->current_frame->data_depth + i];
                     tuple->components()[i] = *component;
@@ -206,11 +201,12 @@ namespace Katsu
             }
             case OpCode::MAKE_VECTOR: {
                 auto num_components = arg().fixnum();
+                // TODO: check >= 0
                 auto vec = this->gc.alloc<Vector>(num_components);
-                vec->v_capacity = Value::fixnum(num_components);
-                vec->v_length = Value::fixnum(num_components);
+                vec->capacity = num_components;
+                vec->length = num_components;
                 this->current_frame->data_depth -= num_components;
-                for (int i = 0; i < num_components; i++) {
+                for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
                         &this->current_frame->data()[this->current_frame->data_depth + i];
                     vec->components()[i] = *component;
@@ -222,15 +218,16 @@ namespace Katsu
                 break;
             }
             case OpCode::MAKE_CLOSURE: {
-                int64_t num_upregs;
+                uint32_t num_upregs;
                 {
                     Code* code = arg().obj_code();
-                    num_upregs = code->v_upreg_map.obj_vector()->v_length.fixnum();
+                    // TODO: check <= UINT32_MAX
+                    num_upregs = code->v_upreg_map.obj_vector()->length;
                 }
 
                 Vector* upregs = this->gc.alloc<Vector>(num_upregs);
-                upregs->v_capacity = Value::fixnum(num_upregs);
-                upregs->v_length = Value::fixnum(num_upregs);
+                upregs->capacity = num_upregs;
+                upregs->length = num_upregs;
                 Root r_upregs(this->gc, Value::object(upregs));
 
                 Closure* closure = this->gc.alloc<Closure>();
@@ -244,7 +241,7 @@ namespace Katsu
 
                 // Copy from the current stack frame registers into the closure's upregs.
                 Vector* upreg_map = arg().obj_code()->v_upreg_map.obj_vector();
-                for (int64_t i = 0; i < upreg_map->v_length.fixnum(); i++) {
+                for (uint64_t i = 0; i < upreg_map->length; i++) {
                     int64_t src = upreg_map->components()[i].fixnum();
                     upregs->components()[i] = this->current_frame->regs()[src];
                 }
@@ -262,16 +259,16 @@ namespace Katsu
 
     Value& VM::module_lookup(Value v_module, String* name)
     {
-        int64_t name_length = name->v_length.fixnum();
+        uint64_t name_length = name->length;
         // TODO: check against size_t?
 
         while (!v_module.is_null()) {
             Module* module = v_module.obj_module();
-            int64_t num_entries = module->v_length.fixnum();
+            uint64_t num_entries = module->length;
             for (int64_t i = 0; i < num_entries; i++) {
                 Module::Entry& entry = module->entries()[i];
                 String* entry_name = entry.v_key.obj_string();
-                if (entry_name->v_length.fixnum() != name_length) {
+                if (entry_name->length != name_length) {
                     continue;
                 }
                 if (memcmp(entry_name->contents(), name->contents(), name_length) != 0) {
@@ -296,7 +293,7 @@ namespace Katsu
 
         // TODO: actually do a proper multimethod dispatch
         Vector* methods = multimethod->v_methods.obj_vector();
-        if (methods->v_length.fixnum() == 0) {
+        if (methods->length == 0) {
             throw std::runtime_error("need a method in multimethod");
         }
         Value v_method = methods->components()[0];
@@ -319,8 +316,8 @@ namespace Katsu
                 throw std::logic_error("method's v_code's v_upreg_map should be null");
             }
 
-            int64_t code_num_regs = code->v_num_regs.fixnum();
-            int64_t code_num_data = code->v_num_data.fixnum();
+            uint32_t code_num_regs = code->num_regs;
+            uint32_t code_num_data = code->num_data;
 
             uint8_t* next_frame_mem = reinterpret_cast<uint8_t*>(
                 align_up(reinterpret_cast<uint64_t>(this->current_frame), TAG_BITS));

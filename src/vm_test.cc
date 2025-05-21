@@ -22,25 +22,25 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     Module* module = gc.alloc<Module>(0);
     Root r_module(gc, Value::object(module));
     module->v_base = Value::null();
-    module->v_length = Value::fixnum(0);
+    module->length = 0;
 
     Vector* insts = gc.alloc<Vector>(1);
     Root r_insts(gc, Value::object(insts));
-    insts->v_capacity = Value::fixnum(1);
-    insts->v_length = Value::fixnum(1);
+    insts->capacity = 1;
+    insts->length = 1;
     insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
 
     Vector* args = gc.alloc<Vector>(1);
     Root r_args(gc, Value::object(args));
-    args->v_capacity = Value::fixnum(1);
-    args->v_length = Value::fixnum(1);
+    args->capacity = 1;
+    args->length = 1;
     args->components()[0] = Value::fixnum(1234);
 
     Code* code = gc.alloc<Code>();
     Root r_code(gc, Value::object(code));
     code->v_module = r_module.get();
-    code->v_num_regs = Value::fixnum(1);
-    code->v_num_data = Value::fixnum(1);
+    code->num_regs = 1;
+    code->num_data = 1;
     code->v_upreg_map = Value::null();
     code->v_insts = r_insts.get();
     code->v_args = r_args.get();
@@ -70,7 +70,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
 
     String* method_name = gc.alloc<String>(strlen("+:"));
     Root r_method_name(gc, Value::object(method_name));
-    method_name->v_length = Value::fixnum(strlen("+:"));
+    method_name->length = strlen("+:");
     memcpy(method_name->contents(), "+:", strlen("+:"));
 
     Method* method = gc.alloc<Method>();
@@ -83,8 +83,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
 
     Vector* methods = gc.alloc<Vector>(1);
     Root r_methods(gc, Value::object(methods));
-    methods->v_capacity = Value::fixnum(1);
-    methods->v_length = Value::fixnum(1);
+    methods->capacity = 1;
+    methods->length = 1;
     methods->components()[0] = r_method.get();
 
     MultiMethod* multimethod = gc.alloc<MultiMethod>();
@@ -96,22 +96,22 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Module* module = gc.alloc<Module>(1);
     Root r_module(gc, Value::object(module));
     module->v_base = Value::null();
-    module->v_length = Value::fixnum(1);
+    module->length = 1;
     module->entries()[0].v_key = r_method_name.get();
     module->entries()[0].v_value = r_multimethod.get();
 
     Vector* insts = gc.alloc<Vector>(3);
     Root r_insts(gc, Value::object(insts));
-    insts->v_capacity = Value::fixnum(3);
-    insts->v_length = Value::fixnum(3);
+    insts->capacity = 3;
+    insts->length = 3;
     insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
     insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
     insts->components()[2] = Value::fixnum(OpCode::INVOKE);
 
     Vector* args = gc.alloc<Vector>(4);
     Root r_args(gc, Value::object(args));
-    args->v_capacity = Value::fixnum(4);
-    args->v_length = Value::fixnum(4);
+    args->capacity = 4;
+    args->length = 4;
     // LOAD_VALUE: 5
     args->components()[0] = Value::fixnum(5);
     // LOAD_VALUE: 10
@@ -123,8 +123,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Code* code = gc.alloc<Code>();
     Root r_code(gc, Value::object(code));
     code->v_module = r_module.get();
-    code->v_num_regs = Value::fixnum(1);
-    code->v_num_data = Value::fixnum(1);
+    code->num_regs = 1;
+    code->num_data = 1;
     code->v_upreg_map = Value::null();
     code->v_insts = r_insts.get();
     code->v_args = r_args.get();

@@ -190,8 +190,8 @@ namespace Katsu
                 }
                 case ObjectTag::TUPLE: {
                     auto v = obj->object<Tuple*>();
-                    int64_t length = v->v_length.fixnum();
-                    for (int64_t i = 0; i < length; i++) {
+                    uint64_t length = v->length;
+                    for (uint64_t i = 0; i < length; i++) {
                         move_value(&v->components()[i]);
                     }
                     obj_size = v->size();
@@ -199,8 +199,8 @@ namespace Katsu
                 }
                 case ObjectTag::VECTOR: {
                     auto v = obj->object<Vector*>();
-                    int64_t length = v->v_length.fixnum();
-                    for (int64_t i = 0; i < length; i++) {
+                    uint64_t length = v->length;
+                    for (uint64_t i = 0; i < length; i++) {
                         move_value(&v->components()[i]);
                     }
                     obj_size = v->size();
@@ -209,8 +209,8 @@ namespace Katsu
                 case ObjectTag::MODULE: {
                     auto v = obj->object<Module*>();
                     move_value(&v->v_base);
-                    int64_t length = v->v_length.fixnum();
-                    for (int64_t i = 0; i < length; i++) {
+                    uint64_t length = v->length;
+                    for (uint64_t i = 0; i < length; i++) {
                         Module::Entry& entry = v->entries()[i];
                         move_value(&entry.v_key);
                         move_value(&entry.v_value);
@@ -227,8 +227,6 @@ namespace Katsu
                 case ObjectTag::CODE: {
                     auto v = obj->object<Code*>();
                     move_value(&v->v_module);
-                    move_value(&v->v_num_regs);
-                    move_value(&v->v_num_data);
                     move_value(&v->v_upreg_map);
                     move_value(&v->v_insts);
                     move_value(&v->v_args);
@@ -263,10 +261,8 @@ namespace Katsu
                     auto v = obj->object<Type*>();
                     move_value(&v->v_name);
                     move_value(&v->v_bases);
-                    move_value(&v->v_sealed);
                     move_value(&v->v_linearization);
                     move_value(&v->v_subtypes);
-                    move_value(&v->v_kind);
                     move_value(&v->v_slots);
                     obj_size = v->size();
                     break;
@@ -276,8 +272,8 @@ namespace Katsu
                     // TODO: deduplicate slot-count lookup.
                     auto type = v->v_type.obj_type();
                     auto type_slots = type->v_slots.obj_vector();
-                    int64_t num_slots = type_slots->v_length.fixnum();
-                    for (int64_t i = 0; i < num_slots; i++) {
+                    uint64_t num_slots = type_slots->length;
+                    for (uint64_t i = 0; i < num_slots; i++) {
                         move_value(&v->slots()[i]);
                     }
                     obj_size = v->size();

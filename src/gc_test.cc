@@ -55,8 +55,8 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
     REQUIRE(reinterpret_cast<uint8_t*>(b) == TESTONLY_get_mem(gc) + 48);
 
     // Add only `b` to the roots.
-    b->v_capacity = Value::fixnum(4);
-    b->v_length = Value::fixnum(4);
+    b->capacity = 4;
+    b->length = 4;
     b->components()[0] = Value::_float(1.0);
     b->components()[1] = Value::_float(2.0);
     b->components()[2] = Value::_float(3.0);
@@ -69,7 +69,7 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
     REQUIRE(reinterpret_cast<uint8_t*>(c) == TESTONLY_get_mem(gc) + 56);
 
     // Keep `c` around via another root.
-    c->v_length = Value::fixnum(1);
+    c->length = 1;
     Root root_c(gc, Value::object(c));
 
     REQUIRE_THROWS_AS(
