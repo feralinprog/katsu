@@ -22,6 +22,7 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     Module* module = gc.alloc<Module>(0);
     Root r_module(gc, Value::object(module));
     module->v_base = Value::null();
+    module->capacity = 0;
     module->length = 0;
 
     Vector* insts = gc.alloc<Vector>(1);
@@ -96,6 +97,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Module* module = gc.alloc<Module>(1);
     Root r_module(gc, Value::object(module));
     module->v_base = Value::null();
+    module->capacity = 1;
     module->length = 1;
     module->entries()[0].v_key = r_method_name.get();
     module->entries()[0].v_value = r_multimethod.get();

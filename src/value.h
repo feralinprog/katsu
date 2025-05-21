@@ -486,6 +486,7 @@ namespace Katsu
         static_assert(sizeof(Entry) == 2 * sizeof(Value));
 
         Value v_base; // Module or Null
+        uint64_t capacity;
         uint64_t length;
         inline Entry* entries()
         {
@@ -493,13 +494,13 @@ namespace Katsu
         }
 
         // Size in bytes.
-        static inline uint64_t size(uint64_t length)
+        static inline uint64_t size(uint64_t capacity)
         {
-            return sizeof(Module) + length * sizeof(Entry);
+            return sizeof(Module) + capacity * sizeof(Entry);
         }
         inline uint64_t size() const
         {
-            return Module::size(this->length);
+            return Module::size(this->capacity);
         }
     };
 
