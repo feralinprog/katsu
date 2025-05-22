@@ -1,0 +1,42 @@
+#pragma once
+
+#include "gc.h"
+#include "value.h"
+
+namespace Katsu
+{
+    // Move this all to Value...
+    // just declare class GC;
+
+    // Make a Ref with the desired v_ref.
+    Ref* make_ref(GC& gc, Value v_ref);
+    // Make a Tuple of the given length, filled with nulls.
+    Tuple* make_tuple(GC& gc, uint64_t length);
+    // Make a Tuple with the specified components.
+    Tuple* make_tuple(GC& gc, uint64_t length, Value* components);
+    // Make a Vector with the given capacity and length, filled with nulls.
+    Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length);
+    // Make a Vector with the given capacity and length, filled with the specified components.
+    Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length, Value* components);
+    // Make a Module with the given capacity (and zero length).
+    Module* make_module(GC& gc, Value v_base, uint64_t capacity);
+    String* make_string(GC& gc, const std::string& src);
+    Code* make_code(GC& gc, Value v_module, uint32_t num_regs, uint32_t num_data, Value v_upreg_map,
+                    Value v_insts, Value v_args);
+    Closure* make_closure(GC& gc, Value v_code, Value v_upregs);
+    Method* make_method(GC& gc, Value v_param_matchers, Value v_return_type, Value v_code,
+                        Value v_attributes, NativeHandler native_handler);
+    MultiMethod* make_multimethod(GC& gc, Value v_name, Value v_methods, Value v_attributes);
+    Type* make_type(GC& gc, Value v_name, Value v_bases, bool sealed, Value v_linearization,
+                    Value v_subtypes, Type::Kind kind, Value v_slots);
+    DataclassInstance* make_instance(GC& gc, Value v_type, Value* slots);
+
+    void append(GC& gc, Vector* vector, Value v_value);
+    void append(GC& gc, Module* module, String* name, Value v_value);
+
+    // Pointer into the relevant Module::Entry, or nullptr if not found.
+    Value* module_lookup(Module* module, String* name);
+
+    bool string_eq(String* a, String* b);
+    bool string_eq(String* a, const std::string& b);
+};

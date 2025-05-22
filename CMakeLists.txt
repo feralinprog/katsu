@@ -18,6 +18,7 @@ add_library(katsudon STATIC
   src/ast.cc
   src/parser.cc
   src/gc.cc
+  src/value_utils.cc
   src/vm.cc
   src/katsu.cc
 )
@@ -43,6 +44,7 @@ add_executable(test
   src/lexer_test.cc
   src/value_test.cc
   src/gc_test.cc
+  src/value_utils_test.cc
   src/vm_test.cc
   src/katsu_test.cc
 )

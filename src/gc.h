@@ -44,6 +44,7 @@ namespace Katsu
 
         ~GC();
 
+        // Note: prefer the make_*() functions instead.
         // T must be a subtype of Object.
         // The (variadic) arguments are directly passed to T::size(...).
         // For instance, alloc<Vector>(n) would allocate a vector of capacity n (and size being

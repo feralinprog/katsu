@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "value_utils.h"
 #include "vm.h"
 #include <cstring>
 
@@ -19,32 +20,25 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
 
     // Perform a simple LOAD_VALUE.
 
-    Module* module = gc.alloc<Module>(0);
+    Module* module = make_module(gc, /* v_base */ Value::null(), /* capacity */ 0);
     Root r_module(gc, Value::object(module));
-    module->v_base = Value::null();
-    module->capacity = 0;
-    module->length = 0;
 
-    Vector* insts = gc.alloc<Vector>(1);
+    Vector* insts = make_vector(gc, /* capacity */ 1, /* length */ 1);
     Root r_insts(gc, Value::object(insts));
-    insts->capacity = 1;
-    insts->length = 1;
     insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
 
-    Vector* args = gc.alloc<Vector>(1);
+    Vector* args = make_vector(gc, /* capacity */ 1, /* length */ 1);
     Root r_args(gc, Value::object(args));
-    args->capacity = 1;
-    args->length = 1;
     args->components()[0] = Value::fixnum(1234);
 
-    Code* code = gc.alloc<Code>();
+    Code* code = make_code(gc,
+                           /* v_module */ r_module.get(),
+                           /* num_regs */ 1,
+                           /* num_data */ 1,
+                           /* v_upreg_map */ Value::null(),
+                           /* v_insts */ r_insts.get(),
+                           /* v_args */ r_args.get());
     Root r_code(gc, Value::object(code));
-    code->v_module = r_module.get();
-    code->num_regs = 1;
-    code->num_data = 1;
-    code->v_upreg_map = Value::null();
-    code->v_insts = r_insts.get();
-    code->v_args = r_args.get();
 
     Value v_result = vm.eval_toplevel(Value::object(code));
     CHECK(v_result == Value::fixnum(1234));
@@ -69,51 +63,47 @@ TEST_CASE("VM executes a native invocation", "[vm]")
 
     // Perform an INVOKE op to add two fixnums.
 
-    String* method_name = gc.alloc<String>(strlen("+:"));
+    String* method_name = make_string(gc, "+:");
     Root r_method_name(gc, Value::object(method_name));
-    method_name->length = strlen("+:");
-    memcpy(method_name->contents(), "+:", strlen("+:"));
 
-    Method* method = gc.alloc<Method>();
+    Vector* method_attributes = make_vector(gc, /* capacity */ 0, /* length */ 0);
+    Root r_method_attributes(gc, Value::object(method_attributes));
+
+    Method* method = make_method(gc,
+                                 /* v_param_matchers */ Value::null(), // TODO
+                                 /* v_return_type */ Value::null(),
+                                 /* v_code */ Value::null(), // native!
+                                 /* v_attributes */ r_method_attributes.get(),
+                                 /* native_handler */ &test__fixnum_add);
     Root r_method(gc, Value::object(method));
-    method->v_param_matchers = Value::null(); // TODO
-    method->v_return_type = Value::null();
-    method->v_code = Value::null();       // native!
-    method->v_attributes = Value::null(); // TODO should be vector
-    method->native_handler = &test__fixnum_add;
 
-    Vector* methods = gc.alloc<Vector>(1);
+    Vector* methods = make_vector(gc, /* capacity */ 1, /* length */ 1);
     Root r_methods(gc, Value::object(methods));
-    methods->capacity = 1;
-    methods->length = 1;
     methods->components()[0] = r_method.get();
 
-    MultiMethod* multimethod = gc.alloc<MultiMethod>();
-    Root r_multimethod(gc, Value::object(multimethod));
-    multimethod->v_name = r_method_name.get();
-    multimethod->v_methods = r_methods.get();
-    multimethod->v_attributes = Value::null(); // TODO should be vector
+    Vector* multimethod_attributes = make_vector(gc, /* capacity */ 0, /* length */ 0);
+    Root r_multimethod_attributes(gc, Value::object(multimethod_attributes));
 
-    Module* module = gc.alloc<Module>(1);
+    MultiMethod* multimethod = make_multimethod(gc,
+                                                /* v_name */ r_method_name.get(),
+                                                /* v_methods */ r_methods.get(),
+                                                /* v_attributes */ r_multimethod_attributes.get());
+    Root r_multimethod(gc, Value::object(multimethod));
+
+    Module* module = make_module(gc, /* v_base */ Value::null(), /* capacity */ 1);
     Root r_module(gc, Value::object(module));
-    module->v_base = Value::null();
-    module->capacity = 1;
     module->length = 1;
     module->entries()[0].v_key = r_method_name.get();
     module->entries()[0].v_value = r_multimethod.get();
 
-    Vector* insts = gc.alloc<Vector>(3);
+    Vector* insts = make_vector(gc, /* capacity */ 3, /* length */ 3);
     Root r_insts(gc, Value::object(insts));
-    insts->capacity = 3;
-    insts->length = 3;
     insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
     insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
     insts->components()[2] = Value::fixnum(OpCode::INVOKE);
 
-    Vector* args = gc.alloc<Vector>(4);
+    Vector* args = make_vector(gc, /* capacity */ 4, /* length */ 4);
     Root r_args(gc, Value::object(args));
-    args->capacity = 4;
-    args->length = 4;
     // LOAD_VALUE: 5
     args->components()[0] = Value::fixnum(5);
     // LOAD_VALUE: 10
@@ -122,14 +112,14 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     args->components()[2] = r_method_name.get();
     args->components()[3] = Value::fixnum(2);
 
-    Code* code = gc.alloc<Code>();
+    Code* code = make_code(gc,
+                           /* v_module */ r_module.get(),
+                           /* num_regs */ 1,
+                           /* num_data */ 1,
+                           /* v_upreg_map */ Value::null(),
+                           /* v_insts */ r_insts.get(),
+                           /* v_args */ r_args.get());
     Root r_code(gc, Value::object(code));
-    code->v_module = r_module.get();
-    code->num_regs = 1;
-    code->num_data = 1;
-    code->v_upreg_map = Value::null();
-    code->v_insts = r_insts.get();
-    code->v_args = r_args.get();
 
     Value v_result = vm.eval_toplevel(Value::object(code));
     CHECK(v_result == Value::fixnum(15));
