@@ -175,7 +175,6 @@ TEMPLATE_PRODUCT_TEST_CASE("object() helper checks object tags", "[object]", EAC
     if (std::is_same<T1, T2>::value) {
         CHECK(obj.object<T2*>() == reinterpret_cast<T2*>(&obj));
     } else {
-        // TODO: check full error message
         std::stringstream ss;
         ss << "expected " << object_tag_str(T2::CLASS_TAG);
         CHECK_THROWS_MATCHES(obj.object<T2*>(), std::runtime_error, Message(ss.str()));
