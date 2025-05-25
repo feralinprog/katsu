@@ -31,21 +31,36 @@ namespace Katsu
         return tuple;
     }
 
-    Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length)
+    Array* make_array(GC& gc, uint64_t length)
     {
-        if (capacity < length) {
-            throw std::invalid_argument("capacity must be at least length");
+        return make_array(gc, length, /* num_components */ 0, /* components */ nullptr);
+    }
+
+    Array* make_array(GC& gc, uint64_t length, Value* components)
+    {
+        return make_array(gc, length, /* num_components */ length, components);
+    }
+
+    Array* make_array(GC& gc, uint64_t length, uint64_t num_components, Value* components)
+    {
+        if (length < num_components) {
+            throw std::invalid_argument("length must be at least num_components");
         }
 
-        Vector* vec = gc.alloc<Vector>(capacity);
-        vec->capacity = capacity;
-        vec->length = length;
-        // Only need to initialize up to the length, not the full capacity.
-        // The GC doesn't look at components beyond the length.
-        for (uint64_t i = 0; i < length; i++) {
-            vec->components()[i] = Value::null();
+        Array* array = gc.alloc<Array>(length);
+        array->length = length;
+        for (uint64_t i = 0; i < num_components; i++) {
+            array->components()[i] = components[i];
         }
-        return vec;
+        for (uint64_t i = num_components; i < length; i++) {
+            array->components()[i] = Value::null();
+        }
+        return array;
+    }
+
+    Vector* make_vector(GC& gc, uint64_t capacity)
+    {
+        return make_vector(gc, capacity, /* length */ 0, /* components */ nullptr);
     }
 
     Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length, Value* components)
@@ -54,14 +69,13 @@ namespace Katsu
             throw std::invalid_argument("capacity must be at least length");
         }
 
-        Vector* vec = gc.alloc<Vector>(capacity);
-        vec->capacity = capacity;
+        Root r_array(
+            gc,
+            Value::object(
+                make_array(gc, /* length */ capacity, /* num_components */ length, components)));
+        Vector* vec = gc.alloc<Vector>();
         vec->length = length;
-        // Only need to initialize up to the length, not the full capacity.
-        // The GC doesn't look at components beyond the length.
-        for (uint64_t i = 0; i < length; i++) {
-            vec->components()[i] = components[i];
-        }
+        vec->array = r_array.get();
         return vec;
     }
 
@@ -94,15 +108,15 @@ namespace Katsu
         if (!v_module.is_obj_module()) {
             throw std::invalid_argument("v_module must be a Module");
         }
-        if (!(v_upreg_map.is_obj_vector() || v_upreg_map.is_null())) {
-            throw std::invalid_argument("v_upreg_map must be a Vector or null");
+        if (!(v_upreg_map.is_obj_array() || v_upreg_map.is_null())) {
+            throw std::invalid_argument("v_upreg_map must be an Array or null");
         }
-        if (!v_insts.is_obj_vector()) {
-            throw std::invalid_argument("v_insts must be a Vector");
+        if (!v_insts.is_obj_array()) {
+            throw std::invalid_argument("v_insts must be an Array");
         }
         // TODO: check for fixnums of the right range?
-        if (!v_args.is_obj_vector()) {
-            throw std::invalid_argument("v_args must be a Vector");
+        if (!v_args.is_obj_array()) {
+            throw std::invalid_argument("v_args must be an Array");
         }
 
         Code* code = gc.alloc<Code>();
@@ -120,8 +134,8 @@ namespace Katsu
         if (!v_code.is_obj_code()) {
             throw std::invalid_argument("v_code must be a Code");
         }
-        if (!v_upregs.is_obj_vector()) {
-            throw std::invalid_argument("v_upregs must be a Vector");
+        if (!v_upregs.is_obj_array()) {
+            throw std::invalid_argument("v_upregs must be an Array");
         }
 
         Closure* closure = gc.alloc<Closure>();
@@ -247,18 +261,18 @@ namespace Katsu
 
     void append(GC& gc, Vector* vector, Value v_value)
     {
-        if (vector->length == vector->capacity) {
+        uint64_t capacity = vector->capacity();
+        if (vector->length == capacity) {
             // Reallocate!
-            uint64_t new_capacity = vector->capacity == 0 ? 1 : vector->capacity * 2;
-            Vector* new_vec = make_vector(gc, new_capacity, vector->length, vector->components());
-            // TODO: make this an explicit function of the GC.
-            // also need to collect to actually make this apply...
-            // ugh, Vector really needs to have <capacity, length, pointer to backing array>
-            // and <backing array> needs to be a separate thing.
-            vector->set_forwarding(new_vec);
-            vector = new_vec;
+            // Make sure we keep the original vector alive while copying components over.
+            Root r_vec(gc, Value::object(vector));
+            uint64_t new_capacity = capacity == 0 ? 1 : capacity * 2;
+            vector = make_vector(gc,
+                                 new_capacity,
+                                 vector->length,
+                                 vector->array.obj_array()->components());
         }
-        vector->components()[vector->length++] = v_value;
+        vector->array.obj_array()->components()[vector->length++] = v_value;
     }
 
     void append(GC& gc, Module* module, String* name, Value v_value)
@@ -271,9 +285,7 @@ namespace Katsu
             for (uint64_t i = 0; i < module->length; i++) {
                 new_module->entries()[i] = module->entries()[i];
             }
-            // TODO: make this an explicit function of the GC.
-            // also need to collect to actually make this apply...
-            module->set_forwarding(new_module);
+            // TODO: need to do similar thing to vectors, which have distinct backing array
             module = new_module;
         }
         Module::Entry& entry = module->entries()[module->length++];

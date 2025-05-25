@@ -23,13 +23,13 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     Module* module = make_module(gc, /* v_base */ Value::null(), /* capacity */ 0);
     Root r_module(gc, Value::object(module));
 
-    Vector* insts = make_vector(gc, /* capacity */ 1, /* length */ 1);
+    Value init_insts[] = {Value::fixnum(OpCode::LOAD_VALUE)};
+    Array* insts = make_array(gc, /* length */ 1, init_insts);
     Root r_insts(gc, Value::object(insts));
-    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
 
-    Vector* args = make_vector(gc, /* capacity */ 1, /* length */ 1);
+    Value init_args[] = {Value::fixnum(1234)};
+    Array* args = make_array(gc, /* length */ 1, init_args);
     Root r_args(gc, Value::object(args));
-    args->components()[0] = Value::fixnum(1234);
 
     Code* code = make_code(gc,
                            /* v_module */ r_module.get(),
@@ -66,7 +66,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     String* method_name = make_string(gc, "+:");
     Root r_method_name(gc, Value::object(method_name));
 
-    Vector* method_attributes = make_vector(gc, /* capacity */ 0, /* length */ 0);
+    Vector* method_attributes = make_vector(gc, /* capacity */ 0);
     Root r_method_attributes(gc, Value::object(method_attributes));
 
     Method* method = make_method(gc,
@@ -77,11 +77,12 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                                  /* native_handler */ &test__fixnum_add);
     Root r_method(gc, Value::object(method));
 
-    Vector* methods = make_vector(gc, /* capacity */ 1, /* length */ 1);
+    Value init_methods[] = {r_method.get()};
+    Vector* methods =
+        make_vector(gc, /* capacity */ 1, /* length */ 1, /* components */ init_methods);
     Root r_methods(gc, Value::object(methods));
-    methods->components()[0] = r_method.get();
 
-    Vector* multimethod_attributes = make_vector(gc, /* capacity */ 0, /* length */ 0);
+    Vector* multimethod_attributes = make_vector(gc, /* capacity */ 0);
     Root r_multimethod_attributes(gc, Value::object(multimethod_attributes));
 
     MultiMethod* multimethod = make_multimethod(gc,
@@ -96,21 +97,26 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     module->entries()[0].v_key = r_method_name.get();
     module->entries()[0].v_value = r_multimethod.get();
 
-    Vector* insts = make_vector(gc, /* capacity */ 3, /* length */ 3);
-    Root r_insts(gc, Value::object(insts));
-    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
-    insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
-    insts->components()[2] = Value::fixnum(OpCode::INVOKE);
+    Value init_insts[] = {
+        Value::fixnum(OpCode::LOAD_VALUE),
+        Value::fixnum(OpCode::LOAD_VALUE),
+        Value::fixnum(OpCode::INVOKE),
+    };
 
-    Vector* args = make_vector(gc, /* capacity */ 4, /* length */ 4);
+    Array* insts = make_array(gc, /* length */ 3, /* components */ init_insts);
+    Root r_insts(gc, Value::object(insts));
+
+    Value init_args[] = {
+        // LOAD_VALUE: 5
+        Value::fixnum(5),
+        // LOAD_VALUE: 10
+        Value::fixnum(10),
+        // INVOKE: +: with two args
+        r_method_name.get(),
+        Value::fixnum(2),
+    };
+    Array* args = make_array(gc, /* length */ 4, /* components */ init_args);
     Root r_args(gc, Value::object(args));
-    // LOAD_VALUE: 5
-    args->components()[0] = Value::fixnum(5);
-    // LOAD_VALUE: 10
-    args->components()[1] = Value::fixnum(10);
-    // INVOKE: +: with two args
-    args->components()[2] = r_method_name.get();
-    args->components()[3] = Value::fixnum(2);
 
     Code* code = make_code(gc,
                            /* v_module */ r_module.get(),

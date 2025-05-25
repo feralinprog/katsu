@@ -75,6 +75,11 @@ namespace Katsu
                         obj_size = v->size();
                         break;
                     }
+                    case ObjectTag::ARRAY: {
+                        auto v = obj->object<Array*>();
+                        obj_size = v->size();
+                        break;
+                    }
                     case ObjectTag::VECTOR: {
                         auto v = obj->object<Vector*>();
                         obj_size = v->size();
@@ -199,12 +204,18 @@ namespace Katsu
                     obj_size = v->size();
                     break;
                 }
-                case ObjectTag::VECTOR: {
-                    auto v = obj->object<Vector*>();
+                case ObjectTag::ARRAY: {
+                    auto v = obj->object<Array*>();
                     uint64_t length = v->length;
                     for (uint64_t i = 0; i < length; i++) {
                         move_value(&v->components()[i]);
                     }
+                    obj_size = v->size();
+                    break;
+                }
+                case ObjectTag::VECTOR: {
+                    auto v = obj->object<Vector*>();
+                    move_value(&v->array);
                     obj_size = v->size();
                     break;
                 }

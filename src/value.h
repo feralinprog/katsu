@@ -16,8 +16,9 @@ namespace Katsu
      * (aggregate:)
      * - objects
      *   - mutable object references
-     *   - tuples
-     *   - vectors
+     *   - tuples (fixed-length) (TODO: fold into arrays..?)
+     *   - arrays (fixed-length)
+     *   - vectors (growable)
      *   - modules (environments)
      *   - strings
      *   - code templates / definitions
@@ -89,6 +90,7 @@ namespace Katsu
     {
         REF,
         TUPLE,
+        ARRAY,
         VECTOR,
         MODULE,
         STRING,
@@ -105,6 +107,7 @@ namespace Katsu
         switch (tag) {
             case ObjectTag::REF: return "ref";
             case ObjectTag::TUPLE: return "tuple";
+            case ObjectTag::ARRAY: return "array";
             case ObjectTag::VECTOR: return "vector";
             case ObjectTag::MODULE: return "module";
             case ObjectTag::STRING: return "string";
@@ -193,6 +196,7 @@ namespace Katsu
     // Forward declarations for helper functions:
     struct Ref;
     struct Tuple;
+    struct Array;
     struct Vector;
     struct Module;
     struct String;
@@ -273,6 +277,10 @@ namespace Katsu
         {
             return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::TUPLE;
         }
+        bool is_obj_array() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::ARRAY;
+        }
         bool is_obj_vector() const
         {
             return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::VECTOR;
@@ -334,6 +342,10 @@ namespace Katsu
         Tuple* obj_tuple() const
         {
             return this->object()->object<Tuple*>();
+        }
+        Array* obj_array() const
+        {
+            return this->object()->object<Array*>();
         }
         Vector* obj_vector() const
         {
@@ -450,11 +462,10 @@ namespace Katsu
         }
     };
 
-    struct Vector : public Object
+    struct Array : public Object
     {
-        static const ObjectTag CLASS_TAG = ObjectTag::VECTOR;
+        static const ObjectTag CLASS_TAG = ObjectTag::ARRAY;
 
-        uint64_t capacity;
         uint64_t length;
         inline Value* components()
         {
@@ -462,13 +473,35 @@ namespace Katsu
         }
 
         // Size in bytes.
-        static inline uint64_t size(uint64_t capacity)
+        static inline uint64_t size(uint64_t length)
         {
-            return sizeof(Vector) + capacity * sizeof(Value);
+            return sizeof(Array) + length * sizeof(Value);
         }
         inline uint64_t size() const
         {
-            return Vector::size(this->capacity);
+            return Array::size(this->length);
+        }
+    };
+
+    struct Vector : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::VECTOR;
+
+        // Number of in-use entries from the backing array.
+        uint64_t length;
+        // Backing array.
+        Value array; // Array
+
+        // Length of the backing array.
+        uint64_t capacity()
+        {
+            return this->array.obj_array()->length;
+        }
+
+        // Size in bytes.
+        static inline uint64_t size()
+        {
+            return sizeof(Vector);
         }
     };
 
@@ -532,11 +565,11 @@ namespace Katsu
         Value v_module; // Module
         uint32_t num_regs;
         uint32_t num_data;
-        Value v_upreg_map; // Null for methods; Vector (of fixnum) for closures
+        Value v_upreg_map; // Null for methods; Array (of fixnum) for closures
         // TODO: byte array inline?
-        Value v_insts; // Vector of fixnums
+        Value v_insts; // Array of fixnums
         // TODO: arg array inline?
-        Value v_args; // Vector (of arbitrary values)
+        Value v_args; // Array (of arbitrary values)
         // TODO: source span for the source of the bytecode (e.g. closure or method definition)
         // TODO: source span per bytecode
 
@@ -552,7 +585,7 @@ namespace Katsu
         static const ObjectTag CLASS_TAG = ObjectTag::CLOSURE;
 
         Value v_code;   // Code
-        Value v_upregs; // Vector
+        Value v_upregs; // Array
 
         // Size in bytes.
         static inline uint64_t size()
@@ -728,6 +761,13 @@ namespace Katsu
             throw std::runtime_error("expected tuple");
         }
         return reinterpret_cast<Tuple*>(&object);
+    }
+    template <> inline Array* static_object<Array*>(Object& object)
+    {
+        if (object.tag() != ObjectTag::ARRAY) {
+            throw std::runtime_error("expected array");
+        }
+        return reinterpret_cast<Array*>(&object);
     }
     template <> inline Vector* static_object<Vector*>(Object& object)
     {

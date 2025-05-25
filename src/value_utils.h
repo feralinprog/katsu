@@ -12,11 +12,19 @@ namespace Katsu
     Ref* make_ref(GC& gc, Value v_ref);
     // Make a Tuple of the given length, filled with nulls.
     Tuple* make_tuple(GC& gc, uint64_t length);
-    // Make a Tuple with the specified components.
+    // Make a Tuple with the specified length and components.
     Tuple* make_tuple(GC& gc, uint64_t length, Value* components);
-    // Make a Vector with the given capacity and length, filled with nulls.
-    Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length);
-    // Make a Vector with the given capacity and length, filled with the specified components.
+    // Make an Array of the given length, filled with nulls.
+    Array* make_array(GC& gc, uint64_t length);
+    // Make an Array with the specified length and components.
+    Array* make_array(GC& gc, uint64_t length, Value* components);
+    // Make an Array with the specified length and components (filling with nulls after
+    // num_components).
+    Array* make_array(GC& gc, uint64_t length, uint64_t num_components, Value* components);
+    // Make a Vector with the given capacity and zero length (filling the backing array with nulls).
+    Vector* make_vector(GC& gc, uint64_t capacity);
+    // Make a Vector with the given capacity and length, filled with the specified components
+    // (followed by a tail of nulls).
     Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length, Value* components);
     // Make a Module with the given capacity (and zero length).
     Module* make_module(GC& gc, Value v_base, uint64_t capacity);

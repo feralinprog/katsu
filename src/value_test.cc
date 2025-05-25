@@ -153,6 +153,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
 #define EACH_OBJECT(F) \
     (F(Ref),           \
      F(Tuple),         \
+     F(Array),         \
      F(Vector),        \
      F(Module),        \
      F(String),        \
@@ -185,6 +186,7 @@ TEMPLATE_PRODUCT_TEST_CASE("object() helper checks object tags", "[object]", EAC
 
 // TODO: test functions of Ref
 // TODO: test functions of Tuple
+// TODO: test functions of Array
 // TODO: test functions of Vector
 // TODO: test functions of Module
 // TODO: test functions of String

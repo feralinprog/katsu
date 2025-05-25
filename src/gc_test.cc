@@ -47,15 +47,14 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
         SKIP();
     }
 
-    GC gc(13 * sizeof(Value));
+    GC gc(12 * sizeof(Value));
 
     Tuple* a = gc.alloc<Tuple>(4);
     REQUIRE(reinterpret_cast<uint8_t*>(a) == TESTONLY_get_mem(gc) + 0);
-    Vector* b = gc.alloc<Vector>(4);
+    Array* b = gc.alloc<Array>(4);
     REQUIRE(reinterpret_cast<uint8_t*>(b) == TESTONLY_get_mem(gc) + 48);
 
     // Add only `b` to the roots.
-    b->capacity = 4;
     b->length = 4;
     b->components()[0] = Value::_float(1.0);
     b->components()[1] = Value::_float(2.0);
@@ -66,7 +65,7 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
     String* c;
     REQUIRE_NOTHROW(c = gc.alloc<String>(sizeof(String) + 1));
     REQUIRE(reinterpret_cast<uint8_t*>(root_b.get().object()) == TESTONLY_get_mem(gc) + 0);
-    REQUIRE(reinterpret_cast<uint8_t*>(c) == TESTONLY_get_mem(gc) + 56);
+    REQUIRE(reinterpret_cast<uint8_t*>(c) == TESTONLY_get_mem(gc) + 48);
 
     // Keep `c` around via another root.
     c->length = 1;
