@@ -132,8 +132,6 @@ namespace Katsu
                           << std::dec << ") from " << obj << " to " << reinterpret_cast<void*>(to)
                           << "\n";
 #endif
-                // TODO: don't necessarily need to memcpy the whole obj_size... for instance vectors
-                // may have length far lower than capacity.
                 memcpy(to, obj, obj_size);
                 obj->set_forwarding(to);
                 to += align_up(obj_size, TAG_BITS);

@@ -128,12 +128,6 @@ namespace Katsu
         // action.
         bool is_cleanup;
 
-        // TODO: use GCed value instead..?
-        // oh yeah, need GCed value so that katsu code can actually use it as a reified thing...
-        // should be optional though, only some frames actually need to allocate a
-        // return-continuation, and most can be (say) null
-        uint64_t return_id;
-
         Value v_module; // Module
 
         // Variable-length array of length `num_regs`.

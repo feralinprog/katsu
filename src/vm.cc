@@ -71,7 +71,6 @@ namespace Katsu
         frame->data_depth = 0;
         frame->v_cleanup = Value::null();
         frame->is_cleanup = false;
-        frame->return_id = 0; // TODO
         frame->v_module = r_code.get().obj_code()->v_module;
         this->current_frame = frame;
 
@@ -324,7 +323,6 @@ namespace Katsu
             frame->data_depth = 0;
             frame->v_cleanup = Value::null();
             frame->is_cleanup = false;
-            frame->return_id = 0; // TODO
             frame->v_module = code->v_module;
             this->current_frame = frame;
         }
