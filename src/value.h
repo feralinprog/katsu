@@ -490,12 +490,12 @@ namespace Katsu
         // Number of in-use entries from the backing array.
         uint64_t length;
         // Backing array.
-        Value array; // Array
+        Value v_array; // Array
 
         // Length of the backing array.
         uint64_t capacity()
         {
-            return this->array.obj_array()->length;
+            return this->v_array.obj_array()->length;
         }
 
         // Size in bytes.

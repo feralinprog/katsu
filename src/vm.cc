@@ -280,7 +280,7 @@ namespace Katsu
         if (methods->length == 0) {
             throw std::runtime_error("need a method in multimethod");
         }
-        Value v_method = methods->array.obj_array()->components()[0];
+        Value v_method = methods->v_array.obj_array()->components()[0];
         Method* method = v_method.obj_method();
 
         if (method->v_code.is_null()) {

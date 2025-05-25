@@ -213,7 +213,7 @@ namespace Katsu
                 }
                 case ObjectTag::VECTOR: {
                     auto v = obj->object<Vector*>();
-                    move_value(&v->array);
+                    move_value(&v->v_array);
                     obj_size = v->size();
                     break;
                 }

@@ -75,7 +75,7 @@ namespace Katsu
                 make_array(gc, /* length */ capacity, /* num_components */ length, components)));
         Vector* vec = gc.alloc<Vector>();
         vec->length = length;
-        vec->array = r_array.get();
+        vec->v_array = r_array.get();
         return vec;
     }
 
@@ -270,9 +270,9 @@ namespace Katsu
             vector = make_vector(gc,
                                  new_capacity,
                                  vector->length,
-                                 vector->array.obj_array()->components());
+                                 vector->v_array.obj_array()->components());
         }
-        vector->array.obj_array()->components()[vector->length++] = v_value;
+        vector->v_array.obj_array()->components()[vector->length++] = v_value;
     }
 
     void append(GC& gc, Module* module, String* name, Value v_value)
