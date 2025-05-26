@@ -140,6 +140,12 @@ namespace Katsu
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
 
+        // Skip any leading semicolons / newlines to get to the meat.
+        while (stream.current_has_type(TokenType::SEMICOLON) ||
+               stream.current_has_type(TokenType::NEWLINE)) {
+            stream.consume();
+        }
+
         while (!stream.current_has_type(TokenType::END)) {
             std::unique_ptr<Expr> top_level_expr =
                 parser->parse(stream, 0 /* precedence */, true /* is_toplevel */);
