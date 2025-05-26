@@ -187,14 +187,12 @@ namespace Katsu
             case OpCode::MAKE_TUPLE: {
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
-                Tuple* tuple = make_tuple(this->gc,
-                                          num_components,
-                                          /* components */ this->current_frame->data() +
-                                              this->current_frame->data_depth - num_components);
+                Tuple* tuple = make_tuple_nofill(this->gc, num_components);
                 this->current_frame->data_depth -= num_components;
                 for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
                         &this->current_frame->data()[this->current_frame->data_depth + i];
+                    tuple->components()[i] = *component;
                     *component = Value::null();
                 }
                 push(Value::object(tuple));
@@ -205,17 +203,15 @@ namespace Katsu
             case OpCode::MAKE_VECTOR: {
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
-                Vector* vec = make_vector(gc,
-                                          /* capacity */ num_components,
-                                          /* length */ num_components,
-                                          /* components */ this->current_frame->data() +
-                                              this->current_frame->data_depth - num_components);
+                Array* array = make_array_nofill(gc, num_components);
                 this->current_frame->data_depth -= num_components;
                 for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
                         &this->current_frame->data()[this->current_frame->data_depth + i];
+                    array->components()[i] = *component;
                     *component = Value::null();
                 }
+                Vector* vec = make_vector(gc, /* length */ num_components, array);
                 push(Value::object(vec));
                 shift_inst();
                 shift_arg();
@@ -232,8 +228,8 @@ namespace Katsu
                 Array* upregs = make_array(gc, num_upregs); // null-initialized
                 Root r_upregs(this->gc, Value::object(upregs));
 
-                Closure* closure =
-                    make_closure(gc, /* v_code */ arg(), /* v_upregs */ r_upregs.get());
+                Root r_code(gc, arg());
+                Closure* closure = make_closure(gc, /* r_code */ r_code, /* r_upregs */ r_upregs);
                 // Don't need to add the closure as a root; we're done with allocation.
                 // Also pull out _upregs again for convenience; it could have moved during closure
                 // allocation.

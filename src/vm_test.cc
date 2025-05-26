@@ -21,24 +21,26 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
 
     // Perform a simple LOAD_VALUE.
 
-    Module* module = make_module(gc, /* v_base */ Value::null(), /* capacity */ 0);
+    Module* module = make_module(gc, /* base */ nullptr, /* capacity */ 0);
     Root r_module(gc, Value::object(module));
 
-    Value init_insts[] = {Value::fixnum(OpCode::LOAD_VALUE)};
-    Array* insts = make_array(gc, /* length */ 1, init_insts);
+    Root r_upreg_map(gc, Value::null());
+
+    Array* insts = make_array_nofill(gc, /* length */ 1);
+    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
     Root r_insts(gc, Value::object(insts));
 
-    Value init_args[] = {Value::fixnum(1234)};
-    Array* args = make_array(gc, /* length */ 1, init_args);
+    Array* args = make_array(gc, /* length */ 1);
+    args->components()[0] = Value::fixnum(1234);
     Root r_args(gc, Value::object(args));
 
     Code* code = make_code(gc,
-                           /* v_module */ r_module.get(),
+                           /* r_module */ r_module,
                            /* num_regs */ 1,
                            /* num_data */ 1,
-                           /* v_upreg_map */ Value::null(),
-                           /* v_insts */ r_insts.get(),
-                           /* v_args */ r_args.get());
+                           /* r_upreg_map */ r_upreg_map,
+                           /* r_insts */ r_insts,
+                           /* r_args */ r_args);
     Root r_code(gc, Value::object(code));
 
     Value v_result = vm.eval_toplevel(Value::object(code));
@@ -67,65 +69,71 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     String* method_name = make_string(gc, "+:");
     Root r_method_name(gc, Value::object(method_name));
 
+    Root r_param_matchers(gc, Value::null()); // TODO: not null
+
+    Root r_return_type(gc, Value::null());
+
+    Root r_method_code(gc, Value::null()); // native!
+
     Vector* method_attributes = make_vector(gc, /* capacity */ 0);
     Root r_method_attributes(gc, Value::object(method_attributes));
 
     Method* method = make_method(gc,
-                                 /* v_param_matchers */ Value::null(), // TODO
-                                 /* v_return_type */ Value::null(),
-                                 /* v_code */ Value::null(), // native!
-                                 /* v_attributes */ r_method_attributes.get(),
+                                 /* r_param_matchers */ r_param_matchers,
+                                 /* r_return_type */ r_return_type,
+                                 /* r_code */ r_method_code,
+                                 /* r_attributes */ r_method_attributes,
                                  /* native_handler */ &test__fixnum_add);
     Root r_method(gc, Value::object(method));
 
-    Value init_methods[] = {r_method.get()};
-    Vector* methods =
-        make_vector(gc, /* capacity */ 1, /* length */ 1, /* components */ init_methods);
+    Vector* methods = make_vector(gc, /* capacity */ 1);
+    methods->length = 1;
+    {
+        Array* array = methods->v_array.obj_array();
+        array->components()[0] = r_method.get();
+    }
     Root r_methods(gc, Value::object(methods));
 
     Vector* multimethod_attributes = make_vector(gc, /* capacity */ 0);
     Root r_multimethod_attributes(gc, Value::object(multimethod_attributes));
 
     MultiMethod* multimethod = make_multimethod(gc,
-                                                /* v_name */ r_method_name.get(),
-                                                /* v_methods */ r_methods.get(),
-                                                /* v_attributes */ r_multimethod_attributes.get());
+                                                /* r_name */ r_method_name,
+                                                /* r_methods */ r_methods,
+                                                /* r_attributes */ r_multimethod_attributes);
     Root r_multimethod(gc, Value::object(multimethod));
 
-    Module* module = make_module(gc, /* v_base */ Value::null(), /* capacity */ 1);
+    Module* module = make_module(gc, /* base */ nullptr, /* capacity */ 1);
     Root r_module(gc, Value::object(module));
     module->length = 1;
     module->entries()[0].v_key = r_method_name.get();
     module->entries()[0].v_value = r_multimethod.get();
 
-    Value init_insts[] = {
-        Value::fixnum(OpCode::LOAD_VALUE),
-        Value::fixnum(OpCode::LOAD_VALUE),
-        Value::fixnum(OpCode::INVOKE),
-    };
+    Root r_upreg_map(gc, Value::null());
 
-    Array* insts = make_array(gc, /* length */ 3, /* components */ init_insts);
+    Array* insts = make_array(gc, /* length */ 3);
+    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
+    insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
+    insts->components()[2] = Value::fixnum(OpCode::INVOKE);
     Root r_insts(gc, Value::object(insts));
 
-    Value init_args[] = {
-        // LOAD_VALUE: 5
-        Value::fixnum(5),
-        // LOAD_VALUE: 10
-        Value::fixnum(10),
-        // INVOKE: +: with two args
-        r_method_name.get(),
-        Value::fixnum(2),
-    };
-    Array* args = make_array(gc, /* length */ 4, /* components */ init_args);
+    Array* args = make_array(gc, /* length */ 4);
+    // LOAD_VALUE: 5
+    args->components()[0] = Value::fixnum(5);
+    // LOAD_VALUE: 10
+    args->components()[1] = Value::fixnum(10);
+    // INVOKE: +: with two args
+    args->components()[2] = r_method_name.get();
+    args->components()[3] = Value::fixnum(2);
     Root r_args(gc, Value::object(args));
 
     Code* code = make_code(gc,
-                           /* v_module */ r_module.get(),
+                           /* r_module */ r_module,
                            /* num_regs */ 1,
                            /* num_data */ 1,
-                           /* v_upreg_map */ Value::null(),
-                           /* v_insts */ r_insts.get(),
-                           /* v_args */ r_args.get());
+                           /* r_upreg_map */ r_upreg_map,
+                           /* r_insts */ r_insts,
+                           /* r_args */ r_args);
     Root r_code(gc, Value::object(code));
 
     Value v_result = vm.eval_toplevel(Value::object(code));

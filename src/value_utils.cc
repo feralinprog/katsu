@@ -4,93 +4,98 @@
 
 namespace Katsu
 {
-    Ref* make_ref(GC& gc, Value v_ref)
+    Ref* make_ref(GC& gc, Root& r_ref)
     {
         Ref* ref = gc.alloc<Ref>();
-        ref->v_ref = v_ref;
+        ref->v_ref = r_ref.get();
         return ref;
+    }
+
+    Ref* make_ref(GC& gc, Value v_ref)
+    {
+        Root r_ref(gc, std::move(v_ref));
+        return make_ref(gc, r_ref);
     }
 
     Tuple* make_tuple(GC& gc, uint64_t length)
     {
-        Tuple* tuple = gc.alloc<Tuple>(length);
-        tuple->length = length;
+        Tuple* tuple = make_tuple_nofill(gc, length);
         for (uint64_t i = 0; i < length; i++) {
             tuple->components()[i] = Value::null();
         }
         return tuple;
     }
 
-    Tuple* make_tuple(GC& gc, uint64_t length, Value* components)
+    Tuple* make_tuple_nofill(GC& gc, uint64_t length)
     {
         Tuple* tuple = gc.alloc<Tuple>(length);
         tuple->length = length;
-        for (uint64_t i = 0; i < length; i++) {
-            tuple->components()[i] = components[i];
-        }
         return tuple;
     }
 
     Array* make_array(GC& gc, uint64_t length)
     {
-        return make_array(gc, length, /* num_components */ 0, /* components */ nullptr);
-    }
-
-    Array* make_array(GC& gc, uint64_t length, Value* components)
-    {
-        return make_array(gc, length, /* num_components */ length, components);
-    }
-
-    Array* make_array(GC& gc, uint64_t length, uint64_t num_components, Value* components)
-    {
-        if (length < num_components) {
-            throw std::invalid_argument("length must be at least num_components");
-        }
-
-        Array* array = gc.alloc<Array>(length);
-        array->length = length;
-        for (uint64_t i = 0; i < num_components; i++) {
-            array->components()[i] = components[i];
-        }
-        for (uint64_t i = num_components; i < length; i++) {
+        Array* array = make_array_nofill(gc, length);
+        for (uint64_t i = 0; i < length; i++) {
             array->components()[i] = Value::null();
         }
         return array;
     }
 
-    Vector* make_vector(GC& gc, uint64_t capacity)
+    Array* make_array_nofill(GC& gc, uint64_t length)
     {
-        return make_vector(gc, capacity, /* length */ 0, /* components */ nullptr);
+        Array* array = gc.alloc<Array>(length);
+        array->length = length;
+        return array;
     }
 
-    Vector* make_vector(GC& gc, uint64_t capacity, uint64_t length, Value* components)
+    Vector* make_vector(GC& gc, uint64_t capacity)
     {
-        if (capacity < length) {
-            throw std::invalid_argument("capacity must be at least length");
+        Root r_array(gc, Value::object(make_array(gc, /* length */ capacity)));
+        return make_vector(gc, /* length */ 0, r_array);
+    }
+
+    Vector* make_vector(GC& gc, uint64_t length, Root& r_array)
+    {
+        if (!r_array.get().is_obj_array()) {
+            throw std::invalid_argument("r_array must be an Array");
         }
 
-        Root r_array(
-            gc,
-            Value::object(
-                make_array(gc, /* length */ capacity, /* num_components */ length, components)));
         Vector* vec = gc.alloc<Vector>();
+        Array* array = r_array.get().obj_array();
+        if (length > array->length) {
+            throw std::invalid_argument("length must be at most r_array length");
+        }
         vec->length = length;
         vec->v_array = r_array.get();
         return vec;
     }
 
-    Module* make_module(GC& gc, Value v_base, uint64_t capacity)
+    Vector* make_vector(GC& gc, uint64_t length, Array* array)
     {
-        if (!(v_base.is_obj_module() || v_base.is_null())) {
-            throw std::invalid_argument("v_base must be a Module or null");
+        Root r_array(gc, Value::object(array));
+        return make_vector(gc, length, r_array);
+    }
+
+    Module* make_module(GC& gc, Root& r_base, uint64_t capacity)
+    {
+        if (!(r_base.get().is_obj_module() || r_base.get().is_null())) {
+            throw std::invalid_argument("r_base must be a Module or null");
         }
 
         Module* module = gc.alloc<Module>(capacity);
-        module->v_base = v_base;
+        module->v_base = r_base.get();
         module->capacity = capacity;
         module->length = 0;
         // No need to initialize entries; GC doesn't look at entries beyond the (zero) length.
         return module;
+    }
+
+    Module* make_module(GC& gc, Module* base, uint64_t capacity)
+    {
+        Value v_base = base ? Value::object(base) : Value::null();
+        Root r_base(gc, std::move(v_base));
+        return make_module(gc, r_base, capacity);
     }
 
     String* make_string(GC& gc, const std::string& src)
@@ -102,177 +107,262 @@ namespace Katsu
         return str;
     }
 
-    Code* make_code(GC& gc, Value v_module, uint32_t num_regs, uint32_t num_data, Value v_upreg_map,
-                    Value v_insts, Value v_args)
+    Code* make_code(GC& gc, Root& r_module, uint32_t num_regs, uint32_t num_data, Root& r_upreg_map,
+                    Root& r_insts, Root& r_args)
     {
-        if (!v_module.is_obj_module()) {
-            throw std::invalid_argument("v_module must be a Module");
+        if (!r_module.get().is_obj_module()) {
+            throw std::invalid_argument("r_module must be a Module");
         }
-        if (!(v_upreg_map.is_obj_array() || v_upreg_map.is_null())) {
-            throw std::invalid_argument("v_upreg_map must be an Array or null");
+        if (!(r_upreg_map.get().is_obj_array() || r_upreg_map.get().is_null())) {
+            throw std::invalid_argument("r_upreg_map must be an Array or null");
         }
-        if (!v_insts.is_obj_array()) {
-            throw std::invalid_argument("v_insts must be an Array");
+        if (!r_insts.get().is_obj_array()) {
+            throw std::invalid_argument("r_insts must be an Array");
         }
         // TODO: check for fixnums of the right range?
-        if (!v_args.is_obj_array()) {
-            throw std::invalid_argument("v_args must be an Array");
+        if (!r_args.get().is_obj_array()) {
+            throw std::invalid_argument("r_args must be an Array");
         }
 
         Code* code = gc.alloc<Code>();
-        code->v_module = v_module;
+        code->v_module = r_module.get();
         code->num_regs = num_regs;
         code->num_data = num_data;
-        code->v_upreg_map = v_upreg_map;
-        code->v_insts = v_insts;
-        code->v_args = v_args;
+        code->v_upreg_map = r_upreg_map.get();
+        code->v_insts = r_insts.get();
+        code->v_args = r_args.get();
         return code;
     }
 
-    Closure* make_closure(GC& gc, Value v_code, Value v_upregs)
+    Code* make_code(GC& gc, Module* module, uint32_t num_regs, uint32_t num_data, Array* upreg_map,
+                    Array* insts, Array* args)
     {
-        if (!v_code.is_obj_code()) {
-            throw std::invalid_argument("v_code must be a Code");
+        Root r_module(gc, Value::object(module));
+        Value v_upreg_map = upreg_map ? Value::object(upreg_map) : Value::null();
+        Root r_upreg_map(gc, std::move(v_upreg_map));
+        Root r_insts(gc, Value::object(insts));
+        Root r_args(gc, Value::object(args));
+        return make_code(gc, r_module, num_regs, num_data, r_upreg_map, r_insts, r_args);
+    }
+
+    Closure* make_closure(GC& gc, Root& r_code, Root& r_upregs)
+    {
+        if (!r_code.get().is_obj_code()) {
+            throw std::invalid_argument("r_code must be a Code");
         }
-        if (!v_upregs.is_obj_array()) {
-            throw std::invalid_argument("v_upregs must be an Array");
+        if (!r_upregs.get().is_obj_array()) {
+            throw std::invalid_argument("r_upregs must be an Array");
         }
 
         Closure* closure = gc.alloc<Closure>();
-        closure->v_code = v_code;
-        closure->v_upregs = v_upregs;
+        closure->v_code = r_code.get();
+        closure->v_upregs = r_upregs.get();
         return closure;
     }
 
-    Method* make_method(GC& gc, Value v_param_matchers, Value v_return_type, Value v_code,
-                        Value v_attributes, NativeHandler native_handler)
+    Closure* make_closure(GC& gc, Code* code, Array* upregs)
     {
-        // if (!v_param_matchers.is_obj_vector()) {
-        //     throw std::invalid_argument("v_param_matchers must be a Vector");
+        Root r_code(gc, Value::object(code));
+        Root r_upregs(gc, Value::object(upregs));
+        return make_closure(gc, r_code, r_upregs);
+    }
+
+    Method* make_method(GC& gc, Root& r_param_matchers, Root& r_return_type, Root& r_code,
+                        Root& r_attributes, NativeHandler native_handler)
+    {
+        // if (!r_param_matchers.get().is_obj_vector()) {
+        //     throw std::invalid_argument("r_param_matchers must be a Vector");
         // }
-        if (!(v_return_type.is_obj_type() || v_return_type.is_null())) {
-            throw std::invalid_argument("v_return_type must be a Type or null");
+        if (!(r_return_type.get().is_obj_type() || r_return_type.get().is_null())) {
+            throw std::invalid_argument("r_return_type must be a Type or null");
         }
-        if (!(v_code.is_obj_code() || v_code.is_null())) {
-            throw std::invalid_argument("v_code must be a Code or null");
+        if (!(r_code.get().is_obj_code() || r_code.get().is_null())) {
+            throw std::invalid_argument("r_code must be a Code or null");
         }
-        if (!v_attributes.is_obj_vector()) {
-            throw std::invalid_argument("v_attributes must be a Vector");
+        if (!r_attributes.get().is_obj_vector()) {
+            throw std::invalid_argument("r_attributes must be a Vector");
         }
         // No way to check native_handler.
         {
-            bool has_code = v_code.is_obj_code();
+            bool has_code = r_code.get().is_obj_code();
             bool has_native_handler = native_handler != nullptr;
             int options_selected = (has_code ? 1 : 0) + (has_native_handler ? 1 : 0);
             if (options_selected != 1) {
                 throw std::invalid_argument(
-                    "exactly one of v_code and native_handler must be instantiated");
+                    "exactly one of r_code and native_handler must be instantiated");
             }
         }
 
         Method* method = gc.alloc<Method>();
-        method->v_param_matchers = v_param_matchers;
-        method->v_return_type = v_return_type;
-        method->v_code = v_code;
-        method->v_attributes = v_attributes;
+        method->v_param_matchers = r_param_matchers.get();
+        method->v_return_type = r_return_type.get();
+        method->v_code = r_code.get();
+        method->v_attributes = r_attributes.get();
         method->native_handler = native_handler;
         return method;
     }
 
-    MultiMethod* make_multimethod(GC& gc, Value v_name, Value v_methods, Value v_attributes)
+    Method* make_method(GC& gc, Value v_param_matchers, Type* return_type, Code* code,
+                        Vector* attributes, NativeHandler native_handler)
     {
-        if (!v_name.is_obj_string()) {
-            throw std::invalid_argument("v_name must be a String");
+        Root r_param_matchers(gc, std::move(v_param_matchers));
+        Value v_return_type = return_type ? Value::object(return_type) : Value::null();
+        Root r_return_type(gc, std::move(v_return_type));
+        Value v_code = code ? Value::object(code) : Value::null();
+        Root r_code(gc, std::move(v_code));
+        Root r_attributes(gc, Value::object(attributes));
+        return make_method(gc,
+                           r_param_matchers,
+                           r_return_type,
+                           r_code,
+                           r_attributes,
+                           native_handler);
+    }
+
+    MultiMethod* make_multimethod(GC& gc, Root& r_name, Root& r_methods, Root& r_attributes)
+    {
+        if (!r_name.get().is_obj_string()) {
+            throw std::invalid_argument("r_name must be a String");
         }
-        if (!v_methods.is_obj_vector()) {
-            throw std::invalid_argument("v_methods must be a Vector");
+        if (!r_methods.get().is_obj_vector()) {
+            throw std::invalid_argument("r_methods must be a Vector");
         }
         // TODO: check for Method components?
-        if (!v_attributes.is_obj_vector()) {
-            throw std::invalid_argument("v_attributes must be a Vector");
+        if (!r_attributes.get().is_obj_vector()) {
+            throw std::invalid_argument("r_attributes must be a Vector");
         }
 
         MultiMethod* multimethod = gc.alloc<MultiMethod>();
-        multimethod->v_name = v_name;
-        multimethod->v_methods = v_methods;
-        multimethod->v_attributes = v_attributes;
+        multimethod->v_name = r_name.get();
+        multimethod->v_methods = r_methods.get();
+        multimethod->v_attributes = r_attributes.get();
         return multimethod;
     }
 
-    Type* make_type(GC& gc, Value v_name, Value v_bases, bool sealed, Value v_linearization,
-                    Value v_subtypes, Type::Kind kind, Value v_slots)
+    MultiMethod* make_multimethod(GC& gc, String* name, Vector* methods, Vector* attributes)
     {
-        if (!v_name.is_obj_string()) {
-            throw std::invalid_argument("v_name must be a String");
+        Root r_name(gc, Value::object(name));
+        Root r_methods(gc, Value::object(methods));
+        Root r_attributes(gc, Value::object(attributes));
+        return make_multimethod(gc, r_name, r_methods, r_attributes);
+    }
+
+    Type* make_type(GC& gc, Root& r_name, Root& r_bases, bool sealed, Root& r_linearization,
+                    Root& r_subtypes, Type::Kind kind, Root& r_slots)
+    {
+        if (!r_name.get().is_obj_string()) {
+            throw std::invalid_argument("r_name must be a String");
         }
-        if (!v_bases.is_obj_vector()) {
-            throw std::invalid_argument("v_bases must be a Vector");
+        if (!r_bases.get().is_obj_vector()) {
+            throw std::invalid_argument("r_bases must be a Vector");
         }
         // TODO: check Type components
         // Nothing to check for `sealed`.
-        if (!v_linearization.is_obj_vector()) {
-            throw std::invalid_argument("v_linearization must be a Vector");
+        if (!r_linearization.get().is_obj_vector()) {
+            throw std::invalid_argument("r_linearization must be a Vector");
         }
         // TODO: check linearization? (at least some basic sanity checks)
-        if (!v_subtypes.is_obj_vector()) {
-            throw std::invalid_argument("v_subtypes must be a Vector");
+        if (!r_subtypes.get().is_obj_vector()) {
+            throw std::invalid_argument("r_subtypes must be a Vector");
         }
         // TODO check Type components
         if (!(kind == Type::Kind::MIXIN || kind == Type::Kind::DATACLASS)) {
             throw std::invalid_argument("kind must be MIXIN or DATACLASS");
         }
-        if (kind == Type::Kind::MIXIN && !v_slots.is_null()) {
-            throw std::invalid_argument("v_slots must be null for MIXIN type");
+        if (kind == Type::Kind::MIXIN && !r_slots.get().is_null()) {
+            throw std::invalid_argument("r_slots must be null for MIXIN type");
         }
-        if (kind == Type::Kind::DATACLASS && !v_slots.is_obj_vector()) {
-            throw std::invalid_argument("v_slots must be a Vector for DATACLASS type");
+        if (kind == Type::Kind::DATACLASS && !r_slots.get().is_obj_vector()) {
+            throw std::invalid_argument("r_slots must be a Vector for DATACLASS type");
         }
 
         Type* type = gc.alloc<Type>();
-        type->v_name = v_name;
-        type->v_bases = v_bases;
+        type->v_name = r_name.get();
+        type->v_bases = r_bases.get();
         type->sealed = sealed;
-        type->v_linearization = v_linearization;
-        type->v_subtypes = v_subtypes;
+        type->v_linearization = r_linearization.get();
+        type->v_subtypes = r_subtypes.get();
         type->kind = kind;
-        type->v_slots = v_slots;
+        type->v_slots = r_slots.get();
         return type;
     }
 
-    DataclassInstance* make_instance(GC& gc, Value v_type, Value* slots)
+    Type* make_type(GC& gc, String* name, Vector* bases, bool sealed, Vector* linearization,
+                    Vector* subtypes, Type::Kind kind, Vector* slots)
     {
-        if (!v_type.is_obj_type()) {
-            throw std::invalid_argument("v_type must be a Type");
+        Root r_name(gc, Value::object(name));
+        Root r_bases(gc, Value::object(bases));
+        Root r_linearization(gc, Value::object(linearization));
+        Root r_subtypes(gc, Value::object(subtypes));
+        Value v_slots = slots ? Value::object(slots) : Value::null();
+        Root r_slots(gc, std::move(v_slots));
+        return make_type(gc, r_name, r_bases, sealed, r_linearization, r_subtypes, kind, r_slots);
+    }
+
+    DataclassInstance* make_instance_nofill(GC& gc, Root& r_type)
+    {
+        if (!r_type.get().is_obj_type()) {
+            throw std::invalid_argument("r_type must be a Type");
         }
 
-        Type* type = v_type.obj_type();
+        Type* type = r_type.get().obj_type();
         if (type->kind != Type::Kind::DATACLASS) {
-            throw std::invalid_argument("v_type must be a DATACLASS-kind type");
+            throw std::invalid_argument("r_type must be a DATACLASS-kind type");
         }
 
         uint64_t num_slots = type->v_slots.obj_vector()->length;
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
-        inst->v_type = v_type;
-        for (uint64_t i = 0; i < num_slots; i++) {
-            inst->slots()[i] = slots[i];
-        }
+        inst->v_type = r_type.get();
         return inst;
     }
 
-    void append(GC& gc, Vector* vector, Value v_value)
+    DataclassInstance* make_instance_nofill(GC& gc, Type* type)
     {
+        Root r_type(gc, Value::object(type));
+        return make_instance_nofill(gc, r_type);
+    }
+
+    Vector* append(GC& gc, Root& r_vector, Root& r_value)
+    {
+        if (!r_vector.get().is_obj_vector()) {
+            throw std::invalid_argument("r_vector must be a Vector");
+        }
+
+        Vector* vector = r_vector.get().obj_vector();
+
         uint64_t capacity = vector->capacity();
         if (vector->length == capacity) {
-            // Reallocate!
-            // Make sure we keep the original vector alive while copying components over.
-            Root r_vec(gc, Value::object(vector));
+            // Reallocate! The original vector and backing array is kept alive by the r_vector root
+            // while we copy components over.
             uint64_t new_capacity = capacity == 0 ? 1 : capacity * 2;
-            vector = make_vector(gc,
-                                 new_capacity,
-                                 vector->length,
-                                 vector->v_array.obj_array()->components());
+            Array* new_array = make_array_nofill(gc, new_capacity);
+            vector = r_vector.get().obj_vector();
+            // Copy components and null-fill the rest.
+            {
+                Array* array = vector->v_array.obj_array();
+                for (uint64_t i = 0; i < capacity; i++) {
+                    new_array->components()[i] = array->components()[i];
+                }
+                for (uint64_t i = capacity; i < new_capacity; i++) {
+                    new_array->components()[i] = Value::null();
+                }
+            }
+            // Pin the new_array while allocating the new vector.
+            Root r_new_array(gc, Value::object(new_array));
+            Vector* new_vector = make_vector(gc, vector->length, r_new_array);
+
+            vector = new_vector;
         }
-        vector->v_array.obj_array()->components()[vector->length++] = v_value;
+
+        vector->v_array.obj_array()->components()[vector->length++] = r_value.get();
+        return vector;
+    }
+
+    Vector* append(GC& gc, Vector* vector, Value v_value)
+    {
+        Root r_vector(gc, Value::object(vector));
+        Root r_value(gc, std::move(v_value));
+        return append(gc, r_vector, r_value);
     }
 
     // TODO: handle as part of Module cleanup.
