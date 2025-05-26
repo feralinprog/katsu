@@ -565,7 +565,7 @@ namespace Katsu
         Value v_module; // Module
         uint32_t num_regs;
         uint32_t num_data;
-        Value v_upreg_map; // Null for methods; Array (of fixnum) for closures
+        Value v_upreg_map; // Null for methods; Array (of fixnums) for closures
         // TODO: byte array inline?
         Value v_insts; // Array of fixnums
         // TODO: arg array inline?
@@ -626,7 +626,7 @@ namespace Katsu
 
         // Just for debugging / logging.
         Value v_name;    // String
-        Value v_methods; // Vector of Method
+        Value v_methods; // Vector of Methods
         // Arbitrary extra values attached by user.
         Value v_attributes; // Vector
 
@@ -671,7 +671,7 @@ namespace Katsu
 
         // The number of slots is determined by the referenced dataclass.
 
-        Value v_type; // type (must be dataclass)
+        Value v_type; // Type (must be Kind::DATACLASS)
         Value* slots()
         {
             return &v_type + 1;
