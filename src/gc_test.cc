@@ -1,5 +1,6 @@
-#include "gc.h"
 #include <catch2/catch_test_macros.hpp>
+
+#include "gc.h"
 
 #include "value_utils.h"
 #include <sstream>

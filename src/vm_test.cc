@@ -1,7 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "value_utils.h"
 #include "vm.h"
+
+#include "value_utils.h"
 #include <cstring>
 
 using namespace Katsu;
