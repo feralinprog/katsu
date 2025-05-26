@@ -275,23 +275,24 @@ namespace Katsu
         vector->v_array.obj_array()->components()[vector->length++] = v_value;
     }
 
-    void append(GC& gc, Module* module, String* name, Value v_value)
-    {
-        if (module->length == module->capacity) {
-            // Reallocate!
-            // TODO: grow more slowly? modules probably don't need 2x growth, maaaaybe 1.5
-            uint64_t new_capacity = module->capacity == 0 ? 1 : module->capacity * 2;
-            Module* new_module = make_module(gc, module->v_base, new_capacity);
-            for (uint64_t i = 0; i < module->length; i++) {
-                new_module->entries()[i] = module->entries()[i];
-            }
-            // TODO: need to do similar thing to vectors, which have distinct backing array
-            module = new_module;
-        }
-        Module::Entry& entry = module->entries()[module->length++];
-        entry.v_key = Value::object(name);
-        entry.v_value = v_value;
-    }
+    // TODO: handle as part of Module cleanup.
+    // void append(GC& gc, Module* module, String* name, Root& r_value)
+    // {
+    //     if (module->length == module->capacity) {
+    //         // Reallocate!
+    //         // TODO: grow more slowly? modules probably don't need 2x growth, maaaaybe 1.5
+    //         uint64_t new_capacity = module->capacity == 0 ? 1 : module->capacity * 2;
+    //         Module* new_module = make_module(gc, module->v_base, new_capacity);
+    //         for (uint64_t i = 0; i < module->length; i++) {
+    //             new_module->entries()[i] = module->entries()[i];
+    //         }
+    //         // TODO: need to do similar thing to vectors, which have distinct backing array
+    //         module = new_module;
+    //     }
+    //     Module::Entry& entry = module->entries()[module->length++];
+    //     entry.v_key = Value::object(name);
+    //     entry.v_value = v_value;
+    // }
 
     Value* module_lookup(Module* module, String* name)
     {

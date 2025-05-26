@@ -48,8 +48,9 @@ namespace Katsu
 
     // Append a value to a vector, reallocating if necessary to expand the vector.
     void append(GC& gc, Vector* vector, Value v_value);
-    // Append a key/value pair to a module, reallocating if necessary to expand the module.
-    void append(GC& gc, Module* module, String* name, Value v_value);
+    // TODO: handle as part of Module cleanup.
+    // // Append a key/value pair to a module, reallocating if necessary to expand the module.
+    // void append(GC& gc, Module* module, String* name, Value v_value);
 
     // Looks up a module entry by name, following the module's v_base until reaching null.
     // Returns a pointer into the relevant Module::Entry value, or nullptr if not found.
