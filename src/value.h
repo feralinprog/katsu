@@ -221,6 +221,11 @@ namespace Katsu
         {}
 
     public:
+        // Default constructor: produce a null value.
+        Value()
+            : Value(Tag::_NULL, 0)
+        {}
+
         // Calculate the tag from the tagged representation.
         Tag tag() const
         {

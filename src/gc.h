@@ -128,6 +128,7 @@ namespace Katsu
         // Next allocation location.
         uint64_t spot;
 
+        friend void TESTONLY_collect(GC& gc);
         friend uint8_t* TESTONLY_get_mem(GC& gc);
     };
 
