@@ -694,18 +694,13 @@ namespace Katsu
         }
 
         // Size in bytes.
-        static inline uint64_t size(int64_t num_slots)
+        static inline uint64_t size(uint64_t num_slots)
         {
             return sizeof(DataclassInstance) + num_slots * sizeof(Value);
         }
-        static inline uint64_t size(Type* _class)
-        {
-            return DataclassInstance::size(_class->v_slots.obj_vector()->length);
-        }
-        inline uint64_t size() const
-        {
-            return DataclassInstance::size(this->_class());
-        }
+        // Non-static size() function is effectively implemented in the GC, since there is extra
+        // complexity to determine size while some objects are forwarding pointers (as opposed to
+        // actual object contents).
     };
 
     // Specializations for static_value():

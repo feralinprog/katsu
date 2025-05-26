@@ -39,6 +39,28 @@ namespace Katsu
         }
     }
 
+    // Get the number of slots of a dataclass-kind type. May have to follow forwarding pointers!
+    uint64_t get_num_slots(Value v_type)
+    {
+        Type* _class;
+        {
+            Object* o_type = v_type.value<Object*>();
+            if (o_type->is_forwarding()) {
+                o_type = reinterpret_cast<Object*>(o_type->forwarding());
+            }
+            _class = o_type->object<Type*>();
+        }
+        Vector* slots;
+        {
+            Object* o_slots = _class->v_slots.value<Object*>();
+            if (o_slots->is_forwarding()) {
+                o_slots = reinterpret_cast<Object*>(o_slots->forwarding());
+            }
+            slots = o_slots->object<Vector*>();
+        }
+        return slots->length;
+    }
+
     void GC::collect()
     {
         uint8_t* to = this->mem_opp;
@@ -122,7 +144,10 @@ namespace Katsu
                     }
                     case ObjectTag::INSTANCE: {
                         auto v = obj->object<DataclassInstance*>();
-                        obj_size = v->size();
+                        // WARNING: special case here. To determine instance size, we look up the
+                        // number of slots in the instance's v_type. However, the v_type (and its
+                        // constituent fields) may be forwarding pointers now.
+                        obj_size = DataclassInstance::size(get_num_slots(v->v_type));
                         break;
                     }
                     default: [[unlikely]] throw std::logic_error("missed an object tag?");
@@ -280,14 +305,15 @@ namespace Katsu
                 }
                 case ObjectTag::INSTANCE: {
                     auto v = obj->object<DataclassInstance*>();
-                    // TODO: deduplicate slot-count lookup.
-                    auto type = v->v_type.obj_type();
-                    auto type_slots = type->v_slots.obj_vector();
-                    uint64_t num_slots = type_slots->length;
+                    // WARNING: special case. Use a helper function to determine number of slots, as
+                    // this may have to follow forwarding pointers to get there.
+                    uint64_t num_slots = get_num_slots(v->v_type);
+                    move_value(&v->v_type);
                     for (uint64_t i = 0; i < num_slots; i++) {
                         move_value(&v->slots()[i]);
                     }
-                    obj_size = v->size();
+                    // WARNING: special case (as just above).
+                    obj_size = DataclassInstance::size(num_slots);
                     break;
                 }
                 default: throw std::logic_error("missed an object tag?");
