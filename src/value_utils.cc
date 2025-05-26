@@ -7,7 +7,7 @@ namespace Katsu
     Ref* make_ref(GC& gc, Root& r_ref)
     {
         Ref* ref = gc.alloc<Ref>();
-        ref->v_ref = r_ref.get();
+        ref->v_ref = *r_ref;
         return ref;
     }
 
@@ -57,17 +57,17 @@ namespace Katsu
 
     Vector* make_vector(GC& gc, uint64_t length, Root& r_array)
     {
-        if (!r_array.get().is_obj_array()) {
+        if (!r_array->is_obj_array()) {
             throw std::invalid_argument("r_array must be an Array");
         }
 
         Vector* vec = gc.alloc<Vector>();
-        Array* array = r_array.get().obj_array();
+        Array* array = r_array->obj_array();
         if (length > array->length) {
             throw std::invalid_argument("length must be at most r_array length");
         }
         vec->length = length;
-        vec->v_array = r_array.get();
+        vec->v_array = *r_array;
         return vec;
     }
 
@@ -79,12 +79,12 @@ namespace Katsu
 
     Module* make_module(GC& gc, Root& r_base, uint64_t capacity)
     {
-        if (!(r_base.get().is_obj_module() || r_base.get().is_null())) {
+        if (!(r_base->is_obj_module() || r_base->is_null())) {
             throw std::invalid_argument("r_base must be a Module or null");
         }
 
         Module* module = gc.alloc<Module>(capacity);
-        module->v_base = r_base.get();
+        module->v_base = *r_base;
         module->capacity = capacity;
         module->length = 0;
         // No need to initialize entries; GC doesn't look at entries beyond the (zero) length.
@@ -110,27 +110,27 @@ namespace Katsu
     Code* make_code(GC& gc, Root& r_module, uint32_t num_regs, uint32_t num_data, Root& r_upreg_map,
                     Root& r_insts, Root& r_args)
     {
-        if (!r_module.get().is_obj_module()) {
+        if (!r_module->is_obj_module()) {
             throw std::invalid_argument("r_module must be a Module");
         }
-        if (!(r_upreg_map.get().is_obj_array() || r_upreg_map.get().is_null())) {
+        if (!(r_upreg_map->is_obj_array() || r_upreg_map->is_null())) {
             throw std::invalid_argument("r_upreg_map must be an Array or null");
         }
-        if (!r_insts.get().is_obj_array()) {
+        if (!r_insts->is_obj_array()) {
             throw std::invalid_argument("r_insts must be an Array");
         }
         // TODO: check for fixnums of the right range?
-        if (!r_args.get().is_obj_array()) {
+        if (!r_args->is_obj_array()) {
             throw std::invalid_argument("r_args must be an Array");
         }
 
         Code* code = gc.alloc<Code>();
-        code->v_module = r_module.get();
+        code->v_module = *r_module;
         code->num_regs = num_regs;
         code->num_data = num_data;
-        code->v_upreg_map = r_upreg_map.get();
-        code->v_insts = r_insts.get();
-        code->v_args = r_args.get();
+        code->v_upreg_map = *r_upreg_map;
+        code->v_insts = *r_insts;
+        code->v_args = *r_args;
         return code;
     }
 
@@ -147,16 +147,16 @@ namespace Katsu
 
     Closure* make_closure(GC& gc, Root& r_code, Root& r_upregs)
     {
-        if (!r_code.get().is_obj_code()) {
+        if (!r_code->is_obj_code()) {
             throw std::invalid_argument("r_code must be a Code");
         }
-        if (!r_upregs.get().is_obj_array()) {
+        if (!r_upregs->is_obj_array()) {
             throw std::invalid_argument("r_upregs must be an Array");
         }
 
         Closure* closure = gc.alloc<Closure>();
-        closure->v_code = r_code.get();
-        closure->v_upregs = r_upregs.get();
+        closure->v_code = *r_code;
+        closure->v_upregs = *r_upregs;
         return closure;
     }
 
@@ -170,21 +170,21 @@ namespace Katsu
     Method* make_method(GC& gc, Root& r_param_matchers, Root& r_return_type, Root& r_code,
                         Root& r_attributes, NativeHandler native_handler)
     {
-        // if (!r_param_matchers.get().is_obj_vector()) {
+        // if (!r_param_matchers->is_obj_vector()) {
         //     throw std::invalid_argument("r_param_matchers must be a Vector");
         // }
-        if (!(r_return_type.get().is_obj_type() || r_return_type.get().is_null())) {
+        if (!(r_return_type->is_obj_type() || r_return_type->is_null())) {
             throw std::invalid_argument("r_return_type must be a Type or null");
         }
-        if (!(r_code.get().is_obj_code() || r_code.get().is_null())) {
+        if (!(r_code->is_obj_code() || r_code->is_null())) {
             throw std::invalid_argument("r_code must be a Code or null");
         }
-        if (!r_attributes.get().is_obj_vector()) {
+        if (!r_attributes->is_obj_vector()) {
             throw std::invalid_argument("r_attributes must be a Vector");
         }
         // No way to check native_handler.
         {
-            bool has_code = r_code.get().is_obj_code();
+            bool has_code = r_code->is_obj_code();
             bool has_native_handler = native_handler != nullptr;
             int options_selected = (has_code ? 1 : 0) + (has_native_handler ? 1 : 0);
             if (options_selected != 1) {
@@ -194,10 +194,10 @@ namespace Katsu
         }
 
         Method* method = gc.alloc<Method>();
-        method->v_param_matchers = r_param_matchers.get();
-        method->v_return_type = r_return_type.get();
-        method->v_code = r_code.get();
-        method->v_attributes = r_attributes.get();
+        method->v_param_matchers = *r_param_matchers;
+        method->v_return_type = *r_return_type;
+        method->v_code = *r_code;
+        method->v_attributes = *r_attributes;
         method->native_handler = native_handler;
         return method;
     }
@@ -221,21 +221,21 @@ namespace Katsu
 
     MultiMethod* make_multimethod(GC& gc, Root& r_name, Root& r_methods, Root& r_attributes)
     {
-        if (!r_name.get().is_obj_string()) {
+        if (!r_name->is_obj_string()) {
             throw std::invalid_argument("r_name must be a String");
         }
-        if (!r_methods.get().is_obj_vector()) {
+        if (!r_methods->is_obj_vector()) {
             throw std::invalid_argument("r_methods must be a Vector");
         }
         // TODO: check for Method components?
-        if (!r_attributes.get().is_obj_vector()) {
+        if (!r_attributes->is_obj_vector()) {
             throw std::invalid_argument("r_attributes must be a Vector");
         }
 
         MultiMethod* multimethod = gc.alloc<MultiMethod>();
-        multimethod->v_name = r_name.get();
-        multimethod->v_methods = r_methods.get();
-        multimethod->v_attributes = r_attributes.get();
+        multimethod->v_name = *r_name;
+        multimethod->v_methods = *r_methods;
+        multimethod->v_attributes = *r_attributes;
         return multimethod;
     }
 
@@ -250,40 +250,40 @@ namespace Katsu
     Type* make_type(GC& gc, Root& r_name, Root& r_bases, bool sealed, Root& r_linearization,
                     Root& r_subtypes, Type::Kind kind, Root& r_slots)
     {
-        if (!r_name.get().is_obj_string()) {
+        if (!r_name->is_obj_string()) {
             throw std::invalid_argument("r_name must be a String");
         }
-        if (!r_bases.get().is_obj_vector()) {
+        if (!r_bases->is_obj_vector()) {
             throw std::invalid_argument("r_bases must be a Vector");
         }
         // TODO: check Type components
         // Nothing to check for `sealed`.
-        if (!r_linearization.get().is_obj_vector()) {
+        if (!r_linearization->is_obj_vector()) {
             throw std::invalid_argument("r_linearization must be a Vector");
         }
         // TODO: check linearization? (at least some basic sanity checks)
-        if (!r_subtypes.get().is_obj_vector()) {
+        if (!r_subtypes->is_obj_vector()) {
             throw std::invalid_argument("r_subtypes must be a Vector");
         }
         // TODO check Type components
         if (!(kind == Type::Kind::MIXIN || kind == Type::Kind::DATACLASS)) {
             throw std::invalid_argument("kind must be MIXIN or DATACLASS");
         }
-        if (kind == Type::Kind::MIXIN && !r_slots.get().is_null()) {
+        if (kind == Type::Kind::MIXIN && !r_slots->is_null()) {
             throw std::invalid_argument("r_slots must be null for MIXIN type");
         }
-        if (kind == Type::Kind::DATACLASS && !r_slots.get().is_obj_vector()) {
+        if (kind == Type::Kind::DATACLASS && !r_slots->is_obj_vector()) {
             throw std::invalid_argument("r_slots must be a Vector for DATACLASS type");
         }
 
         Type* type = gc.alloc<Type>();
-        type->v_name = r_name.get();
-        type->v_bases = r_bases.get();
+        type->v_name = *r_name;
+        type->v_bases = *r_bases;
         type->sealed = sealed;
-        type->v_linearization = r_linearization.get();
-        type->v_subtypes = r_subtypes.get();
+        type->v_linearization = *r_linearization;
+        type->v_subtypes = *r_subtypes;
         type->kind = kind;
-        type->v_slots = r_slots.get();
+        type->v_slots = *r_slots;
         return type;
     }
 
@@ -301,18 +301,18 @@ namespace Katsu
 
     DataclassInstance* make_instance_nofill(GC& gc, Root& r_type)
     {
-        if (!r_type.get().is_obj_type()) {
+        if (!r_type->is_obj_type()) {
             throw std::invalid_argument("r_type must be a Type");
         }
 
-        Type* type = r_type.get().obj_type();
+        Type* type = r_type->obj_type();
         if (type->kind != Type::Kind::DATACLASS) {
             throw std::invalid_argument("r_type must be a DATACLASS-kind type");
         }
 
         uint64_t num_slots = type->v_slots.obj_vector()->length;
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
-        inst->v_type = r_type.get();
+        inst->v_type = *r_type;
         return inst;
     }
 
@@ -324,11 +324,11 @@ namespace Katsu
 
     Vector* append(GC& gc, Root& r_vector, Root& r_value)
     {
-        if (!r_vector.get().is_obj_vector()) {
+        if (!r_vector->is_obj_vector()) {
             throw std::invalid_argument("r_vector must be a Vector");
         }
 
-        Vector* vector = r_vector.get().obj_vector();
+        Vector* vector = r_vector->obj_vector();
 
         uint64_t capacity = vector->capacity();
         if (vector->length == capacity) {
@@ -336,7 +336,7 @@ namespace Katsu
             // while we copy components over.
             uint64_t new_capacity = capacity == 0 ? 1 : capacity * 2;
             Array* new_array = make_array_nofill(gc, new_capacity);
-            vector = r_vector.get().obj_vector();
+            vector = r_vector->obj_vector();
             // Copy components and null-fill the rest.
             {
                 Array* array = vector->v_array.obj_array();
@@ -354,7 +354,7 @@ namespace Katsu
             vector = new_vector;
         }
 
-        vector->v_array.obj_array()->components()[vector->length++] = r_value.get();
+        vector->v_array.obj_array()->components()[vector->length++] = *r_value;
         return vector;
     }
 

@@ -172,14 +172,14 @@ namespace Katsu
             }
         }
 
-        operator Value()
+        inline Value& operator*()
         {
             return this->root;
         }
 
-        Value& get()
+        inline Value* operator->()
         {
-            return this->root;
+            return &this->root;
         }
 
     private:

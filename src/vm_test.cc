@@ -90,7 +90,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     methods->length = 1;
     {
         Array* array = methods->v_array.obj_array();
-        array->components()[0] = r_method.get();
+        array->components()[0] = *r_method;
     }
     Root r_methods(gc, Value::object(methods));
 
@@ -106,8 +106,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Module* module = make_module(gc, /* base */ nullptr, /* capacity */ 1);
     Root r_module(gc, Value::object(module));
     module->length = 1;
-    module->entries()[0].v_key = r_method_name.get();
-    module->entries()[0].v_value = r_multimethod.get();
+    module->entries()[0].v_key = *r_method_name;
+    module->entries()[0].v_value = *r_multimethod;
 
     Root r_upreg_map(gc, Value::null());
 
@@ -123,7 +123,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     // LOAD_VALUE: 10
     args->components()[1] = Value::fixnum(10);
     // INVOKE: +: with two args
-    args->components()[2] = r_method_name.get();
+    args->components()[2] = *r_method_name;
     args->components()[3] = Value::fixnum(2);
     Root r_args(gc, Value::object(args));
 

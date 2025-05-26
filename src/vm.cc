@@ -47,8 +47,8 @@ namespace Katsu
         }
 
         Root r_code(this->gc, std::move(v_code));
-        uint32_t code_num_regs = r_code.get().obj_code()->num_regs;
-        uint32_t code_num_data = r_code.get().obj_code()->num_data;
+        uint32_t code_num_regs = r_code->obj_code()->num_regs;
+        uint32_t code_num_data = r_code->obj_code()->num_data;
 
         // auto next_frame_mem =
         // reinterpret_cast<uint8_t*>(align_up(reinterpret_cast<uint64_t>(this->current_frame),
@@ -63,7 +63,7 @@ namespace Katsu
         std::memset(next_frame_mem, 0x1234ABCD, next_frame_size);
 
         auto frame = reinterpret_cast<Frame*>(next_frame_mem);
-        frame->v_code = r_code.get();
+        frame->v_code = *r_code;
         frame->inst_spot = 0;
         frame->arg_spot = 0;
         frame->num_regs = code_num_regs;
@@ -71,7 +71,7 @@ namespace Katsu
         frame->data_depth = 0;
         frame->v_cleanup = Value::null();
         frame->is_cleanup = false;
-        frame->v_module = r_code.get().obj_code()->v_module;
+        frame->v_module = r_code->obj_code()->v_module;
         this->current_frame = frame;
 
         while (true) {
@@ -233,7 +233,7 @@ namespace Katsu
                 // Don't need to add the closure as a root; we're done with allocation.
                 // Also pull out _upregs again for convenience; it could have moved during closure
                 // allocation.
-                upregs = r_upregs.get().obj_array();
+                upregs = r_upregs->obj_array();
 
                 // Copy from the current stack frame registers into the closure's upregs.
                 Array* upreg_map = arg().obj_code()->v_upreg_map.obj_array();
