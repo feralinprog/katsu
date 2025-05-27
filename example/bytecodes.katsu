@@ -1,0 +1,65 @@
+method: [adder: n0] does: [
+    mut: n = n0
+    let: delta = n0
+    \x [
+        let: new-n = n + delta + x
+        set-n: new-n
+        n
+    ]
+]
+
+let: a = (adder: 3)
+print: (a call: 1)
+print: (a call: 2)
+
+adder:
+======
+regs:
+- 0: n0
+- 1: ref: n
+- 2: delta
+module:
+- a: (whatever value)
+bytecode:
+  load_reg 0
+  store_ref 1
+  load_reg 0
+  store_reg 2
+  load_reg 1 # note _reg_ and not _ref_, since this is setting up the closure!
+  load_reg 2
+  make_closure <bytecode for [set-n ...]> up-reg-count:2
+
+[set-n ...]
+===========
+regs: -- arguments, then [closed-over regs and any locals] (in possibly any order)
+- 0: x
+- 1: ref: n
+- 2: delta
+- 3: new-n
+module:
+- a: (whatever value)
+from the closure object itself:
+- upregs: {values of ref:n and delta from adder:}   <-- runtime values
+- upreg-mapping: upreg 0 -> reg 1; upreg 1 -> reg 2 <-- known at compile time
+- upreg-count: 2                                    <-- known at compile time
+bytecode:
+  <implicit>:
+    load upreg 0 (ref:n), store to 1 (per upreg-mapping)
+    load upreg 1 (delta), store to 2 (per upreg-mapping)
+  load_ref 1
+  load_reg 2
+  invoke +:
+  load_reg 0
+  invoke +:
+  store_reg 3
+  load_reg 3
+  store_ref 1
+  load_ref 1
+
+let: a = (adder: 3)
+===================
+bytecode:
+  load_value <fixnum 3>
+  invoke adder:
+  store_module <string "a">
+  load_module <string "a">

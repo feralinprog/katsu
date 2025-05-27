@@ -1,0 +1,13 @@
+method: [adder: n0] does: [
+    mut: n = n0
+    let: delta = n0
+    \x [
+        let: new-n = n + delta + x
+        set-n: new-n
+        n
+    ]
+]
+
+let: a = (adder: 3)
+print: (a call: 1)
+print: (a call: 2)
