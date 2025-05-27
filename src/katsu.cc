@@ -1,13 +1,17 @@
 #include "katsu.h"
+
+#include "compile.h"
+#include "gc.h"
 #include "lexer.h"
+#include "parser.h"
+#include "value.h"
+#include "vm.h"
 
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
 #include <variant>
-
-#include "parser.h"
 
 namespace Katsu
 {
@@ -139,6 +143,11 @@ namespace Katsu
         Lexer lexer(source);
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
+        // 100 MiB GC-managed memory.
+        GC gc(100 * 1024 * 1024);
+        // 5 MiB call stack size.
+        VM vm(gc, 5 * 1024 * 1024);
+        OptionalRoot<Module> r_module(gc, nullptr);
 
         // Skip any leading semicolons / newlines to get to the meat.
         while (stream.current_has_type(TokenType::SEMICOLON) ||
@@ -150,9 +159,16 @@ namespace Katsu
             std::unique_ptr<Expr> top_level_expr =
                 parser->parse(stream, 0 /* precedence */, true /* is_toplevel */);
 
-            ExprPrinter printer(0);
-            top_level_expr->accept(printer);
-            // TODO: evaluate it
+            // ExprPrinter printer(0);
+            // top_level_expr->accept(printer);
+
+            std::vector<std::unique_ptr<Expr>> top_level_exprs;
+            top_level_exprs.emplace_back(std::move(top_level_expr));
+            Code* code = compile_module(gc, *r_module, top_level_exprs);
+            Value result = vm.eval_toplevel(code);
+            std::cout << "EVALUATION RESULT: tag=" << tag_str(result.tag())
+                      << ", raw=" << result.raw_value() << "(0x" << std::hex << result.raw_value()
+                      << std::dec << ")\n";
 
             // Ratchet past any semicolons and newlines, since the parser explicitly stops
             // when it sees either of these at the top level.

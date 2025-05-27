@@ -6,6 +6,9 @@
 #include <map>
 #include <vector>
 
+#include <iostream>
+#include <sstream>
+
 namespace Katsu
 {
     struct Scope
@@ -21,53 +24,71 @@ namespace Katsu
         std::unique_ptr<Scope> base;
     };
 
-    class Compiler : public ExprVisitor
+    Scope::Binding* scope_lookup(Scope& scope, const std::string& name)
     {
-    public:
-        Compiler(GC& _gc, Module* base)
-            : gc(_gc)
-            , r_base(gc, Value::object(base))
-            , r_module(gc, Value::object(make_module(gc, /* r_base */ r_base, /* capacity */ 0)))
-            , scope{.bindings = {}, .base = nullptr}
-        {}
+        Scope* cur = &scope;
+        while (cur) {
+            auto it = cur->bindings.find(name);
+            if (it != cur->bindings.end()) {
+                return &it->second;
+            }
+            cur = cur->base.get();
+        }
+        return nullptr;
+    }
+    Scope::Binding* scope_lookup(Scope& scope, String* name)
+    {
+        // TODO: check name->length against size_t?
+        Scope* cur = &scope;
+        while (cur) {
+            for (auto& [binding_name, binding] : cur->bindings) {
+                if (!string_eq(name, binding_name)) {
+                    continue;
+                }
+                return &binding;
+            }
+            cur = cur->base.get();
+        }
+        return nullptr;
+    }
 
-        ~Compiler() = default;
+    void compile_expr(GC& gc, Root<Code>& r_code, Expr& _expr)
+    {
+        Scope scope = {.bindings = {}, .base = nullptr};
 
-        void visit(UnaryOpExpr& expr) override
-        {
-            Root r_name(gc,
-                        Value::object(make_string(this->gc, std::get<std::string>(expr.op.value))));
-            if (!module_lookup(r_name->obj_string())) {
+        auto module = [&r_code]() -> Module* { return r_code->v_module.obj_module(); };
+
+        auto emit_op = [](OpCode op) -> void {};
+        auto emit_arg = [](Value v_arg) -> void {};
+
+        if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
+            const std::string& op_name = std::get<std::string>(expr->op.value);
+            Root<String> r_name(gc, make_string(gc, op_name));
+            if (!module_lookup(module(), *r_name)) {
                 // TODO: raise a compilation error and expose to katsu, ideally.
                 // should show the source of the issue, i.e. expr.op.span
                 throw std::invalid_argument("unknown module name, cannot invoke unaryop");
             }
-            expr.arg->accept(*this);
+            compile_expr(gc, r_code, *expr->arg);
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
-            emit_arg(*r_name);
+            emit_arg(r_name.value());
             emit_arg(Value::fixnum(1));
-        }
-
-        void visit(BinaryOpExpr& expr) override
-        {
-            Root r_name(gc,
-                        Value::object(make_string(this->gc, std::get<std::string>(expr.op.value))));
-            if (!module_lookup(r_name->obj_string())) {
+        } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
+            const std::string& op_name = std::get<std::string>(expr->op.value);
+            Root<String> r_name(gc, make_string(gc, op_name));
+            if (!module_lookup(module(), *r_name)) {
                 // TODO: raise a compilation error and expose to katsu, ideally.
                 // should show the source of the issue, i.e. expr.op.span
                 throw std::invalid_argument("unknown module name, cannot invoke binaryop");
             }
-            expr.left->accept(*this);
-            expr.right->accept(*this);
+            compile_expr(gc, r_code, *expr->left);
+            compile_expr(gc, r_code, *expr->right);
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
-            emit_arg(*r_name);
+            emit_arg(r_name.value());
             emit_arg(Value::fixnum(2));
-        }
-
-        void visit(NameExpr& expr) override
-        {
+        } else if (NameExpr* expr = dynamic_cast<NameExpr*>(&_expr)) {
             // TODO: somehow distinguish between a plain `x` being
             // * `<default-receiver> x`, i.e. invoking `x` on the default receiver; or
             // * `x`, i.e. load the local or module value `x`
@@ -75,10 +96,9 @@ namespace Katsu
             // but then compilation would vary depending on whether module value is multimethod or
             // something else. Currently this always assumes it's a local/module load, not a unary
             // message.
-            Root r_name(
-                gc,
-                Value::object(make_string(this->gc, std::get<std::string>(expr.name.value))));
-            const Scope::Binding* maybe_local = this->scope_lookup(r_name->obj_string());
+            const std::string& name = std::get<std::string>(expr->name.value);
+            Root<String> r_name(gc, make_string(gc, name));
+            const Scope::Binding* maybe_local = scope_lookup(scope, *r_name);
             if (maybe_local) {
                 const Scope::Binding& local = *maybe_local;
                 if (local._mutable) {
@@ -90,31 +110,28 @@ namespace Katsu
                     emit_op(OpCode::LOAD_REG);
                     emit_arg(Value::fixnum(local.spot));
                 }
-            } else if (module_lookup(r_name->obj_string())) {
+            } else if (module_lookup(module(), *r_name)) {
                 // LOAD_MODULE: <name>
                 emit_op(OpCode::LOAD_MODULE);
-                emit_arg(*r_name);
+                emit_arg(r_name.value());
             } else {
                 // TODO: raise a compilation error and expose to katsu, ideally.
                 // should show the source of the issue, i.e. expr.name.span
                 throw std::invalid_argument("unknown local or module name, cannot load name");
             }
-        }
-
-        void visit(LiteralExpr& expr) override
-        {
-            switch (expr.literal.type) {
+        } else if (LiteralExpr* expr = dynamic_cast<LiteralExpr*>(&_expr)) {
+            switch (expr->literal.type) {
                 case TokenType::INTEGER: {
                     // LOAD_VALUE: <value>
-                    this->emit_op(OpCode::LOAD_VALUE);
-                    this->emit_arg(Value::fixnum(std::get<long long>(expr.literal.value)));
+                    emit_op(OpCode::LOAD_VALUE);
+                    emit_arg(Value::fixnum(std::get<long long>(expr->literal.value)));
                     break;
                 }
                 case TokenType::STRING: {
                     // LOAD_VALUE: <value>
-                    this->emit_op(OpCode::LOAD_VALUE);
-                    this->emit_arg(
-                        Value::object(make_string(gc, std::get<std::string>(expr.literal.value))));
+                    emit_op(OpCode::LOAD_VALUE);
+                    emit_arg(
+                        Value::object(make_string(gc, std::get<std::string>(expr->literal.value))));
                     break;
                 }
                 case TokenType::SYMBOL: {
@@ -123,38 +140,31 @@ namespace Katsu
                 }
                 default: throw std::logic_error("unexpected token type in visit(LiteralExpr)");
             }
-        }
-
-        void visit(UnaryMessageExpr& expr) override
-        {
-            Root r_name(
-                gc,
-                Value::object(make_string(this->gc, std::get<std::string>(expr.message.value))));
-            if (!this->module_lookup(r_name->obj_string())) {
+        } else if (UnaryMessageExpr* expr = dynamic_cast<UnaryMessageExpr*>(&_expr)) {
+            const std::string& name = std::get<std::string>(expr->message.value);
+            Root<String> r_name(gc, make_string(gc, name));
+            if (!module_lookup(module(), *r_name)) {
                 // TODO: raise a compilation error and expose to katsu, ideally.
                 // should show the source of the issue, i.e. expr.message.span
                 throw std::invalid_argument("unknown module name, cannot invoke unary-message");
             }
-            expr.target->accept(*this);
+            compile_expr(gc, r_code, *expr->target);
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
-            emit_arg(*r_name);
+            emit_arg(r_name.value());
             emit_arg(Value::fixnum(1));
-        }
-
-        void visit(NAryMessageExpr& expr) override
-        {
+        } else if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(&_expr)) {
             String* combined_name;
             {
                 size_t total_len = 0;
-                for (const Token& token_part : expr.messages) {
+                for (const Token& token_part : expr->messages) {
                     const std::string& part = std::get<std::string>(token_part.value);
                     total_len += part.size() + 1 /* for `:` */;
                 }
                 combined_name = gc.alloc<String>(total_len);
                 combined_name->length = total_len;
                 size_t offset = 0;
-                for (const Token& token_part : expr.messages) {
+                for (const Token& token_part : expr->messages) {
                     const std::string& part = std::get<std::string>(token_part.value);
                     const size_t len = part.size();
                     memcpy(combined_name->contents() + offset, part.c_str(), len);
@@ -162,28 +172,28 @@ namespace Katsu
                     combined_name->contents()[offset++] = ':';
                 }
             }
-            // Establish a root in case the recursive `accept` calls perform any more
+            // Establish a root in case the recursive `compile_expr` calls perform any more
             // allocations.
-            Root r_name(gc, Value::object(combined_name));
+            Root<String> r_name(gc, std::move(combined_name));
 
             // Ensure the message is:
             // * `<name>:` where <name> is a local mutable variable (in which case expr.target
             //   must be nullopt),
             // * or else in the module under construction.
-            if (expr.messages.size() == 1) {
+            if (expr->messages.size() == 1) {
                 // Check for local mutable variables.
-                const std::string& name = std::get<std::string>(expr.messages[0].value);
-                const Scope::Binding* maybe_local = this->scope_lookup(name);
+                const std::string& name = std::get<std::string>(expr->messages[0].value);
+                const Scope::Binding* maybe_local = scope_lookup(scope, name);
                 if (maybe_local) {
                     const Scope::Binding& local = *maybe_local;
                     if (local._mutable) {
                         // Ensure there's no target provided.
-                        if (expr.target) {
+                        if (expr->target) {
                             // TODO: raise compilation error to katsu instead.
                             throw std::invalid_argument(
                                 "setting mutable variable requires no target");
                         }
-                        expr.args[0]->accept(*this);
+                        compile_expr(gc, r_code, *expr->args[0]);
                         // STORE_REF: <local index>
                         emit_op(OpCode::STORE_REF);
                         emit_arg(Value::fixnum(local.spot));
@@ -194,40 +204,34 @@ namespace Katsu
                     // make it mutable?".
                 }
             }
-            if (!this->module_lookup(r_name->obj_string())) {
+            if (!module_lookup(module(), *r_name)) {
                 // TODO: raise a compilation error and expose to katsu, ideally.
                 // should show the source of the issue, i.e. expr.op.span
                 throw std::invalid_argument("unknown module name (or mutable local variable "
                                             "name), cannot invoke n-ary-message");
             }
 
-            if (expr.target) {
-                (*expr.target)->accept(*this);
+            if (expr->target) {
+                compile_expr(gc, r_code, *expr->target.value());
             } else {
                 // Load the default receiver, which is always register 0.
                 // LOAD_REG: <local index>
                 emit_op(OpCode::LOAD_REG);
                 emit_arg(Value::fixnum(0));
             }
-            for (const std::unique_ptr<Expr>& arg : expr.args) {
-                arg->accept(*this);
+            for (const std::unique_ptr<Expr>& arg : expr->args) {
+                compile_expr(gc, r_code, *arg);
             }
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
-            emit_arg(*r_name);
-            emit_arg(Value::fixnum(expr.args.size()));
-        }
-
-        void visit(ParenExpr& expr) override
-        {
-            expr.inner->accept(*this);
-        }
-
-        void visit(BlockExpr& expr) override
-        {
+            emit_arg(r_name.value());
+            emit_arg(Value::fixnum(expr->args.size()));
+        } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
+            compile_expr(gc, r_code, *expr->inner);
+        } else if (BlockExpr* expr = dynamic_cast<BlockExpr*>(&_expr)) {
             // TODO: use make_code() instead.
-            Code* code = this->gc.alloc<Code>();
-            code->v_module = *this->r_module;
+            Code* block_code = gc.alloc<Code>();
+            block_code->v_module = r_code->v_module;
             // TODO: set up the rest
             // Value v_module;    // Module
             // Value v_num_regs;  // fixnum
@@ -237,26 +241,20 @@ namespace Katsu
             // Value v_insts; // Vector of fixnums
             // // TODO: arg array inline?
             // Value v_args; // Vector (of arbitrary values)
-            Root r_code(this->gc, Value::object(code));
-            if (expr.parameters.empty()) {
+            Root<Code> r_block_code(gc, std::move(block_code));
+            if (expr->parameters.empty()) {
                 // It still has an implicit parameter: `it`.
             }
             throw std::logic_error("not implemented yet");
-        }
-
-        void visit(DataExpr& expr) override
-        {
-            for (const std::unique_ptr<Expr>& component : expr.components) {
-                component->accept(*this);
+        } else if (DataExpr* expr = dynamic_cast<DataExpr*>(&_expr)) {
+            for (const std::unique_ptr<Expr>& component : expr->components) {
+                compile_expr(gc, r_code, *component);
             }
             // MAKE_VECTOR: <num components>
             emit_op(OpCode::MAKE_VECTOR);
-            emit_arg(Value::fixnum(expr.components.size()));
-        }
-
-        void visit(SequenceExpr& expr) override
-        {
-            if (expr.components.empty()) {
+            emit_arg(Value::fixnum(expr->components.size()));
+        } else if (SequenceExpr* expr = dynamic_cast<SequenceExpr*>(&_expr)) {
+            if (expr->components.empty()) {
                 // Empty sequence -> just load null.
                 // LOAD_VALUE: <value>
                 emit_op(OpCode::LOAD_VALUE);
@@ -265,79 +263,182 @@ namespace Katsu
             }
 
             // Drop all but the last component's result.
-            for (size_t i = 0; i < expr.components.size(); i++) {
-                bool last = i == expr.components.size() - 1;
-                expr.components[i]->accept(*this);
+            for (size_t i = 0; i < expr->components.size(); i++) {
+                bool last = i == expr->components.size() - 1;
+                compile_expr(gc, r_code, *expr->components[i]);
                 if (!last) {
                     emit_op(OpCode::DROP);
                 }
             }
-        }
-
-        void visit(TupleExpr& expr) override
-        {
-            for (const std::unique_ptr<Expr>& component : expr.components) {
-                component->accept(*this);
+        } else if (TupleExpr* expr = dynamic_cast<TupleExpr*>(&_expr)) {
+            for (const std::unique_ptr<Expr>& component : expr->components) {
+                compile_expr(gc, r_code, *component);
             }
             // MAKE_TUPLE: <num components>
             emit_op(OpCode::MAKE_TUPLE);
-            emit_arg(Value::fixnum(expr.components.size()));
+            emit_arg(Value::fixnum(expr->components.size()));
+        } else {
+            throw std::logic_error("forgot a case");
         }
+    }
 
-    private:
-        void emit_op(OpCode op) {}
-        void emit_arg(Value v_arg) {}
-
-        Scope::Binding* scope_lookup(const std::string& name)
-        {
-            Scope* cur = &this->scope;
-            while (cur) {
-                auto it = cur->bindings.find(name);
-                if (it != cur->bindings.end()) {
-                    return &it->second;
-                }
-                cur = cur->base.get();
-            }
-            return nullptr;
-        }
-        Scope::Binding* scope_lookup(String* name)
-        {
-            uint64_t name_len = name->length;
-            // TODO: check against size_t?
-
-            Scope* cur = &this->scope;
-            while (cur) {
-                for (auto& [binding_name, binding] : cur->bindings) {
-                    if (name_len != binding_name.size()) {
-                        continue;
-                    }
-                    if (memcmp(binding_name.c_str(), name->contents(), name_len) != 0) {
-                        continue;
-                    }
-                    return &binding;
-                }
-                cur = cur->base.get();
-            }
-            return nullptr;
-        }
-
-        Value* module_lookup(String* name)
-        {
-            return Katsu::module_lookup(this->r_module->obj_module(), name);
-        }
-
-        GC& gc;
-        Root r_base;   // Module
-        Root r_module; // Module
-        Scope scope;
-    };
-
-    Module* compile_module(GC& gc, Module* base,
-                           std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
+    void compile_expr(GC& gc, Code* code, Expr& expr)
     {
-        Compiler compiler(gc, base);
+        Root<Code> r_code(gc, std::move(code));
+        compile_expr(gc, r_code, expr);
+    }
+
+    // receiver, attrs are optional
+    void compile_method(GC& gc, Module* module, const std::string& message, SourceSpan& span,
+                        Expr* receiver, Expr& decl, Expr& body, Expr* attrs)
+    {
+        if (receiver) {
+            std::stringstream ss;
+            ss << "" << message << " takes no receiver";
+            throw std::invalid_argument(ss.str());
+        }
+
+        while (ParenExpr* p = dynamic_cast<ParenExpr*>(&decl)) {
+            decl = *p->inner;
+        }
+
+        if (BlockExpr* b = dynamic_cast<BlockExpr*>(&decl)) {
+            if (!b->parameters.empty()) {
+                std::stringstream ss;
+                ss << "" << message << " 'declaration' argument should not specify any parameters";
+                throw std::invalid_argument(ss.str());
+            }
+            decl = *b->body;
+        } else {
+            throw std::logic_error("non-block decls for method:does: not yet implemented");
+        }
+
+        if (NameExpr* n = dynamic_cast<NameExpr*>(&decl)) {
+        }
+
+        /*
+            if isinstance(decl, NameExpr):
+                message = decl.name.value
+                param_names = ["self"]
+                param_matchers = [ParameterAnyMatcher()]
+            elif isinstance(decl, UnaryMessageExpr):
+                format_msg = (
+                    f"When the {message} 'declaration' argument is a unary message, "
+                    "it must be a simple unary message of the form [target-name message-name] "
+                    "or else a unary message of the form [(target-name: matcher) message-name]"
+                )
+                message = decl.message.value
+                param_name, param_matcher = param_name_and_matcher(decl.target, format_msg)
+                param_names = [param_name]
+                param_matchers = [param_matcher]
+            elif isinstance(decl, NAryMessageExpr):
+                format_msg = (
+                    f"When the {message} 'declaration' argument is an n-ary message, "
+                    "it must be a simple n-ary message of the form [target-name message: param-name
+           ...] " "or else an n-ary message of the form [(target-name: matcher) message:
+           (param-name: matcher) ...] "
+                    "(the target-name is optional, as is each parameter matcher declaration)"
+                )
+                message = "".join(message.value + ":" for message in decl.messages)
+                param_names = []
+                param_matchers = []
+
+                if decl.target:
+                    param_name, param_matcher = param_name_and_matcher(decl.target, format_msg)
+                    param_names.append(param_name)
+                    param_matchers.append(param_matcher)
+                else:
+                    param_names.append("self")
+                    param_matchers.append(ParameterAnyMatcher())
+
+                for arg in decl.args:
+                    param_name, param_matcher = param_name_and_matcher(arg, format_msg)
+                    param_names.append(param_name)
+                    param_matchers.append(param_matcher)
+            else:
+                # TODO: allow unary / binary ops too
+                raise ValueError(
+                    f"{message} 'declaration' argument should be a name or message; got {decl}"
+                )
+
+            # Fill in the body and context, then define the method.
+            if not isinstance(body, QuoteExpr):
+                raise ValueError(f"{message} 'body' argument should be a quote")
+            if body.parameters:
+                raise ValueError(f"{message} 'body' argument should not specify any parameters")
+
+            inline = False
+            tail_recursive = False
+            if attrs:
+                if not isinstance(attrs, DataExpr):
+                    raise ValueError(f"{message} 'attrs' argument should be a vector")
+                for attr in attrs.components:
+                    if isinstance(attr, NameExpr) and attr.name.value == "+inline":
+                        inline = True
+                    elif isinstance(attr, NameExpr) and attr.name.value == "+tail-recursive":
+                        tail_recursive = True
+                    else:
+                        raise ValueError(f"Unknown method attribute: '{attr}'.")
+        */
+    }
+
+    Code* compile_module(GC& gc, Module* base,
+                         std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
+    {
         // TODO: for future -- first find all multimethod definitions, add them to scope (with
         // zero methods defined), and then go and compile everything.
-        module_top_level_expr.accept(compiler);
+
+        Root<Module> r_module(gc, make_module(gc, base, /* capacity */ 0));
+        // `base` must be assumed to be an invalid pointer now.
+
+        OptionalRoot<Array> r_upreg_map(gc, nullptr);
+        Root<Array> r_insts(gc, make_array(gc, 0));
+        Root<Array> r_args(gc, make_array(gc, 0));
+
+        // TODO: maybe use a local struct which is better suited for construction?
+        Root<Code> r_top_level_code(gc,
+                                    make_code(gc,
+                                              r_module,
+                                              /* num_regs */ 0,
+                                              /* num_data */ 0,
+                                              r_upreg_map,
+                                              r_insts,
+                                              r_args));
+
+        for (std::unique_ptr<Expr>& top_level_expr : module_top_level_exprs) {
+            if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(top_level_expr.get())) {
+                if (expr->messages.size() == 2 &&
+                    std::get<std::string>(expr->messages[0].value) == "method" &&
+                    std::get<std::string>(expr->messages[1].value) == "does") {
+                    compile_method(gc,
+                                   *r_module,
+                                   "method:does:",
+                                   expr->span,
+                                   expr->target ? expr->target->get() : nullptr,
+                                   *expr->args[0],
+                                   *expr->args[1],
+                                   nullptr);
+                    continue;
+                } else if (expr->messages.size() == 3 &&
+                           std::get<std::string>(expr->messages[0].value) == "method" &&
+                           std::get<std::string>(expr->messages[1].value) == "does" &&
+                           std::get<std::string>(expr->messages[2].value) == ":"
+
+                ) {
+                    compile_method(gc,
+                                   *r_module,
+                                   "method:does:",
+                                   expr->span,
+                                   expr->target ? expr->target->get() : nullptr,
+                                   *expr->args[0],
+                                   *expr->args[1],
+                                   expr->args[2].get());
+                    continue;
+                }
+            }
+            compile_expr(gc, *r_top_level_code, *top_level_expr);
+        }
+
+        return *r_top_level_code;
     }
 };

@@ -6,5 +6,6 @@
 
 namespace Katsu
 {
-    Module* compile_module(GC& gc, Module* base, Expr& top_level_expr);
+    Code* compile_module(GC& gc, Module* base,
+                         std::vector<std::unique_ptr<Expr>>& module_top_level_exprs);
 };

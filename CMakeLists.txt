@@ -19,6 +19,7 @@ add_library(katsudon STATIC
   src/parser.cc
   src/gc.cc
   src/value_utils.cc
+  src/compile.cc
   src/vm.cc
   src/katsu.cc
 )
