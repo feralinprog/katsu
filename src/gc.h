@@ -29,6 +29,11 @@
 #ifndef DEBUG_GC_NEW_SEMISPACE
 #define DEBUG_GC_NEW_SEMISPACE (0)
 #endif
+// Have GC roots check the root stack for expected ordering when getting destructed.
+// Default on.
+#ifndef DEBUG_GC_VERIFY_ROOT_ORDERING
+#define DEBUG_GC_VERIFY_ROOT_ORDERING (1)
+#endif
 
 #if DEBUG_GC_LOG
 #include <iostream>
@@ -148,28 +153,30 @@ namespace Katsu
     {
     public:
         ValueRoot(GC& _gc, Value&& value)
-            : gc(&_gc)
+            : gc(_gc)
             , root(value)
         {
-            gc->roots.push_back(&this->root);
+            this->gc.roots.push_back(&this->root);
             value = Value::null();
         }
 
         ValueRoot(ValueRoot&) = delete;
-
-        ValueRoot(ValueRoot&& from)
-            : gc(from.gc)
-            , root(from.root)
-        {
-            from.gc = nullptr;
-            from.root = Value::null();
-        }
+        ValueRoot(ValueRoot&&) = delete;
 
         ~ValueRoot()
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+            noexcept(false)
+#endif
         {
-            if (this->gc) {
-                this->gc->roots.pop_back();
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+            if (this->gc.roots.empty()) {
+                throw std::logic_error("GC roots are empty while destructing ValueRoot");
             }
+            if (this->gc.roots.back() != &this->root) {
+                throw std::logic_error("GC roots are out of order while destructing ValueRoot");
+            }
+#endif
+            this->gc.roots.pop_back();
         }
 
         inline Value& operator*()
@@ -183,7 +190,7 @@ namespace Katsu
         }
 
     private:
-        GC* gc;
+        GC& gc;
         Value root;
     };
 
@@ -193,31 +200,33 @@ namespace Katsu
 
     public:
         Root(GC& _gc, T*&& value)
-            : gc(&_gc)
+            : gc(_gc)
             , root(Value::object(value))
         {
             if (!value) {
                 throw std::logic_error("attempted to create Root from nullptr");
             }
-            gc->roots.push_back(&this->root);
+            this->gc.roots.push_back(&this->root);
             value = nullptr;
         }
 
         Root(Root<T>&) = delete;
-
-        Root(Root<T>&& from)
-            : gc(from.gc)
-            , root(from.root)
-        {
-            from.gc = nullptr;
-            from.root = Value::null();
-        }
+        Root(Root<T>&&) = delete;
 
         ~Root()
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+            noexcept(false)
+#endif
         {
-            if (this->gc) {
-                this->gc->roots.pop_back();
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+            if (this->gc.roots.empty()) {
+                throw std::logic_error("GC roots are empty while destructing Root");
             }
+            if (this->gc.roots.back() != &this->root) {
+                throw std::logic_error("GC roots are out of order while destructing Root");
+            }
+#endif
+            this->gc.roots.pop_back();
         }
 
         inline Value value()
@@ -236,7 +245,7 @@ namespace Katsu
         }
 
     private:
-        GC* gc;
+        GC& gc;
         Value root;
     };
 
@@ -246,28 +255,30 @@ namespace Katsu
 
     public:
         OptionalRoot(GC& _gc, T*&& value)
-            : gc(&_gc)
+            : gc(_gc)
             , root(value ? Value::object(value) : Value::null())
         {
-            gc->roots.push_back(&this->root);
+            this->gc.roots.push_back(&this->root);
             value = nullptr;
         }
 
         OptionalRoot(OptionalRoot<T>&) = delete;
-
-        OptionalRoot(OptionalRoot<T>&& from)
-            : gc(from.gc)
-            , root(from.root)
-        {
-            from.gc = nullptr;
-            from.root = Value::null();
-        }
+        OptionalRoot(OptionalRoot<T>&&) = delete;
 
         ~OptionalRoot()
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+            noexcept(false)
+#endif
         {
-            if (this->gc) {
-                this->gc->roots.pop_back();
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+            if (this->gc.roots.empty()) {
+                throw std::logic_error("GC roots are empty while destructing OptionalRoot");
             }
+            if (this->gc.roots.back() != &this->root) {
+                throw std::logic_error("GC roots are out of order while destructing OptionalRoot");
+            }
+#endif
+            this->gc.roots.pop_back();
         }
 
         inline Value value()
@@ -294,7 +305,7 @@ namespace Katsu
         }
 
     private:
-        GC* gc;
+        GC& gc;
         Value root;
     };
 };
