@@ -4,7 +4,7 @@
 
 namespace Katsu
 {
-    Ref* make_ref(GC& gc, Root& r_ref)
+    Ref* make_ref(GC& gc, ValueRoot& r_ref)
     {
         Ref* ref = gc.alloc<Ref>();
         ref->v_ref = *r_ref;
@@ -13,7 +13,7 @@ namespace Katsu
 
     Ref* make_ref(GC& gc, Value v_ref)
     {
-        Root r_ref(gc, std::move(v_ref));
+        ValueRoot r_ref(gc, std::move(v_ref));
         return make_ref(gc, r_ref);
     }
 
@@ -51,40 +51,32 @@ namespace Katsu
 
     Vector* make_vector(GC& gc, uint64_t capacity)
     {
-        Root r_array(gc, Value::object(make_array(gc, /* length */ capacity)));
+        Root<Array> r_array(gc, make_array(gc, /* length */ capacity));
         return make_vector(gc, /* length */ 0, r_array);
     }
 
-    Vector* make_vector(GC& gc, uint64_t length, Root& r_array)
+    Vector* make_vector(GC& gc, uint64_t length, Root<Array>& r_array)
     {
-        if (!r_array->is_obj_array()) {
-            throw std::invalid_argument("r_array must be an Array");
-        }
-
         Vector* vec = gc.alloc<Vector>();
-        Array* array = r_array->obj_array();
+        Array* array = *r_array;
         if (length > array->length) {
             throw std::invalid_argument("length must be at most r_array length");
         }
         vec->length = length;
-        vec->v_array = *r_array;
+        vec->v_array = r_array.value();
         return vec;
     }
 
     Vector* make_vector(GC& gc, uint64_t length, Array* array)
     {
-        Root r_array(gc, Value::object(array));
+        Root<Array> r_array(gc, std::move(array));
         return make_vector(gc, length, r_array);
     }
 
-    Module* make_module(GC& gc, Root& r_base, uint64_t capacity)
+    Module* make_module(GC& gc, OptionalRoot<Module>& r_base, uint64_t capacity)
     {
-        if (!(r_base->is_obj_module() || r_base->is_null())) {
-            throw std::invalid_argument("r_base must be a Module or null");
-        }
-
         Module* module = gc.alloc<Module>(capacity);
-        module->v_base = *r_base;
+        module->v_base = r_base.value();
         module->capacity = capacity;
         module->length = 0;
         // No need to initialize entries; GC doesn't look at entries beyond the (zero) length.
@@ -93,8 +85,7 @@ namespace Katsu
 
     Module* make_module(GC& gc, Module* base, uint64_t capacity)
     {
-        Value v_base = base ? Value::object(base) : Value::null();
-        Root r_base(gc, std::move(v_base));
+        OptionalRoot<Module> r_base(gc, std::move(base));
         return make_module(gc, r_base, capacity);
     }
 
@@ -107,84 +98,55 @@ namespace Katsu
         return str;
     }
 
-    Code* make_code(GC& gc, Root& r_module, uint32_t num_regs, uint32_t num_data, Root& r_upreg_map,
-                    Root& r_insts, Root& r_args)
+    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_regs, uint32_t num_data,
+                    OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts, Root<Array>& r_args)
     {
-        if (!r_module->is_obj_module()) {
-            throw std::invalid_argument("r_module must be a Module");
-        }
-        if (!(r_upreg_map->is_obj_array() || r_upreg_map->is_null())) {
-            throw std::invalid_argument("r_upreg_map must be an Array or null");
-        }
-        if (!r_insts->is_obj_array()) {
-            throw std::invalid_argument("r_insts must be an Array");
-        }
-        // TODO: check for fixnums of the right range?
-        if (!r_args->is_obj_array()) {
-            throw std::invalid_argument("r_args must be an Array");
-        }
-
+        // TODO: check that insts are fixnums of the right range?
         Code* code = gc.alloc<Code>();
-        code->v_module = *r_module;
+        code->v_module = r_module.value();
         code->num_regs = num_regs;
         code->num_data = num_data;
-        code->v_upreg_map = *r_upreg_map;
-        code->v_insts = *r_insts;
-        code->v_args = *r_args;
+        code->v_upreg_map = r_upreg_map.value();
+        code->v_insts = r_insts.value();
+        code->v_args = r_args.value();
         return code;
     }
 
     Code* make_code(GC& gc, Module* module, uint32_t num_regs, uint32_t num_data, Array* upreg_map,
                     Array* insts, Array* args)
     {
-        Root r_module(gc, Value::object(module));
-        Value v_upreg_map = upreg_map ? Value::object(upreg_map) : Value::null();
-        Root r_upreg_map(gc, std::move(v_upreg_map));
-        Root r_insts(gc, Value::object(insts));
-        Root r_args(gc, Value::object(args));
+        Root<Module> r_module(gc, std::move(module));
+        OptionalRoot<Array> r_upreg_map(gc, std::move(upreg_map));
+        Root<Array> r_insts(gc, std::move(insts));
+        Root<Array> r_args(gc, std::move(args));
         return make_code(gc, r_module, num_regs, num_data, r_upreg_map, r_insts, r_args);
     }
 
-    Closure* make_closure(GC& gc, Root& r_code, Root& r_upregs)
+    Closure* make_closure(GC& gc, Root<Code>& r_code, Root<Array>& r_upregs)
     {
-        if (!r_code->is_obj_code()) {
-            throw std::invalid_argument("r_code must be a Code");
-        }
-        if (!r_upregs->is_obj_array()) {
-            throw std::invalid_argument("r_upregs must be an Array");
-        }
-
         Closure* closure = gc.alloc<Closure>();
-        closure->v_code = *r_code;
-        closure->v_upregs = *r_upregs;
+        closure->v_code = r_code.value();
+        closure->v_upregs = r_upregs.value();
         return closure;
     }
 
     Closure* make_closure(GC& gc, Code* code, Array* upregs)
     {
-        Root r_code(gc, Value::object(code));
-        Root r_upregs(gc, Value::object(upregs));
+        Root<Code> r_code(gc, std::move(code));
+        Root<Array> r_upregs(gc, std::move(upregs));
         return make_closure(gc, r_code, r_upregs);
     }
 
-    Method* make_method(GC& gc, Root& r_param_matchers, Root& r_return_type, Root& r_code,
-                        Root& r_attributes, NativeHandler native_handler)
+    Method* make_method(GC& gc, ValueRoot& r_param_matchers, OptionalRoot<Type>& r_return_type,
+                        OptionalRoot<Code>& r_code, Root<Vector>& r_attributes,
+                        NativeHandler native_handler)
     {
         // if (!r_param_matchers->is_obj_vector()) {
         //     throw std::invalid_argument("r_param_matchers must be a Vector");
         // }
-        if (!(r_return_type->is_obj_type() || r_return_type->is_null())) {
-            throw std::invalid_argument("r_return_type must be a Type or null");
-        }
-        if (!(r_code->is_obj_code() || r_code->is_null())) {
-            throw std::invalid_argument("r_code must be a Code or null");
-        }
-        if (!r_attributes->is_obj_vector()) {
-            throw std::invalid_argument("r_attributes must be a Vector");
-        }
         // No way to check native_handler.
         {
-            bool has_code = r_code->is_obj_code();
+            bool has_code = r_code;
             bool has_native_handler = native_handler != nullptr;
             int options_selected = (has_code ? 1 : 0) + (has_native_handler ? 1 : 0);
             if (options_selected != 1) {
@@ -195,9 +157,9 @@ namespace Katsu
 
         Method* method = gc.alloc<Method>();
         method->v_param_matchers = *r_param_matchers;
-        method->v_return_type = *r_return_type;
-        method->v_code = *r_code;
-        method->v_attributes = *r_attributes;
+        method->v_return_type = r_return_type.value();
+        method->v_code = r_code.value();
+        method->v_attributes = r_attributes.value();
         method->native_handler = native_handler;
         return method;
     }
@@ -205,12 +167,10 @@ namespace Katsu
     Method* make_method(GC& gc, Value v_param_matchers, Type* return_type, Code* code,
                         Vector* attributes, NativeHandler native_handler)
     {
-        Root r_param_matchers(gc, std::move(v_param_matchers));
-        Value v_return_type = return_type ? Value::object(return_type) : Value::null();
-        Root r_return_type(gc, std::move(v_return_type));
-        Value v_code = code ? Value::object(code) : Value::null();
-        Root r_code(gc, std::move(v_code));
-        Root r_attributes(gc, Value::object(attributes));
+        ValueRoot r_param_matchers(gc, std::move(v_param_matchers));
+        OptionalRoot<Type> r_return_type(gc, std::move(return_type));
+        OptionalRoot<Code> r_code(gc, std::move(code));
+        Root<Vector> r_attributes(gc, std::move(attributes));
         return make_method(gc,
                            r_param_matchers,
                            r_return_type,
@@ -219,116 +179,87 @@ namespace Katsu
                            native_handler);
     }
 
-    MultiMethod* make_multimethod(GC& gc, Root& r_name, Root& r_methods, Root& r_attributes)
+    MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, Root<Vector>& r_methods,
+                                  Root<Vector>& r_attributes)
     {
-        if (!r_name->is_obj_string()) {
-            throw std::invalid_argument("r_name must be a String");
-        }
-        if (!r_methods->is_obj_vector()) {
-            throw std::invalid_argument("r_methods must be a Vector");
-        }
-        // TODO: check for Method components?
-        if (!r_attributes->is_obj_vector()) {
-            throw std::invalid_argument("r_attributes must be a Vector");
-        }
-
+        // TODO: check for Method components in r_methods?
         MultiMethod* multimethod = gc.alloc<MultiMethod>();
-        multimethod->v_name = *r_name;
-        multimethod->v_methods = *r_methods;
-        multimethod->v_attributes = *r_attributes;
+        multimethod->v_name = r_name.value();
+        multimethod->v_methods = r_methods.value();
+        multimethod->v_attributes = r_attributes.value();
         return multimethod;
     }
 
     MultiMethod* make_multimethod(GC& gc, String* name, Vector* methods, Vector* attributes)
     {
-        Root r_name(gc, Value::object(name));
-        Root r_methods(gc, Value::object(methods));
-        Root r_attributes(gc, Value::object(attributes));
+        Root<String> r_name(gc, std::move(name));
+        Root<Vector> r_methods(gc, std::move(methods));
+        Root<Vector> r_attributes(gc, std::move(attributes));
         return make_multimethod(gc, r_name, r_methods, r_attributes);
     }
 
-    Type* make_type(GC& gc, Root& r_name, Root& r_bases, bool sealed, Root& r_linearization,
-                    Root& r_subtypes, Type::Kind kind, Root& r_slots)
+    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+                    Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
+                    OptionalRoot<Vector>& r_slots)
     {
-        if (!r_name->is_obj_string()) {
-            throw std::invalid_argument("r_name must be a String");
-        }
-        if (!r_bases->is_obj_vector()) {
-            throw std::invalid_argument("r_bases must be a Vector");
-        }
-        // TODO: check Type components
+        // TODO: check Type components in r_bases
         // Nothing to check for `sealed`.
-        if (!r_linearization->is_obj_vector()) {
-            throw std::invalid_argument("r_linearization must be a Vector");
-        }
         // TODO: check linearization? (at least some basic sanity checks)
-        if (!r_subtypes->is_obj_vector()) {
-            throw std::invalid_argument("r_subtypes must be a Vector");
-        }
-        // TODO check Type components
+        // TODO check Type components in r_subtypes
         if (!(kind == Type::Kind::MIXIN || kind == Type::Kind::DATACLASS)) {
             throw std::invalid_argument("kind must be MIXIN or DATACLASS");
         }
-        if (kind == Type::Kind::MIXIN && !r_slots->is_null()) {
+        if (kind == Type::Kind::MIXIN && r_slots) {
             throw std::invalid_argument("r_slots must be null for MIXIN type");
         }
-        if (kind == Type::Kind::DATACLASS && !r_slots->is_obj_vector()) {
+        if (kind == Type::Kind::DATACLASS && !r_slots) {
             throw std::invalid_argument("r_slots must be a Vector for DATACLASS type");
         }
 
         Type* type = gc.alloc<Type>();
-        type->v_name = *r_name;
-        type->v_bases = *r_bases;
+        type->v_name = r_name.value();
+        type->v_bases = r_bases.value();
         type->sealed = sealed;
-        type->v_linearization = *r_linearization;
-        type->v_subtypes = *r_subtypes;
+        type->v_linearization = r_linearization.value();
+        type->v_subtypes = r_subtypes.value();
         type->kind = kind;
-        type->v_slots = *r_slots;
+        type->v_slots = r_slots.value();
         return type;
     }
 
     Type* make_type(GC& gc, String* name, Vector* bases, bool sealed, Vector* linearization,
                     Vector* subtypes, Type::Kind kind, Vector* slots)
     {
-        Root r_name(gc, Value::object(name));
-        Root r_bases(gc, Value::object(bases));
-        Root r_linearization(gc, Value::object(linearization));
-        Root r_subtypes(gc, Value::object(subtypes));
-        Value v_slots = slots ? Value::object(slots) : Value::null();
-        Root r_slots(gc, std::move(v_slots));
+        Root<String> r_name(gc, std::move(name));
+        Root<Vector> r_bases(gc, std::move(bases));
+        Root<Vector> r_linearization(gc, std::move(linearization));
+        Root<Vector> r_subtypes(gc, std::move(subtypes));
+        OptionalRoot<Vector> r_slots(gc, std::move(slots));
         return make_type(gc, r_name, r_bases, sealed, r_linearization, r_subtypes, kind, r_slots);
     }
 
-    DataclassInstance* make_instance_nofill(GC& gc, Root& r_type)
+    DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type)
     {
-        if (!r_type->is_obj_type()) {
-            throw std::invalid_argument("r_type must be a Type");
-        }
-
-        Type* type = r_type->obj_type();
+        Type* type = *r_type;
         if (type->kind != Type::Kind::DATACLASS) {
             throw std::invalid_argument("r_type must be a DATACLASS-kind type");
         }
 
         uint64_t num_slots = type->v_slots.obj_vector()->length;
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
-        inst->v_type = *r_type;
+        inst->v_type = r_type.value();
         return inst;
     }
 
     DataclassInstance* make_instance_nofill(GC& gc, Type* type)
     {
-        Root r_type(gc, Value::object(type));
+        Root<Type> r_type(gc, std::move(type));
         return make_instance_nofill(gc, r_type);
     }
 
-    Vector* append(GC& gc, Root& r_vector, Root& r_value)
+    Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value)
     {
-        if (!r_vector->is_obj_vector()) {
-            throw std::invalid_argument("r_vector must be a Vector");
-        }
-
-        Vector* vector = r_vector->obj_vector();
+        Vector* vector = *r_vector;
 
         uint64_t capacity = vector->capacity();
         if (vector->length == capacity) {
@@ -336,7 +267,7 @@ namespace Katsu
             // while we copy components over.
             uint64_t new_capacity = capacity == 0 ? 1 : capacity * 2;
             Array* new_array = make_array_nofill(gc, new_capacity);
-            vector = r_vector->obj_vector();
+            vector = *r_vector;
             // Copy components and null-fill the rest.
             {
                 Array* array = vector->v_array.obj_array();
@@ -348,7 +279,7 @@ namespace Katsu
                 }
             }
             // Pin the new_array while allocating the new vector.
-            Root r_new_array(gc, Value::object(new_array));
+            Root<Array> r_new_array(gc, std::move(new_array));
             Vector* new_vector = make_vector(gc, vector->length, r_new_array);
 
             vector = new_vector;
@@ -360,13 +291,13 @@ namespace Katsu
 
     Vector* append(GC& gc, Vector* vector, Value v_value)
     {
-        Root r_vector(gc, Value::object(vector));
-        Root r_value(gc, std::move(v_value));
+        Root<Vector> r_vector(gc, std::move(vector));
+        ValueRoot r_value(gc, std::move(v_value));
         return append(gc, r_vector, r_value);
     }
 
     // TODO: handle as part of Module cleanup.
-    // void append(GC& gc, Module* module, String* name, Root& r_value)
+    // void append(GC& gc, Module* module, String* name, ValueRoot& r_value)
     // {
     //     if (module->length == module->capacity) {
     //         // Reallocate!

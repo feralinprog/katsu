@@ -69,16 +69,16 @@ TEST_CASE("walk GC through simple allocations, collection, and OOM", "[gc]")
     b->components()[1] = Value::_float(2.0);
     b->components()[2] = Value::_float(3.0);
     b->components()[3] = Value::_float(4.0);
-    Root root_b(gc, Value::object(b));
+    Root<Array> root_b(gc, std::move(b));
 
     String* c;
     REQUIRE_NOTHROW(c = gc.alloc<String>(sizeof(String) + 1));
-    REQUIRE(reinterpret_cast<uint8_t*>(root_b->object()) == TESTONLY_get_mem(gc) + 0);
+    REQUIRE(reinterpret_cast<uint8_t*>(root_b.value().object()) == TESTONLY_get_mem(gc) + 0);
     REQUIRE(reinterpret_cast<uint8_t*>(c) == TESTONLY_get_mem(gc) + 48);
 
     // Keep `c` around via another root.
     c->length = 1;
-    Root root_c(gc, Value::object(c));
+    Root<String> root_c(gc, std::move(c));
 
     REQUIRE_THROWS_AS(
         gc._alloc_raw(12 * sizeof(Value) - sizeof(Object) - 5 * sizeof(Value) - sizeof(String)),
@@ -389,4 +389,6 @@ TEST_CASE("GC follows internal references", "[gc]")
     }
 }
 
-// TODO: test Root more (e.g. move semantics, destructor)
+// TODO: test ValueRoot more (e.g. move semantics, destructor)
+// TODO: test Root<T> more
+// TODO: test OptionalRoot<T> more

@@ -21,33 +21,32 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
 
     // Perform a simple LOAD_VALUE.
 
-    Module* module = make_module(gc, /* base */ nullptr, /* capacity */ 0);
-    Root r_module(gc, Value::object(module));
+    Root<Module> r_module(gc, make_module(gc, /* base */ nullptr, /* capacity */ 0));
 
-    Root r_upreg_map(gc, Value::null());
+    OptionalRoot<Array> r_upreg_map(gc, nullptr);
 
     Array* insts = make_array_nofill(gc, /* length */ 1);
     insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
-    Root r_insts(gc, Value::object(insts));
+    Root<Array> r_insts(gc, std::move(insts));
 
     Array* args = make_array(gc, /* length */ 1);
     args->components()[0] = Value::fixnum(1234);
-    Root r_args(gc, Value::object(args));
+    Root<Array> r_args(gc, std::move(args));
 
-    Code* code = make_code(gc,
-                           /* r_module */ r_module,
-                           /* num_regs */ 1,
-                           /* num_data */ 1,
-                           /* r_upreg_map */ r_upreg_map,
-                           /* r_insts */ r_insts,
-                           /* r_args */ r_args);
-    Root r_code(gc, Value::object(code));
+    Root<Code> r_code(gc,
+                      make_code(gc,
+                                /* r_module */ r_module,
+                                /* num_regs */ 1,
+                                /* num_data */ 1,
+                                /* r_upreg_map */ r_upreg_map,
+                                /* r_insts */ r_insts,
+                                /* r_args */ r_args));
 
-    Value v_result = vm.eval_toplevel(Value::object(code));
+    Value v_result = vm.eval_toplevel(*r_code);
     CHECK(v_result == Value::fixnum(1234));
 
     // Evaluate again -- VM should be able to handle this easily.
-    v_result = vm.eval_toplevel(Value::object(code));
+    v_result = vm.eval_toplevel(*r_code);
     CHECK(v_result == Value::fixnum(1234));
 }
 
@@ -66,56 +65,52 @@ TEST_CASE("VM executes a native invocation", "[vm]")
 
     // Perform an INVOKE op to add two fixnums.
 
-    String* method_name = make_string(gc, "+:");
-    Root r_method_name(gc, Value::object(method_name));
+    Root<String> r_method_name(gc, make_string(gc, "+:"));
 
-    Root r_param_matchers(gc, Value::null()); // TODO: not null
+    ValueRoot r_param_matchers(gc, Value::null()); // TODO: not null
 
-    Root r_return_type(gc, Value::null());
+    OptionalRoot<Type> r_return_type(gc, nullptr);
 
-    Root r_method_code(gc, Value::null()); // native!
+    OptionalRoot<Code> r_method_code(gc, nullptr); // native!
 
-    Vector* method_attributes = make_vector(gc, /* capacity */ 0);
-    Root r_method_attributes(gc, Value::object(method_attributes));
+    Root<Vector> r_method_attributes(gc, make_vector(gc, /* capacity */ 0));
 
-    Method* method = make_method(gc,
-                                 /* r_param_matchers */ r_param_matchers,
-                                 /* r_return_type */ r_return_type,
-                                 /* r_code */ r_method_code,
-                                 /* r_attributes */ r_method_attributes,
-                                 /* native_handler */ &test__fixnum_add);
-    Root r_method(gc, Value::object(method));
+    Root<Method> r_method(gc,
+                          make_method(gc,
+                                      /* r_param_matchers */ r_param_matchers,
+                                      /* r_return_type */ r_return_type,
+                                      /* r_code */ r_method_code,
+                                      /* r_attributes */ r_method_attributes,
+                                      /* native_handler */ &test__fixnum_add));
 
     Vector* methods = make_vector(gc, /* capacity */ 1);
     methods->length = 1;
     {
         Array* array = methods->v_array.obj_array();
-        array->components()[0] = *r_method;
+        array->components()[0] = r_method.value();
     }
-    Root r_methods(gc, Value::object(methods));
+    Root<Vector> r_methods(gc, std::move(methods));
 
-    Vector* multimethod_attributes = make_vector(gc, /* capacity */ 0);
-    Root r_multimethod_attributes(gc, Value::object(multimethod_attributes));
+    Root<Vector> r_multimethod_attributes(gc, make_vector(gc, /* capacity */ 0));
 
-    MultiMethod* multimethod = make_multimethod(gc,
-                                                /* r_name */ r_method_name,
-                                                /* r_methods */ r_methods,
-                                                /* r_attributes */ r_multimethod_attributes);
-    Root r_multimethod(gc, Value::object(multimethod));
+    Root<MultiMethod> r_multimethod(gc,
+                                    make_multimethod(gc,
+                                                     /* r_name */ r_method_name,
+                                                     /* r_methods */ r_methods,
+                                                     /* r_attributes */ r_multimethod_attributes));
 
-    Module* module = make_module(gc, /* base */ nullptr, /* capacity */ 1);
-    Root r_module(gc, Value::object(module));
-    module->length = 1;
-    module->entries()[0].v_key = *r_method_name;
-    module->entries()[0].v_value = *r_multimethod;
+    Root<Module> r_module(gc, make_module(gc, /* base */ nullptr, /* capacity */ 1));
+    r_module->length = 1;
+    r_module->entries()[0].v_key = r_method_name.value();
+    r_module->entries()[0].v_value = r_multimethod.value();
 
-    Root r_upreg_map(gc, Value::null());
+    OptionalRoot<Array> r_upreg_map(gc, nullptr);
 
     Array* insts = make_array(gc, /* length */ 3);
     insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
     insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
     insts->components()[2] = Value::fixnum(OpCode::INVOKE);
-    Root r_insts(gc, Value::object(insts));
+    Root<Array> r_insts(gc, std::move(insts));
 
     Array* args = make_array(gc, /* length */ 4);
     // LOAD_VALUE: 5
@@ -123,19 +118,19 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     // LOAD_VALUE: 10
     args->components()[1] = Value::fixnum(10);
     // INVOKE: +: with two args
-    args->components()[2] = *r_method_name;
+    args->components()[2] = r_method_name.value();
     args->components()[3] = Value::fixnum(2);
-    Root r_args(gc, Value::object(args));
+    Root<Array> r_args(gc, std::move(args));
 
-    Code* code = make_code(gc,
-                           /* r_module */ r_module,
-                           /* num_regs */ 1,
-                           /* num_data */ 1,
-                           /* r_upreg_map */ r_upreg_map,
-                           /* r_insts */ r_insts,
-                           /* r_args */ r_args);
-    Root r_code(gc, Value::object(code));
+    Root<Code> r_code(gc,
+                      make_code(gc,
+                                /* r_module */ r_module,
+                                /* num_regs */ 1,
+                                /* num_data */ 1,
+                                /* r_upreg_map */ r_upreg_map,
+                                /* r_insts */ r_insts,
+                                /* r_args */ r_args));
 
-    Value v_result = vm.eval_toplevel(Value::object(code));
+    Value v_result = vm.eval_toplevel(*r_code);
     CHECK(v_result == Value::fixnum(15));
 }

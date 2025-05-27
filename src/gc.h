@@ -144,10 +144,10 @@ namespace Katsu
         friend uint8_t* TESTONLY_get_mem(GC& gc);
     };
 
-    class Root
+    class ValueRoot
     {
     public:
-        Root(GC& _gc, Value&& value)
+        ValueRoot(GC& _gc, Value&& value)
             : gc(&_gc)
             , root(value)
         {
@@ -155,9 +155,9 @@ namespace Katsu
             value = Value::null();
         }
 
-        Root(Root&) = delete;
+        ValueRoot(ValueRoot&) = delete;
 
-        Root(Root&& from)
+        ValueRoot(ValueRoot&& from)
             : gc(from.gc)
             , root(from.root)
         {
@@ -165,7 +165,7 @@ namespace Katsu
             from.root = Value::null();
         }
 
-        ~Root()
+        ~ValueRoot()
         {
             if (this->gc) {
                 this->gc->roots.pop_back();
@@ -180,6 +180,118 @@ namespace Katsu
         inline Value* operator->()
         {
             return &this->root;
+        }
+
+    private:
+        GC* gc;
+        Value root;
+    };
+
+    template <typename T> class Root
+    {
+        static_assert(!std::is_same_v<Object, T> && std::is_base_of_v<Object, T>);
+
+    public:
+        Root(GC& _gc, T*&& value)
+            : gc(&_gc)
+            , root(Value::object(value))
+        {
+            if (!value) {
+                throw std::logic_error("attempted to create Root from nullptr");
+            }
+            gc->roots.push_back(&this->root);
+            value = nullptr;
+        }
+
+        Root(Root<T>&) = delete;
+
+        Root(Root<T>&& from)
+            : gc(from.gc)
+            , root(from.root)
+        {
+            from.gc = nullptr;
+            from.root = Value::null();
+        }
+
+        ~Root()
+        {
+            if (this->gc) {
+                this->gc->roots.pop_back();
+            }
+        }
+
+        inline Value value()
+        {
+            return this->root;
+        }
+
+        inline T* operator*()
+        {
+            return this->root.template value<Object*>()->template object<T*>();
+        }
+
+        inline T* operator->()
+        {
+            return this->root.template value<Object*>()->template object<T*>();
+        }
+
+    private:
+        GC* gc;
+        Value root;
+    };
+
+    template <typename T> class OptionalRoot
+    {
+        static_assert(!std::is_same_v<Object, T> && std::is_base_of_v<Object, T>);
+
+    public:
+        OptionalRoot(GC& _gc, T*&& value)
+            : gc(&_gc)
+            , root(value ? Value::object(value) : Value::null())
+        {
+            gc->roots.push_back(&this->root);
+            value = nullptr;
+        }
+
+        OptionalRoot(OptionalRoot<T>&) = delete;
+
+        OptionalRoot(OptionalRoot<T>&& from)
+            : gc(from.gc)
+            , root(from.root)
+        {
+            from.gc = nullptr;
+            from.root = Value::null();
+        }
+
+        ~OptionalRoot()
+        {
+            if (this->gc) {
+                this->gc->roots.pop_back();
+            }
+        }
+
+        inline Value value()
+        {
+            return this->root;
+        }
+
+        inline operator bool()
+        {
+            return !this->root.is_null();
+        }
+
+        inline T* operator*()
+        {
+            return (bool)this ? this->root.template value<Object*>()->template object<T*>()
+                              : nullptr;
+        }
+
+        inline T* operator->()
+        {
+            if (!(bool)this) {
+                throw std::logic_error("dereferencing null OptionalRoot!");
+            }
+            return this->root.template value<Object*>()->template object<T*>();
         }
 
     private:

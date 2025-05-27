@@ -150,7 +150,7 @@ namespace Katsu
         VM(GC& gc, uint64_t call_stack_size);
         ~VM();
 
-        Value eval_toplevel(Value v_code);
+        Value eval_toplevel(Code* code);
 
         void visit_roots(std::function<void(Value*)>& visitor) override;
 
