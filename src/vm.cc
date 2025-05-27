@@ -40,17 +40,16 @@ namespace Katsu
         // TODO: scan stack frames to add roots
     }
 
-    Value VM::eval_toplevel(Code* code)
+    ValueRoot VM::eval_toplevel(Root<Code>& r_code)
     {
         if (this->current_frame) {
             throw std::logic_error("shouldn't already have a call frame if eval-ing at top level");
         }
 
-        if (code->v_insts.obj_array()->length == 0) {
+        if (r_code->v_insts.obj_array()->length == 0) {
             throw std::invalid_argument("code must not be empty");
         }
 
-        Root<Code> r_code(this->gc, std::move(code));
         uint32_t code_num_regs = r_code->num_regs;
         uint32_t code_num_data = r_code->num_data;
 
@@ -88,7 +87,7 @@ namespace Katsu
                 if (finished_instructions && no_cleanup) {
                     Value v_return_value = this->current_frame->data()[0];
                     this->current_frame = nullptr;
-                    return v_return_value;
+                    return ValueRoot(gc, std::move(v_return_value));
                 }
             }
             single_step();

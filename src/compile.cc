@@ -382,7 +382,7 @@ namespace Katsu
         */
     }
 
-    Code* compile_module(GC& gc, Module* base,
+    Code* compile_module(GC& gc, OptionalRoot<Module>& base,
                          std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
         // TODO: for future -- first find all multimethod definitions, add them to scope (with

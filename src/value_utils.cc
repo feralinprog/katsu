@@ -11,12 +11,6 @@ namespace Katsu
         return ref;
     }
 
-    Ref* make_ref(GC& gc, Value v_ref)
-    {
-        ValueRoot r_ref(gc, std::move(v_ref));
-        return make_ref(gc, r_ref);
-    }
-
     Tuple* make_tuple(GC& gc, uint64_t length)
     {
         Tuple* tuple = make_tuple_nofill(gc, length);
@@ -83,12 +77,6 @@ namespace Katsu
         return module;
     }
 
-    Module* make_module(GC& gc, Module* base, uint64_t capacity)
-    {
-        OptionalRoot<Module> r_base(gc, std::move(base));
-        return make_module(gc, r_base, capacity);
-    }
-
     String* make_string(GC& gc, const std::string& src)
     {
         size_t length = src.size();
@@ -112,29 +100,12 @@ namespace Katsu
         return code;
     }
 
-    Code* make_code(GC& gc, Module* module, uint32_t num_regs, uint32_t num_data, Array* upreg_map,
-                    Array* insts, Array* args)
-    {
-        Root<Module> r_module(gc, std::move(module));
-        OptionalRoot<Array> r_upreg_map(gc, std::move(upreg_map));
-        Root<Array> r_insts(gc, std::move(insts));
-        Root<Array> r_args(gc, std::move(args));
-        return make_code(gc, r_module, num_regs, num_data, r_upreg_map, r_insts, r_args);
-    }
-
     Closure* make_closure(GC& gc, Root<Code>& r_code, Root<Array>& r_upregs)
     {
         Closure* closure = gc.alloc<Closure>();
         closure->v_code = r_code.value();
         closure->v_upregs = r_upregs.value();
         return closure;
-    }
-
-    Closure* make_closure(GC& gc, Code* code, Array* upregs)
-    {
-        Root<Code> r_code(gc, std::move(code));
-        Root<Array> r_upregs(gc, std::move(upregs));
-        return make_closure(gc, r_code, r_upregs);
     }
 
     Method* make_method(GC& gc, ValueRoot& r_param_matchers, OptionalRoot<Type>& r_return_type,
@@ -164,21 +135,6 @@ namespace Katsu
         return method;
     }
 
-    Method* make_method(GC& gc, Value v_param_matchers, Type* return_type, Code* code,
-                        Vector* attributes, NativeHandler native_handler)
-    {
-        ValueRoot r_param_matchers(gc, std::move(v_param_matchers));
-        OptionalRoot<Type> r_return_type(gc, std::move(return_type));
-        OptionalRoot<Code> r_code(gc, std::move(code));
-        Root<Vector> r_attributes(gc, std::move(attributes));
-        return make_method(gc,
-                           r_param_matchers,
-                           r_return_type,
-                           r_code,
-                           r_attributes,
-                           native_handler);
-    }
-
     MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, Root<Vector>& r_methods,
                                   Root<Vector>& r_attributes)
     {
@@ -188,14 +144,6 @@ namespace Katsu
         multimethod->v_methods = r_methods.value();
         multimethod->v_attributes = r_attributes.value();
         return multimethod;
-    }
-
-    MultiMethod* make_multimethod(GC& gc, String* name, Vector* methods, Vector* attributes)
-    {
-        Root<String> r_name(gc, std::move(name));
-        Root<Vector> r_methods(gc, std::move(methods));
-        Root<Vector> r_attributes(gc, std::move(attributes));
-        return make_multimethod(gc, r_name, r_methods, r_attributes);
     }
 
     Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
@@ -227,17 +175,6 @@ namespace Katsu
         return type;
     }
 
-    Type* make_type(GC& gc, String* name, Vector* bases, bool sealed, Vector* linearization,
-                    Vector* subtypes, Type::Kind kind, Vector* slots)
-    {
-        Root<String> r_name(gc, std::move(name));
-        Root<Vector> r_bases(gc, std::move(bases));
-        Root<Vector> r_linearization(gc, std::move(linearization));
-        Root<Vector> r_subtypes(gc, std::move(subtypes));
-        OptionalRoot<Vector> r_slots(gc, std::move(slots));
-        return make_type(gc, r_name, r_bases, sealed, r_linearization, r_subtypes, kind, r_slots);
-    }
-
     DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type)
     {
         Type* type = *r_type;
@@ -249,12 +186,6 @@ namespace Katsu
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
         inst->v_type = r_type.value();
         return inst;
-    }
-
-    DataclassInstance* make_instance_nofill(GC& gc, Type* type)
-    {
-        Root<Type> r_type(gc, std::move(type));
-        return make_instance_nofill(gc, r_type);
     }
 
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value)
@@ -287,13 +218,6 @@ namespace Katsu
 
         vector->v_array.obj_array()->components()[vector->length++] = *r_value;
         return vector;
-    }
-
-    Vector* append(GC& gc, Vector* vector, Value v_value)
-    {
-        Root<Vector> r_vector(gc, std::move(vector));
-        ValueRoot r_value(gc, std::move(v_value));
-        return append(gc, r_vector, r_value);
     }
 
     // TODO: handle as part of Module cleanup.

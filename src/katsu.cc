@@ -164,10 +164,10 @@ namespace Katsu
 
             std::vector<std::unique_ptr<Expr>> top_level_exprs;
             top_level_exprs.emplace_back(std::move(top_level_expr));
-            Code* code = compile_module(gc, *r_module, top_level_exprs);
-            Value result = vm.eval_toplevel(code);
-            std::cout << "EVALUATION RESULT: tag=" << tag_str(result.tag())
-                      << ", raw=" << result.raw_value() << "(0x" << std::hex << result.raw_value()
+            Root<Code> code(gc, compile_module(gc, r_module, top_level_exprs));
+            ValueRoot result = vm.eval_toplevel(code);
+            std::cout << "EVALUATION RESULT: tag=" << tag_str(result->tag())
+                      << ", raw=" << result->raw_value() << "(0x" << std::hex << result->raw_value()
                       << std::dec << ")\n";
 
             // Ratchet past any semicolons and newlines, since the parser explicitly stops

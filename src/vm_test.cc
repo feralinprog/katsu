@@ -21,7 +21,8 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
 
     // Perform a simple LOAD_VALUE.
 
-    Root<Module> r_module(gc, make_module(gc, /* base */ nullptr, /* capacity */ 0));
+    OptionalRoot<Module> r_module_base(gc, nullptr);
+    Root<Module> r_module(gc, make_module(gc, /* base */ r_module_base, /* capacity */ 0));
 
     OptionalRoot<Array> r_upreg_map(gc, nullptr);
 
@@ -42,12 +43,12 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
                                 /* r_insts */ r_insts,
                                 /* r_args */ r_args));
 
-    Value v_result = vm.eval_toplevel(*r_code);
-    CHECK(v_result == Value::fixnum(1234));
+    ValueRoot r_result = vm.eval_toplevel(r_code);
+    CHECK(*r_result == Value::fixnum(1234));
 
     // Evaluate again -- VM should be able to handle this easily.
-    v_result = vm.eval_toplevel(*r_code);
-    CHECK(v_result == Value::fixnum(1234));
+    ValueRoot r_result_2 = vm.eval_toplevel(r_code);
+    CHECK(*r_result_2 == Value::fixnum(1234));
 }
 
 Value test__fixnum_add(VM& vm, int64_t num_args, Value* args)
@@ -99,7 +100,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                                                      /* r_methods */ r_methods,
                                                      /* r_attributes */ r_multimethod_attributes));
 
-    Root<Module> r_module(gc, make_module(gc, /* base */ nullptr, /* capacity */ 1));
+    OptionalRoot<Module> r_module_base(gc, nullptr);
+    Root<Module> r_module(gc, make_module(gc, /* base */ r_module_base, /* capacity */ 1));
     r_module->length = 1;
     r_module->entries()[0].v_key = r_method_name.value();
     r_module->entries()[0].v_value = r_multimethod.value();
@@ -131,6 +133,6 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                                 /* r_insts */ r_insts,
                                 /* r_args */ r_args));
 
-    Value v_result = vm.eval_toplevel(*r_code);
-    CHECK(v_result == Value::fixnum(15));
+    ValueRoot r_result = vm.eval_toplevel(r_code);
+    CHECK(*r_result == Value::fixnum(15));
 }

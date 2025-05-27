@@ -13,13 +13,4 @@ TEST_CASE("make_ref - roots", "[value-utils]")
     CHECK(string_eq(ref->v_ref.obj_string(), "pointee"));
 }
 
-TEST_CASE("make_ref - values", "[value-utils]")
-{
-    GC gc(1024 * 1024);
-
-    String* string = make_string(gc, "pointee");
-    Ref* ref = make_ref(gc, Value::object(string));
-    CHECK(string_eq(ref->v_ref.obj_string(), "pointee"));
-}
-
 // TODO: test the rest
