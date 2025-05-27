@@ -277,18 +277,17 @@ namespace Katsu
 
         inline operator bool()
         {
-            return !this->root.is_null();
+            return this->root.is_object();
         }
 
         inline T* operator*()
         {
-            return (bool)this ? this->root.template value<Object*>()->template object<T*>()
-                              : nullptr;
+            return *this ? this->root.template value<Object*>()->template object<T*>() : nullptr;
         }
 
         inline T* operator->()
         {
-            if (!(bool)this) {
+            if (!*this) {
                 throw std::logic_error("dereferencing null OptionalRoot!");
             }
             return this->root.template value<Object*>()->template object<T*>();
