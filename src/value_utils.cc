@@ -244,9 +244,7 @@ namespace Katsu
         uint64_t name_length = name->length;
         // TODO: check against size_t?
 
-        Value v_module = Value::object(module);
-        while (!v_module.is_null()) {
-            Module* module = v_module.obj_module();
+        while (module) {
             uint64_t num_entries = module->length;
             for (uint64_t i = 0; i < num_entries; i++) {
                 Module::Entry& entry = module->entries()[i];
@@ -260,7 +258,7 @@ namespace Katsu
                 // Match!
                 return &entry.v_value;
             }
-            v_module = module->v_base;
+            module = module->v_base.is_null() ? nullptr : module->v_base.obj_module();
         }
 
         return nullptr;
