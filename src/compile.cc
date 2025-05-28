@@ -418,8 +418,17 @@ namespace Katsu
                                     r_upreg_map,
                                     r_insts,
                                     r_args));
-        Scope scope = {.bindings = {},
-                       .base = nullptr}; // TODO: add param names as (immutable) bindings
+        Scope scope = {.bindings = {}, .base = nullptr};
+        // Add param names as (immutable) bindings.
+        int spot = 0;
+        for (const std::string& param_name : param_names) {
+            scope.bindings.emplace(param_name,
+                                   Scope::Binding{
+                                       .name = param_name,
+                                       ._mutable = false,
+                                       .spot = spot++,
+                                   });
+        }
         compile_expr(gc, r_code, scope, *body);
 
         // Generate the method.
@@ -448,8 +457,8 @@ namespace Katsu
     Code* compile_module(GC& gc, OptionalRoot<Module>& base,
                          std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
-        // TODO: for future -- first find all multimethod definitions, add them to scope (with
-        // zero methods defined), and then go and compile everything.
+        // TODO: for future -- first find all multimethod definitions, add them to module (with zero
+        // methods defined), and then go and compile everything.
 
         Root<Module> r_module(gc, make_module(gc, base, /* capacity */ 0));
         // `base` must be assumed to be an invalid pointer now.
@@ -499,7 +508,8 @@ namespace Katsu
                     continue;
                 }
             }
-            // TODO: keep scope across top level exprs? or do it at code->module level?
+            // Lexical state is maintained through the under-construction module. Each module
+            // top-level expression gets the same empty scope on top.
             Scope scope = {.bindings = {}, .base = nullptr};
             compile_expr(gc, r_top_level_code, scope, *top_level_expr);
         }
