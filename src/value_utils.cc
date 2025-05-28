@@ -220,24 +220,24 @@ namespace Katsu
         return vector;
     }
 
-    // TODO: handle as part of Module cleanup.
-    // void append(GC& gc, Module* module, String* name, ValueRoot& r_value)
-    // {
-    //     if (module->length == module->capacity) {
-    //         // Reallocate!
-    //         // TODO: grow more slowly? modules probably don't need 2x growth, maaaaybe 1.5
-    //         uint64_t new_capacity = module->capacity == 0 ? 1 : module->capacity * 2;
-    //         Module* new_module = make_module(gc, module->v_base, new_capacity);
-    //         for (uint64_t i = 0; i < module->length; i++) {
-    //             new_module->entries()[i] = module->entries()[i];
-    //         }
-    //         // TODO: need to do similar thing to vectors, which have distinct backing array
-    //         module = new_module;
-    //     }
-    //     Module::Entry& entry = module->entries()[module->length++];
-    //     entry.v_key = Value::object(name);
-    //     entry.v_value = v_value;
-    // }
+    void append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value)
+    {
+        throw std::logic_error("module append not implemented");
+        // if (module->length == module->capacity) {
+        //     // Reallocate!
+        //     // TODO: grow more slowly? modules probably don't need 2x growth, maaaaybe 1.5
+        //     uint64_t new_capacity = module->capacity == 0 ? 1 : module->capacity * 2;
+        //     Module* new_module = make_module(gc, module->v_base, new_capacity);
+        //     for (uint64_t i = 0; i < module->length; i++) {
+        //         new_module->entries()[i] = module->entries()[i];
+        //     }
+        //     // TODO: need to do similar thing to vectors, which have distinct backing array
+        //     module = new_module;
+        // }
+        // Module::Entry& entry = module->entries()[module->length++];
+        // entry.v_key = Value::object(name);
+        // entry.v_value = v_value;
+    }
 
     Value* module_lookup(Module* module, String* name)
     {
@@ -283,5 +283,50 @@ namespace Katsu
             return false;
         }
         return memcmp(a->contents(), b.c_str(), b_length) == 0;
+    }
+
+    String* concat(GC& gc, const std::vector<std::string>& parts)
+    {
+        size_t total_len = 0;
+        for (const std::string& part : parts) {
+            total_len += part.size();
+        }
+
+        String* cat = gc.alloc<String>(total_len);
+        cat->length = total_len;
+
+        size_t offset = 0;
+        for (const std::string& part : parts) {
+            const size_t part_size = part.size();
+            memcpy(cat->contents() + offset, part.c_str(), part_size);
+            offset += part_size;
+        }
+
+        return cat;
+    }
+
+    String* concat_with_suffix(GC& gc, const std::vector<std::string>& parts,
+                               const std::string& each_suffix)
+    {
+        size_t suffix_size = each_suffix.size();
+
+        size_t total_len = 0;
+        for (const std::string& part : parts) {
+            total_len += part.size() + suffix_size;
+        }
+
+        String* cat = gc.alloc<String>(total_len);
+        cat->length = total_len;
+
+        size_t offset = 0;
+        for (const std::string& part : parts) {
+            const size_t part_size = part.size();
+            memcpy(cat->contents() + offset, part.c_str(), part_size);
+            offset += part_size;
+            memcpy(cat->contents() + offset, each_suffix.c_str(), suffix_size);
+            offset += suffix_size;
+        }
+
+        return cat;
     }
 };

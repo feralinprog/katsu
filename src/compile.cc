@@ -52,10 +52,8 @@ namespace Katsu
         return nullptr;
     }
 
-    void compile_expr(GC& gc, Root<Code>& r_code, Expr& _expr)
+    void compile_expr(GC& gc, Root<Code>& r_code, Scope& scope, Expr& _expr)
     {
-        Scope scope = {.bindings = {}, .base = nullptr};
-
         auto module = [&r_code]() -> Module* { return r_code->v_module.obj_module(); };
 
         auto emit_op = [](OpCode op) -> void {};
@@ -69,7 +67,7 @@ namespace Katsu
                 // should show the source of the issue, i.e. expr.op.span
                 throw std::invalid_argument("unknown module name, cannot invoke unaryop");
             }
-            compile_expr(gc, r_code, *expr->arg);
+            compile_expr(gc, r_code, scope, *expr->arg);
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
             emit_arg(r_name.value());
@@ -82,8 +80,8 @@ namespace Katsu
                 // should show the source of the issue, i.e. expr.op.span
                 throw std::invalid_argument("unknown module name, cannot invoke binaryop");
             }
-            compile_expr(gc, r_code, *expr->left);
-            compile_expr(gc, r_code, *expr->right);
+            compile_expr(gc, r_code, scope, *expr->left);
+            compile_expr(gc, r_code, scope, *expr->right);
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
             emit_arg(r_name.value());
@@ -148,7 +146,7 @@ namespace Katsu
                 // should show the source of the issue, i.e. expr.message.span
                 throw std::invalid_argument("unknown module name, cannot invoke unary-message");
             }
-            compile_expr(gc, r_code, *expr->target);
+            compile_expr(gc, r_code, scope, *expr->target);
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
             emit_arg(r_name.value());
@@ -193,7 +191,7 @@ namespace Katsu
                             throw std::invalid_argument(
                                 "setting mutable variable requires no target");
                         }
-                        compile_expr(gc, r_code, *expr->args[0]);
+                        compile_expr(gc, r_code, scope, *expr->args[0]);
                         // STORE_REF: <local index>
                         emit_op(OpCode::STORE_REF);
                         emit_arg(Value::fixnum(local.spot));
@@ -212,7 +210,7 @@ namespace Katsu
             }
 
             if (expr->target) {
-                compile_expr(gc, r_code, *expr->target.value());
+                compile_expr(gc, r_code, scope, *expr->target.value());
             } else {
                 // Load the default receiver, which is always register 0.
                 // LOAD_REG: <local index>
@@ -220,14 +218,14 @@ namespace Katsu
                 emit_arg(Value::fixnum(0));
             }
             for (const std::unique_ptr<Expr>& arg : expr->args) {
-                compile_expr(gc, r_code, *arg);
+                compile_expr(gc, r_code, scope, *arg);
             }
             // INVOKE: <name>, <num args>
             emit_op(OpCode::INVOKE);
             emit_arg(r_name.value());
             emit_arg(Value::fixnum(expr->args.size()));
         } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
-            compile_expr(gc, r_code, *expr->inner);
+            compile_expr(gc, r_code, scope, *expr->inner);
         } else if (BlockExpr* expr = dynamic_cast<BlockExpr*>(&_expr)) {
             // TODO: use make_code() instead.
             Code* block_code = gc.alloc<Code>();
@@ -248,7 +246,7 @@ namespace Katsu
             throw std::logic_error("not implemented yet");
         } else if (DataExpr* expr = dynamic_cast<DataExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
-                compile_expr(gc, r_code, *component);
+                compile_expr(gc, r_code, scope, *component);
             }
             // MAKE_VECTOR: <num components>
             emit_op(OpCode::MAKE_VECTOR);
@@ -265,14 +263,14 @@ namespace Katsu
             // Drop all but the last component's result.
             for (size_t i = 0; i < expr->components.size(); i++) {
                 bool last = i == expr->components.size() - 1;
-                compile_expr(gc, r_code, *expr->components[i]);
+                compile_expr(gc, r_code, scope, *expr->components[i]);
                 if (!last) {
                     emit_op(OpCode::DROP);
                 }
             }
         } else if (TupleExpr* expr = dynamic_cast<TupleExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
-                compile_expr(gc, r_code, *component);
+                compile_expr(gc, r_code, scope, *component);
             }
             // MAKE_TUPLE: <num components>
             emit_op(OpCode::MAKE_TUPLE);
@@ -282,15 +280,9 @@ namespace Katsu
         }
     }
 
-    void compile_expr(GC& gc, Code* code, Expr& expr)
-    {
-        Root<Code> r_code(gc, std::move(code));
-        compile_expr(gc, r_code, expr);
-    }
-
     // receiver, attrs are optional
-    void compile_method(GC& gc, Module* module, const std::string& message, SourceSpan& span,
-                        Expr* receiver, Expr& decl, Expr& body, Expr* attrs)
+    void compile_method(GC& gc, Root<Module>& r_module, const std::string& message,
+                        SourceSpan& span, Expr* receiver, Expr& _decl, Expr& _body, Expr* attrs)
     {
         if (receiver) {
             std::stringstream ss;
@@ -298,88 +290,159 @@ namespace Katsu
             throw std::invalid_argument(ss.str());
         }
 
-        while (ParenExpr* p = dynamic_cast<ParenExpr*>(&decl)) {
-            decl = *p->inner;
+        Expr* decl = &_decl;
+
+        while (ParenExpr* p = dynamic_cast<ParenExpr*>(decl)) {
+            decl = p->inner.get();
         }
 
-        if (BlockExpr* b = dynamic_cast<BlockExpr*>(&decl)) {
+        if (BlockExpr* b = dynamic_cast<BlockExpr*>(decl)) {
             if (!b->parameters.empty()) {
                 std::stringstream ss;
                 ss << "" << message << " 'declaration' argument should not specify any parameters";
                 throw std::invalid_argument(ss.str());
             }
-            decl = *b->body;
+            decl = b->body.get();
         } else {
             throw std::logic_error("non-block decls for method:does: not yet implemented");
         }
 
-        if (NameExpr* n = dynamic_cast<NameExpr*>(&decl)) {
+        std::vector<std::string> method_name_parts{};
+        std::vector<std::string> param_names{};
+        // TODO: param matchers
+
+        auto add_param_name_and_matcher = [&param_names](Expr& param_decl,
+                                                         const std::string& error_msg) -> void {
+            if (NameExpr* d = dynamic_cast<NameExpr*>(&param_decl)) {
+                param_names.push_back(std::get<std::string>(d->name.value));
+                // TODO: add an any-matcher
+                return;
+            } else if (ParenExpr* d = dynamic_cast<ParenExpr*>(&param_decl)) {
+                if (NAryMessageExpr* n = dynamic_cast<NAryMessageExpr*>(d->inner.get())) {
+                    if (!n->target && n->messages.size() == 1) {
+                        param_names.push_back(std::get<std::string>(n->messages[0].value));
+                        // TODO: param matcher, from n->args[0]
+                        return;
+                    }
+                }
+            }
+            throw std::invalid_argument(error_msg);
+        };
+
+        if (NameExpr* d = dynamic_cast<NameExpr*>(decl)) {
+            method_name_parts.push_back(std::get<std::string>(d->name.value));
+            param_names.push_back("self");
+            // TODO: add an any-matcher
+        } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
+            std::stringstream ss;
+            ss << "When the " << message << "'declaration' argument is a unary message, "
+               << "it must be a simple unary message of the form [target-name message-name] "
+               << "or else a unary message of the form [(target-name: matcher) message-name]";
+            const std::string& error_msg = ss.str();
+            add_param_name_and_matcher(*d->target, error_msg);
+        } else if (NAryMessageExpr* d = dynamic_cast<NAryMessageExpr*>(decl)) {
+            std::stringstream ss;
+            ss << "When the " << message
+               << "'declaration' argument is an n-ary message, it must be a simple n-ary message "
+               << "of the form "
+               << "[target-name message: param-name ...] "
+               << "or else an n-ary message of the form "
+               << "[(target-name: matcher) message: (param-name: matcher) ...] "
+               << "(the target-name is optional, as is each parameter matcher declaration)";
+            const std::string& error_msg = ss.str();
+
+            if (d->target) {
+                add_param_name_and_matcher(**d->target, error_msg);
+            } else {
+                param_names.push_back("self");
+                // TODO: add an any-matcher
+            }
+
+            for (const std::unique_ptr<Expr>& arg : d->args) {
+                add_param_name_and_matcher(*arg, error_msg);
+            }
+        } else {
+            // TODO: allow unary / binary ops too
+            std::stringstream ss;
+            ss << message << " 'declaration' argument should be a name or message";
+            throw std::invalid_argument(ss.str());
         }
 
-        /*
-            if isinstance(decl, NameExpr):
-                message = decl.name.value
-                param_names = ["self"]
-                param_matchers = [ParameterAnyMatcher()]
-            elif isinstance(decl, UnaryMessageExpr):
-                format_msg = (
-                    f"When the {message} 'declaration' argument is a unary message, "
-                    "it must be a simple unary message of the form [target-name message-name] "
-                    "or else a unary message of the form [(target-name: matcher) message-name]"
-                )
-                message = decl.message.value
-                param_name, param_matcher = param_name_and_matcher(decl.target, format_msg)
-                param_names = [param_name]
-                param_matchers = [param_matcher]
-            elif isinstance(decl, NAryMessageExpr):
-                format_msg = (
-                    f"When the {message} 'declaration' argument is an n-ary message, "
-                    "it must be a simple n-ary message of the form [target-name message: param-name
-           ...] " "or else an n-ary message of the form [(target-name: matcher) message:
-           (param-name: matcher) ...] "
-                    "(the target-name is optional, as is each parameter matcher declaration)"
-                )
-                message = "".join(message.value + ":" for message in decl.messages)
-                param_names = []
-                param_matchers = []
+        Root<String> r_method_name(gc, concat_with_suffix(gc, method_name_parts, ":"));
 
-                if decl.target:
-                    param_name, param_matcher = param_name_and_matcher(decl.target, format_msg)
-                    param_names.append(param_name)
-                    param_matchers.append(param_matcher)
-                else:
-                    param_names.append("self")
-                    param_matchers.append(ParameterAnyMatcher())
+        Expr* body;
+        if (BlockExpr* b = dynamic_cast<BlockExpr*>(&_body)) {
+            if (!b->parameters.empty()) {
+                std::stringstream ss;
+                ss << message << "'body' argument should not specify any parameters";
+                throw std::invalid_argument(ss.str());
+            }
+            body = b->body.get();
+        } else {
+            std::stringstream ss;
+            ss << message << "'body' argument should be a block";
+            throw std::invalid_argument(ss.str());
+        }
 
-                for arg in decl.args:
-                    param_name, param_matcher = param_name_and_matcher(arg, format_msg)
-                    param_names.append(param_name)
-                    param_matchers.append(param_matcher)
-            else:
-                # TODO: allow unary / binary ops too
-                raise ValueError(
-                    f"{message} 'declaration' argument should be a name or message; got {decl}"
-                )
+        MultiMethod* multimethod;
+        {
+            Value* existing = module_lookup(*r_module, *r_method_name);
+            if (existing) {
+                if (existing->is_obj_multimethod()) {
+                    multimethod = existing->obj_multimethod();
+                } else {
+                    throw std::invalid_argument("method name is already defined in the current "
+                                                "context, but not as a multimethod");
+                }
+            } else {
+                // We know we're about to add at least one method!
+                Root<Vector> r_methods(gc, make_vector(gc, 1));
+                Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                multimethod = make_multimethod(gc, r_method_name, r_methods, r_attributes);
+                ValueRoot r_multimethod(gc, Value::object(multimethod));
+                append(gc, r_module, r_method_name, r_multimethod);
+                multimethod = r_multimethod->obj_multimethod();
+            }
+        }
+        Root<MultiMethod> r_multimethod(gc, std::move(multimethod));
 
-            # Fill in the body and context, then define the method.
-            if not isinstance(body, QuoteExpr):
-                raise ValueError(f"{message} 'body' argument should be a quote")
-            if body.parameters:
-                raise ValueError(f"{message} 'body' argument should not specify any parameters")
+        // Compile the body.
+        OptionalRoot<Array> r_upreg_map(gc, nullptr); // not a closure!
+        Root<Array> r_insts(gc, make_array(gc, 0));
+        Root<Array> r_args(gc, make_array(gc, 0));
+        Root<Code> r_code(gc,
+                          make_code(gc,
+                                    r_module,
+                                    /* num_regs */ 0,
+                                    /* num_data */ 0,
+                                    r_upreg_map,
+                                    r_insts,
+                                    r_args));
+        Scope scope = {.bindings = {},
+                       .base = nullptr}; // TODO: add param names as (immutable) bindings
+        compile_expr(gc, r_code, scope, *body);
 
-            inline = False
-            tail_recursive = False
-            if attrs:
-                if not isinstance(attrs, DataExpr):
-                    raise ValueError(f"{message} 'attrs' argument should be a vector")
-                for attr in attrs.components:
-                    if isinstance(attr, NameExpr) and attr.name.value == "+inline":
-                        inline = True
-                    elif isinstance(attr, NameExpr) and attr.name.value == "+tail-recursive":
-                        tail_recursive = True
-                    else:
-                        raise ValueError(f"Unknown method attribute: '{attr}'.")
-        */
+        // Generate the method.
+        ValueRoot r_param_matchers(gc, Value::null()); // TODO
+        OptionalRoot<Type> r_return_type(gc, nullptr); // TODO: support return types for methods
+        Code* code = *r_code;
+        OptionalRoot<Code> r_opt_code(gc, std::move(code));
+        Root<Vector> r_attributes(gc, make_vector(gc, 0)); // TODO: support attributes for methods
+        NativeHandler native_handler = nullptr;            // not a native handler
+        ValueRoot r_method(gc,
+                           Value::object(make_method(gc,
+                                                     r_param_matchers,
+                                                     r_return_type,
+                                                     r_opt_code,
+                                                     r_attributes,
+                                                     native_handler)));
+
+        Root<Vector> r_methods(gc, r_multimethod->v_methods.obj_vector());
+        // TODO: refactor into util function to add to multimethod. Need to do other things like:
+        // * roll up method inlining to multimethod inline-dispatch
+        // * check for duplicate signatures
+        // * sort methods / generate decision tree
+        append(gc, r_methods, r_method);
     }
 
     Code* compile_module(GC& gc, OptionalRoot<Module>& base,
@@ -411,7 +474,7 @@ namespace Katsu
                     std::get<std::string>(expr->messages[0].value) == "method" &&
                     std::get<std::string>(expr->messages[1].value) == "does") {
                     compile_method(gc,
-                                   *r_module,
+                                   r_module,
                                    "method:does:",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
@@ -426,7 +489,7 @@ namespace Katsu
 
                 ) {
                     compile_method(gc,
-                                   *r_module,
+                                   r_module,
                                    "method:does:",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
@@ -436,7 +499,9 @@ namespace Katsu
                     continue;
                 }
             }
-            compile_expr(gc, *r_top_level_code, *top_level_expr);
+            // TODO: keep scope across top level exprs? or do it at code->module level?
+            Scope scope = {.bindings = {}, .base = nullptr};
+            compile_expr(gc, r_top_level_code, scope, *top_level_expr);
         }
 
         return *r_top_level_code;

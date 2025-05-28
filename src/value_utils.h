@@ -51,9 +51,8 @@ namespace Katsu
     // For convenience, this returns a pointer to the resulting Vector (which may have been moved
     // due to reallocation).
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value);
-    // TODO: handle as part of Module cleanup.
-    // // Append a key/value pair to a module, reallocating if necessary to expand the module.
-    // void append(GC& gc, Module* module, String* name, Value v_value);
+    // Append a key/value pair to a module, reallocating if necessary to expand the module.
+    void append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value);
 
     // Looks up a module entry by name, following the module's v_base until reaching null.
     // Returns a pointer into the relevant Module::Entry value, or nullptr if not found.
@@ -63,4 +62,10 @@ namespace Katsu
     bool string_eq(String* a, String* b);
     // Determine if a String and string are equal, i.e. have the same contents.
     bool string_eq(String* a, const std::string& b);
+
+    // Concatenate all the given strings.
+    String* concat(GC& gc, const std::vector<std::string>& parts);
+    // Concate all the given strings (each with a given suffix applied -- commonly ":").
+    String* concat_with_suffix(GC& gc, const std::vector<std::string>& parts,
+                               const std::string& each_suffix);
 };
