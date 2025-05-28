@@ -8,6 +8,9 @@ namespace Katsu
     // Move this all to Value...
     // just declare class GC;
 
+    // TODO: make all these just return Roots in the first place... maybe have separate (e.g.)
+    // make_ref_ptr for raw pointer results.
+
     // Make a Ref with the desired v_ref.
     Ref* make_ref(GC& gc, ValueRoot& r_ref);
     // Make a Tuple of the given length, filled with nulls.
