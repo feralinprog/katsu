@@ -611,7 +611,8 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::METHOD;
 
-        Value v_param_matchers; // TODO how to represent this?? vector of any / type / value
+        Value v_param_matchers; // TODO how to represent this?? vector of any (Null) / type (Type) /
+                                // value (... Ref!)
         Value v_return_type;    // Type or Null
         Value v_code;           // Code, or Null if referring to a native method
         // Arbitrary extra values attached by user.
