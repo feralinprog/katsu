@@ -38,6 +38,9 @@
 #if DEBUG_GC_LOG
 #include <iostream>
 #endif
+#if DEBUG_GC_FILL
+#include <cstring>
+#endif
 
 namespace Katsu
 {
@@ -117,11 +120,7 @@ namespace Katsu
             std::cout << "GC: allocated @" << reinterpret_cast<void*>(allocation) << "\n";
 #endif
 #if DEBUG_GC_FILL
-            for (uint32_t* w = reinterpret_cast<uint32_t*>(&this->mem[spot]);
-                 w < reinterpret_cast<uint32_t*>(&this->mem[spot + size]);
-                 w++) {
-                *w = 0xFEEDBEEF;
-            }
+            memset((void*)allocation, 0x42, size);
 #endif
             return allocation;
         }

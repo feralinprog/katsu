@@ -27,6 +27,11 @@ namespace Katsu
         if (!this->mem_opp) {
             throw std::bad_alloc();
         }
+
+#if DEBUG_GC_FILL
+        memset(this->mem, 0x42, this->size);
+        memset(this->mem_opp, 0x42, this->size);
+#endif
     }
 
     GC::~GC()
@@ -326,6 +331,9 @@ namespace Katsu
             throw std::bad_alloc();
         }
         free(old_mem_opp);
+#if DEBUG_GC_FILL
+        memset(this->mem_opp, 0x42, this->size);
+#endif
 #endif
         this->spot = queue - this->mem;
 #if DEBUG_GC_LOG

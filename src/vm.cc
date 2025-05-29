@@ -63,7 +63,7 @@ namespace Katsu
         }
 
         // Help with debugging.
-        std::memset(next_frame_mem, 0x1234ABCD, next_frame_size);
+        std::memset(next_frame_mem, 0x56, next_frame_size);
 
         auto frame = reinterpret_cast<Frame*>(next_frame_mem);
         frame->v_code = r_code.value();
@@ -307,7 +307,7 @@ namespace Katsu
             }
 
             // Help with debugging.
-            std::memset(next_frame_mem, 0x1234ABCD, next_frame_size);
+            std::memset(next_frame_mem, 0x56, next_frame_size);
 
             auto frame = reinterpret_cast<Frame*>(next_frame_mem);
             frame->v_code = method->v_code;
