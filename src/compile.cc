@@ -202,6 +202,45 @@ namespace Katsu
                     // make it mutable?".
                 }
             }
+            // TODO: handle this as a builtin within the module.
+            if (expr->messages.size() == 1 &&
+                (std::get<std::string>(expr->messages[0].value) == "let" ||
+                 std::get<std::string>(expr->messages[0].value) == "mut")) {
+                bool _mutable = std::get<std::string>(expr->messages[0].value) == "mut";
+                if (expr->target) {
+                    throw std::invalid_argument("let: / mut: require no target");
+                }
+                if (BinaryOpExpr* b = dynamic_cast<BinaryOpExpr*>(expr->args[0].get())) {
+                    if (std::get<std::string>(b->op.value) == "=") {
+                        if (NameExpr* n = dynamic_cast<NameExpr*>(b->left.get())) {
+                            const std::string& name = std::get<std::string>(n->name.value);
+                            Root<String> r_name(gc, make_string(gc, name));
+                            if (_mutable && scope_lookup(scope, *r_name)) {
+                                // TODO: maybe just allow?
+                                throw std::invalid_argument(
+                                    "cannot shadow mut: binding with another mut: binding");
+                            }
+                            // Compile initial value _without_ the new binding established.
+                            compile_expr(gc, r_code, scope, *b->right);
+                            // Then add the binding.
+                            scope.bindings.emplace(
+                                name,
+                                Scope::Binding{
+                                    .name = name,
+                                    ._mutable = _mutable,
+                                    .spot = (int)scope.bindings
+                                                .size(), // TODO: check size_t -> int range?
+                                });
+                            // int spot = scope.bindings[name].spot;
+                            // TODO: for `let`, just STORE_REG (and then load null?).
+                            //       for `ref`, need a new bytecode to actually generate a new REF
+                            //       with the value. (then again load null)
+                            throw std::logic_error("not implemented yet");
+                            return;
+                        }
+                    }
+                }
+            }
             if (!module_lookup(module(), *r_name)) {
                 // TODO: raise a compilation error and expose to katsu, ideally.
                 // should show the source of the issue, i.e. expr.op.span
@@ -483,6 +522,7 @@ namespace Katsu
                                               r_args));
 
         for (std::unique_ptr<Expr>& top_level_expr : module_top_level_exprs) {
+            // TODO: handle method:does:[::] as a builtin, looked up in module.
             if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(top_level_expr.get())) {
                 if (expr->messages.size() == 2 &&
                     std::get<std::string>(expr->messages[0].value) == "method" &&
