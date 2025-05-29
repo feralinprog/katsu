@@ -331,9 +331,9 @@ namespace Katsu
             throw std::bad_alloc();
         }
         free(old_mem_opp);
+#endif
 #if DEBUG_GC_FILL
         memset(this->mem_opp, 0x42, this->size);
-#endif
 #endif
         this->spot = queue - this->mem;
 #if DEBUG_GC_LOG
