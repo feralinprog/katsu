@@ -514,8 +514,8 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::MODULE;
 
-        // Currently implemented as associative array.
-        // TODO: use a more optimal data structure.
+        // Implemented as an associative array (more specifically, as an Array of length 2n,
+        // where n is the number of key/value pairs).
         struct Entry
         {
             Value v_key;   // String
@@ -524,21 +524,18 @@ namespace Katsu
         static_assert(sizeof(Entry) == 2 * sizeof(Value));
 
         Value v_base; // Module or Null
-        uint64_t capacity;
         uint64_t length;
+        Value v_array; // Array (of String/any pairs, stored consecutively)
+
         inline Entry* entries()
         {
-            return reinterpret_cast<Entry*>(&this->length + 1);
+            return reinterpret_cast<Entry*>(this->v_array.obj_array()->components());
         }
 
         // Size in bytes.
-        static inline uint64_t size(uint64_t capacity)
+        static inline uint64_t size()
         {
-            return sizeof(Module) + capacity * sizeof(Entry);
-        }
-        inline uint64_t size() const
-        {
-            return Module::size(this->capacity);
+            return sizeof(Module);
         }
     };
 

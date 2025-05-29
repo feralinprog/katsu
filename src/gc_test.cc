@@ -185,18 +185,10 @@ TEST_CASE("GC follows internal references", "[gc]")
     SECTION("Module")
     {
         // Set up object.
-        Module* obj = gc.alloc<Module>(/* capacity */ 3);
+        Module* obj = gc.alloc<Module>();
         obj->v_base = v_pointees[0];
-        obj->capacity = 3;
-        // Set up test to distinguish between length and capacity!
-        obj->length = 2;
-        obj->entries()[0].v_key = v_pointees[1];
-        obj->entries()[0].v_value = v_pointees[2];
-        obj->entries()[1].v_key = v_pointees[3];
-        obj->entries()[1].v_value = v_pointees[4];
-        // Set 3rd entry to some pointees; these should _not_ be tracked by GC.
-        obj->entries()[2].v_key = v_pointees[5];
-        obj->entries()[2].v_value = v_pointees[6];
+        obj->length = 0x12345678; // not actually used by the GC
+        obj->v_array = v_pointees[1];
 
         Value v_obj = Value::object(obj);
         single_root_collect(&v_obj);
@@ -204,13 +196,8 @@ TEST_CASE("GC follows internal references", "[gc]")
         // Unpack and verify object.
         REQUIRE_NOTHROW(obj = v_obj.obj_module());
         CHECK_POINTEE(0, obj->v_base);
-        CHECK(obj->capacity == 3);
-        CHECK(obj->length == 2);
-        CHECK_POINTEE(1, obj->entries()[0].v_key);
-        CHECK_POINTEE(2, obj->entries()[0].v_value);
-        CHECK_POINTEE(3, obj->entries()[1].v_key);
-        CHECK_POINTEE(4, obj->entries()[1].v_value);
-        // TODO: check: 3rd entry key/value should not be pointing into active GC memory
+        CHECK(obj->length == 0x12345678);
+        CHECK_POINTEE(1, obj->v_array);
     }
 
     // Kind of already tested in other sections implicitly...

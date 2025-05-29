@@ -55,7 +55,9 @@ namespace Katsu
     // due to reallocation).
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value);
     // Append a key/value pair to a module, reallocating if necessary to expand the module.
-    void append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value);
+    // For convenience, this returns a pointer to the resulting Module (which may have been moved
+    // due to reallocation).
+    Module* append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value);
 
     // Looks up a module entry by name, following the module's v_base until reaching null.
     // Returns a pointer into the relevant Module::Entry value, or nullptr if not found.

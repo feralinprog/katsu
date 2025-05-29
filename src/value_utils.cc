@@ -69,11 +69,11 @@ namespace Katsu
 
     Module* make_module(GC& gc, OptionalRoot<Module>& r_base, uint64_t capacity)
     {
-        Module* module = gc.alloc<Module>(capacity);
+        Root<Array> r_array(gc, make_array(gc, /* length */ capacity * 2));
+        Module* module = gc.alloc<Module>();
         module->v_base = r_base.value();
-        module->capacity = capacity;
         module->length = 0;
-        // No need to initialize entries; GC doesn't look at entries beyond the (zero) length.
+        module->v_array = r_array.value();
         return module;
     }
 
@@ -194,7 +194,7 @@ namespace Katsu
 
         uint64_t capacity = vector->capacity();
         if (vector->length == capacity) {
-            // Reallocate! The original vector and backing array is kept alive by the r_vector root
+            // Reallocate! The original vector and backing array are kept alive by the r_vector root
             // while we copy components over.
             uint64_t new_capacity = capacity == 0 ? 1 : capacity * 2;
             Array* new_array = make_array_nofill(gc, new_capacity);
@@ -220,23 +220,47 @@ namespace Katsu
         return vector;
     }
 
-    void append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value)
+    Module* append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value)
     {
-        throw std::logic_error("module append not implemented");
-        // if (module->length == module->capacity) {
-        //     // Reallocate!
-        //     // TODO: grow more slowly? modules probably don't need 2x growth, maaaaybe 1.5
-        //     uint64_t new_capacity = module->capacity == 0 ? 1 : module->capacity * 2;
-        //     Module* new_module = make_module(gc, module->v_base, new_capacity);
-        //     for (uint64_t i = 0; i < module->length; i++) {
-        //         new_module->entries()[i] = module->entries()[i];
-        //     }
-        //     // TODO: need to do similar thing to vectors, which have distinct backing array
-        //     module = new_module;
-        // }
-        // Module::Entry& entry = module->entries()[module->length++];
-        // entry.v_key = Value::object(name);
-        // entry.v_value = v_value;
+        Module* module = *r_module;
+
+        uint64_t array_capacity = module->v_array.obj_array()->length;
+        if (array_capacity % 2 != 0) {
+            throw std::logic_error("module backing array has odd length!");
+        }
+        uint64_t entries_capacity = array_capacity / 2;
+        if (module->length == entries_capacity) {
+            // Reallocate! The original module and backing array are kept alive by the r_vector root
+            // while we copy components over.
+            // TODO: probably don't need to double. Maybe 1.5x?
+            uint64_t new_entries_capacity = entries_capacity == 0 ? 1 : entries_capacity * 2;
+            uint64_t new_array_capacity = new_entries_capacity * 2;
+            Array* new_array = make_array_nofill(gc, new_entries_capacity);
+            module = *r_module;
+            // Copy components and null-fill the rest.
+            {
+                Array* array = module->v_array.obj_array();
+                for (uint64_t i = 0; i < array_capacity; i++) {
+                    new_array->components()[i] = array->components()[i];
+                }
+                for (uint64_t i = array_capacity; i < new_array_capacity; i++) {
+                    new_array->components()[i] = Value::null();
+                }
+            }
+            // Pin the new_array while allocating the new module.
+            Root<Array> r_new_array(gc, std::move(new_array));
+            Module* new_module = gc.alloc<Module>();
+            new_module->v_base = r_module->v_base;
+            new_module->length = r_module->length;
+            new_module->v_array = r_new_array.value();
+
+            module = new_module;
+        }
+
+        Module::Entry& entry = module->entries()[module->length++];
+        entry.v_key = r_name.value();
+        entry.v_value = *r_value;
+        return module;
     }
 
     Value* module_lookup(Module* module, String* name)

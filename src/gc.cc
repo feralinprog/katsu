@@ -245,12 +245,7 @@ namespace Katsu
                 case ObjectTag::MODULE: {
                     auto v = obj->object<Module*>();
                     move_value(&v->v_base);
-                    uint64_t length = v->length;
-                    for (uint64_t i = 0; i < length; i++) {
-                        Module::Entry& entry = v->entries()[i];
-                        move_value(&entry.v_key);
-                        move_value(&entry.v_value);
-                    }
+                    move_value(&v->v_array);
                     obj_size = v->size();
                     break;
                 }
