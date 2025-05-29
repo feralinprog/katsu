@@ -339,6 +339,7 @@ namespace Katsu
                << "it must be a simple unary message of the form [target-name message-name] "
                << "or else a unary message of the form [(target-name: matcher) message-name]";
             const std::string& error_msg = ss.str();
+            method_name_parts.push_back(std::get<std::string>(d->message.value));
             add_param_name_and_matcher(*d->target, error_msg);
         } else if (NAryMessageExpr* d = dynamic_cast<NAryMessageExpr*>(decl)) {
             std::stringstream ss;
@@ -350,6 +351,10 @@ namespace Katsu
                << "[(target-name: matcher) message: (param-name: matcher) ...] "
                << "(the target-name is optional, as is each parameter matcher declaration)";
             const std::string& error_msg = ss.str();
+
+            for (const Token& message : d->messages) {
+                method_name_parts.push_back(std::get<std::string>(message.value));
+            }
 
             if (d->target) {
                 add_param_name_and_matcher(**d->target, error_msg);
