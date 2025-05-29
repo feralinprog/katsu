@@ -194,8 +194,8 @@ namespace Katsu
 
         uint64_t capacity = vector->capacity();
         if (vector->length == capacity) {
-            // Reallocate! The original vector and backing array are kept alive by the r_vector root
-            // while we copy components over.
+            // Reallocate the backing array! The original backing array (and vector) are kept alive
+            // by the r_vector root while we copy components over.
             uint64_t new_capacity = capacity == 0 ? 1 : capacity * 2;
             Array* new_array = make_array_nofill(gc, new_capacity);
             vector = *r_vector;
@@ -209,11 +209,7 @@ namespace Katsu
                     new_array->components()[i] = Value::null();
                 }
             }
-            // Pin the new_array while allocating the new vector.
-            Root<Array> r_new_array(gc, std::move(new_array));
-            Vector* new_vector = make_vector(gc, vector->length, r_new_array);
-
-            vector = new_vector;
+            vector->v_array = Value::object(new_array);
         }
 
         vector->v_array.obj_array()->components()[vector->length++] = *r_value;
@@ -230,12 +226,12 @@ namespace Katsu
         }
         uint64_t entries_capacity = array_capacity / 2;
         if (module->length == entries_capacity) {
-            // Reallocate! The original module and backing array are kept alive by the r_vector root
-            // while we copy components over.
+            // Reallocate the backing array! The original backing array (and module) are kept alive
+            // by the r_vector root while we copy components over.
             // TODO: probably don't need to double. Maybe 1.5x?
             uint64_t new_entries_capacity = entries_capacity == 0 ? 1 : entries_capacity * 2;
             uint64_t new_array_capacity = new_entries_capacity * 2;
-            Array* new_array = make_array_nofill(gc, new_entries_capacity);
+            Array* new_array = make_array_nofill(gc, new_array_capacity);
             module = *r_module;
             // Copy components and null-fill the rest.
             {
@@ -247,14 +243,7 @@ namespace Katsu
                     new_array->components()[i] = Value::null();
                 }
             }
-            // Pin the new_array while allocating the new module.
-            Root<Array> r_new_array(gc, std::move(new_array));
-            Module* new_module = gc.alloc<Module>();
-            new_module->v_base = r_module->v_base;
-            new_module->length = r_module->length;
-            new_module->v_array = r_new_array.value();
-
-            module = new_module;
+            module->v_array = Value::object(new_array);
         }
 
         Module::Entry& entry = module->entries()[module->length++];
