@@ -38,11 +38,6 @@ TEST_CASE("align_up", "[gc]")
 
 namespace Katsu
 {
-    void TESTONLY_collect(GC& gc)
-    {
-        gc.collect();
-    }
-
     uint8_t* TESTONLY_get_mem(GC& gc)
     {
         return gc.mem;
@@ -104,7 +99,7 @@ TEST_CASE("GC follows internal references", "[gc]")
     auto single_root_collect = [&gc](Value* root) {
         gc.roots.clear();
         gc.roots.push_back(root);
-        TESTONLY_collect(gc);
+        gc.collect();
     };
 
     auto CHECK_POINTEE = [](size_t i, Value pointee) {

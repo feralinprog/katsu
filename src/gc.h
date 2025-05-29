@@ -125,6 +125,8 @@ namespace Katsu
             return allocation;
         }
 
+        void collect();
+
         std::vector<RootProvider*> root_providers;
         // (Pointers to) object values indicating any GC roots, i.e. entry points to the graph
         // of live objects. This is intended more for ephemeral extra roots that are not covered
@@ -132,8 +134,6 @@ namespace Katsu
         std::vector<Value*> roots;
 
     private:
-        void collect();
-
         // Core array of values.
         uint8_t* mem;
         uint64_t size;
@@ -144,7 +144,6 @@ namespace Katsu
         // Next allocation location.
         uint64_t spot;
 
-        friend void TESTONLY_collect(GC& gc);
         friend uint8_t* TESTONLY_get_mem(GC& gc);
     };
 
