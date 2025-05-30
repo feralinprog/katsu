@@ -159,6 +159,14 @@ namespace Katsu
                 shift_arg();
                 break;
             }
+            case OpCode::INIT_REF: {
+                ValueRoot r_ref(this->gc, pop());
+                this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref =
+                    Value::object(make_ref(this->gc, r_ref));
+                shift_inst();
+                shift_arg();
+                break;
+            }
             case OpCode::LOAD_MODULE: {
                 push(module_lookup_or_fail(this->current_frame->v_module, arg().obj_string()));
                 shift_inst();

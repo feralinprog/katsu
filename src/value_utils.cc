@@ -252,6 +252,16 @@ namespace Katsu
         return module;
     }
 
+    Array* vector_to_array(GC& gc, Root<Vector>& r_vector)
+    {
+        Array* array = make_array_nofill(gc, r_vector->length);
+        Array* src = r_vector->v_array.obj_array();
+        for (uint64_t i = 0; i < array->length; i++) {
+            array->components()[i] = src->components()[i];
+        }
+        return array;
+    }
+
     Value* module_lookup(Module* module, String* name)
     {
         uint64_t name_length = name->length;

@@ -4,6 +4,7 @@
 
 namespace Katsu
 {
+    // TODO: update this whole block!
     /*
      * Bytecodes:
      * - LOAD_REG: load local register by index onto stack
@@ -11,6 +12,7 @@ namespace Katsu
      * - LOAD_REF: load local register by index, then dereference _that_, to push to stack
      * - STORE_REF: pop from stack into pointee of reference object
      * - LOAD_VALUE: load a Value (contents may be managed by GC!) onto stack
+     * - INIT_REF: pop from stack, wrap in a Ref, and write to a local register
      * - LOAD_MODULE: load a value by name from the call frame's module onto stack
      * - STORE_MODULE: pop from stack to module variable
      * - INVOKE: look up (by name) a multimethod in the global multimethod store, pop arguments, and
@@ -37,6 +39,7 @@ namespace Katsu
      * | LOAD_REF     |  0x3   | (fixnum) local index                                     |
      * | STORE_REF    |  0x4   | (fixnum) local index                                     |
      * | LOAD_VALUE   |  0x5   | value to load                                            |
+     * | INIT_REF     |  0x?   | (fixnum) local index                                     |
      * | LOAD_MODULE  |  0x6   | (string) name                                            |
      * | STORE_MODULE |  0x7   | (string) name                                            |
      * | INVOKE       |  0x8   | (string) name; (fixnum) num args                     (1) |
@@ -97,6 +100,7 @@ namespace Katsu
         LOAD_REF,
         STORE_REF,
         LOAD_VALUE,
+        INIT_REF,
         LOAD_MODULE,
         STORE_MODULE,
         INVOKE,

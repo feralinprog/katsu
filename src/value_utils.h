@@ -59,6 +59,8 @@ namespace Katsu
     // due to reallocation).
     Module* append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value);
 
+    Array* vector_to_array(GC& gc, Root<Vector>& r_vector);
+
     // Looks up a module entry by name, following the module's v_base until reaching null.
     // Returns a pointer into the relevant Module::Entry value, or nullptr if not found.
     Value* module_lookup(Module* module, String* name);
