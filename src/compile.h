@@ -6,6 +6,17 @@
 
 namespace Katsu
 {
+    class compile_error : public std::runtime_error
+    {
+    public:
+        compile_error(const std::string& message, const SourceSpan& _span)
+            : std::runtime_error(message)
+            , span(_span)
+        {}
+
+        const SourceSpan span;
+    };
+
     Code* compile_module(GC& gc, OptionalRoot<Module>& base,
                          std::vector<std::unique_ptr<Expr>>& module_top_level_exprs);
 };

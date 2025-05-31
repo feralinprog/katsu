@@ -11,71 +11,37 @@
 
 namespace Katsu
 {
-    struct Scope
+    struct Binding
     {
-        struct Binding
-        {
-            const std::string name;
-            bool _mutable;
-            uint32_t local_index;
-        };
-
-        std::map<std::string, Binding> bindings;
-        std::unique_ptr<Scope> base;
-
-        Binding* lookup(const std::string& name, bool* is_upvar = nullptr)
-        {
-            bool upvar = false;
-            Scope* cur = this;
-            while (cur) {
-                auto it = cur->bindings.find(name);
-                if (it != cur->bindings.end()) {
-                    if (is_upvar) {
-                        *is_upvar = upvar;
-                    }
-                    return &it->second;
-                }
-                cur = cur->base.get();
-                upvar = true;
-            }
-            return nullptr;
-        }
-        Binding* lookup(String* name, bool* is_upvar = nullptr)
-        {
-            // TODO: check name->length against size_t?
-            bool upvar = false;
-            Scope* cur = this;
-            while (cur) {
-                for (auto& [binding_name, binding] : cur->bindings) {
-                    if (!string_eq(name, binding_name)) {
-                        continue;
-                    }
-                    if (is_upvar) {
-                        *is_upvar = upvar;
-                    }
-                    return &binding;
-                }
-                cur = cur->base.get();
-                upvar = true;
-            }
-            return nullptr;
-        }
+        const std::string name;
+        bool _mutable;
+        uint32_t local_index;
     };
 
     struct CodeBuilder
     {
         // This has Vector variants of all the Arrays that go into a Code object.
         // This way we can append/grow, then copy into Arrays to finalize the Code.
+
         Root<Module>& r_module;
+        // Number of locals.
         uint32_t num_regs;
+        // Max size of data stack (kept up to date using emit_op().)
         uint32_t num_data;
+        // Mapping from upreg index to local index, for initializing locals when invoking a closure
+        // instance.
         OptionalRoot<Vector>& r_upreg_map;
+        // The OpCode instructions...
         Root<Vector>& r_insts;
+        // and their arguments.
         Root<Vector>& r_args;
 
-        // Vector of Strings which indicate which upvars have already been accessed, and which are
-        // thus already tracked by the r_upreg_map.
-        Root<Vector>& r_seen_upvars;
+        // Mapping from upreg index to _base's_ local indices, for initializing upreg array when
+        // creating a closure instance.
+        Root<Vector>& r_upreg_loading;
+
+        std::map<std::string, Binding> bindings;
+        CodeBuilder* base;
 
         uint32_t stack_height;
         void bump_stack(int64_t delta)
@@ -106,6 +72,44 @@ namespace Katsu
             append(gc, this->r_args, r_arg);
         }
 
+        Binding* lookup(const std::string& name, size_t* depth = nullptr)
+        {
+            size_t _depth = 0;
+            CodeBuilder* cur = this;
+            while (cur) {
+                auto it = cur->bindings.find(name);
+                if (it != cur->bindings.end()) {
+                    if (depth) {
+                        *depth = _depth;
+                    }
+                    return &it->second;
+                }
+                cur = cur->base;
+                _depth++;
+            }
+            return nullptr;
+        }
+        Binding* lookup(String* name, size_t* depth = nullptr)
+        {
+            // TODO: check name->length against size_t?
+            size_t _depth = 0;
+            CodeBuilder* cur = this;
+            while (cur) {
+                for (auto& [binding_name, binding] : cur->bindings) {
+                    if (!string_eq(name, binding_name)) {
+                        continue;
+                    }
+                    if (depth) {
+                        *depth = _depth;
+                    }
+                    return &binding;
+                }
+                cur = cur->base;
+                _depth++;
+            }
+            return nullptr;
+        }
+
         Code* finalize(GC& gc)
         {
             Array* maybe_upreg_map;
@@ -131,17 +135,15 @@ namespace Katsu
         }
     };
 
-    void compile_expr(GC& gc, CodeBuilder& builder, Scope& scope, Expr& _expr)
+    void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr)
     {
         if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
             if (!module_lookup(*builder.r_module, *r_name)) {
-                // TODO: raise a compilation error and expose to katsu, ideally.
-                // should show the source of the issue, i.e. expr.op.span
-                throw std::invalid_argument("unknown module name, cannot invoke unaryop");
+                throw compile_error("unknown module name, cannot invoke unaryop", expr->op.span);
             }
-            compile_expr(gc, builder, scope, *expr->arg);
+            compile_expr(gc, builder, *expr->arg);
             // INVOKE: <name>, <num args>
             builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -1 + 1);
             builder.emit_arg(gc, r_name.value());
@@ -150,12 +152,10 @@ namespace Katsu
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
             if (!module_lookup(*builder.r_module, *r_name)) {
-                // TODO: raise a compilation error and expose to katsu, ideally.
-                // should show the source of the issue, i.e. expr.op.span
-                throw std::invalid_argument("unknown module name, cannot invoke binaryop");
+                throw compile_error("unknown module name, cannot invoke binaryop", expr->op.span);
             }
-            compile_expr(gc, builder, scope, *expr->left);
-            compile_expr(gc, builder, scope, *expr->right);
+            compile_expr(gc, builder, *expr->left);
+            compile_expr(gc, builder, *expr->right);
             // INVOKE: <name>, <num args>
             builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1);
             builder.emit_arg(gc, r_name.value());
@@ -170,54 +170,56 @@ namespace Katsu
             // message.
             const std::string& name = std::get<std::string>(expr->name.value);
             Root<String> r_name(gc, make_string(gc, name));
-            bool is_upvar;
-            const Scope::Binding* maybe_local = scope.lookup(*r_name, &is_upvar);
-            if (maybe_local) {
-                const Scope::Binding& local = *maybe_local;
-
-                // If this is an upvar access, we need to make sure it's tracked in the upreg map.
-                if (is_upvar) {
-                    // Check if it is already seen.
-                    bool seen = false;
-                    for (uint64_t i = 0; i < builder.r_seen_upvars->length; i++) {
-                        Value upvar = builder.r_seen_upvars->v_array.obj_array()->components()[i];
-                        if (string_eq(upvar.obj_string(), *r_name)) {
-                            seen = true;
-                            break;
-                        }
+            size_t var_depth;
+            const Binding* local = builder.lookup(*r_name, &var_depth);
+            if (local) {
+                // If this is an upvar access, we need to make sure it's tracked in the upreg map
+                // and loading vector.
+                if (var_depth > 0) {
+                    if (var_depth != 1) {
+                        throw compile_error("upvar depth more than 1 not implemented yet",
+                                            expr->name.span);
                     }
 
-                    if (!seen) {
-                        // Add it for tracking!
-                        ValueRoot r_name_val(gc, r_name.value());
-                        append(gc, builder.r_seen_upvars, r_name_val);
-                        if (!builder.r_upreg_map) {
-                            throw std::logic_error("shouldn't be able to have is_upvar when "
-                                                   "builder is missing r_upreg_map");
-                        }
-                        Root<Vector> r_upreg_map(gc, *builder.r_upreg_map);
-                        // TODO: need to also push this down the code-builder stack (which, probably
-                        // need to make!) ValueRoot append(gc, r_upreg_map,
+                    // Add it for tracking!
+
+                    ValueRoot r_upvar_index(gc, Value::fixnum(local->local_index));
+                    append(gc, builder.r_upreg_loading, r_upvar_index);
+
+                    builder.bindings.emplace(name,
+                                             Binding{
+                                                 .name = name,
+                                                 ._mutable = local->_mutable,
+                                                 .local_index = builder.num_regs++,
+                                             });
+                    local = &builder.bindings[name];
+
+                    if (!builder.r_upreg_map) {
+                        throw compile_error("shouldn't be able to have var_depth > 0 when builder "
+                                            "is missing r_upreg_map",
+                                            expr->name.span);
                     }
+                    Root<Vector> r_upreg_map(gc, *builder.r_upreg_map);
+                    ValueRoot r_local_index(gc, Value::fixnum(local->local_index));
+                    append(gc, r_upreg_map, r_local_index);
                 }
 
-                if (local._mutable) {
+                if (local->_mutable) {
                     // LOAD_REF: <local index>
                     builder.emit_op(gc, OpCode::LOAD_REF, /* stack_height_delta */ +1);
-                    builder.emit_arg(gc, Value::fixnum(local.local_index));
+                    builder.emit_arg(gc, Value::fixnum(local->local_index));
                 } else {
                     // LOAD_REG: <local index>
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
-                    builder.emit_arg(gc, Value::fixnum(local.local_index));
+                    builder.emit_arg(gc, Value::fixnum(local->local_index));
                 }
             } else if (module_lookup(*builder.r_module, *r_name)) {
                 // LOAD_MODULE: <name>
                 builder.emit_op(gc, OpCode::LOAD_MODULE, /* stack_height_delta */ +1);
                 builder.emit_arg(gc, r_name.value());
             } else {
-                // TODO: raise a compilation error and expose to katsu, ideally.
-                // should show the source of the issue, i.e. expr.name.span
-                throw std::invalid_argument("unknown local or module name, cannot load name");
+                throw compile_error("unknown local or module name, cannot load name",
+                                    expr->name.span);
             }
         } else if (LiteralExpr* expr = dynamic_cast<LiteralExpr*>(&_expr)) {
             switch (expr->literal.type) {
@@ -236,20 +238,22 @@ namespace Katsu
                     break;
                 }
                 case TokenType::SYMBOL: {
-                    throw std::logic_error("visit(LiteralExpr) SYMBOL handling not implemented");
+                    throw compile_error("visit(LiteralExpr) SYMBOL handling not implemented",
+                                        expr->literal.span);
                     break;
                 }
-                default: throw std::logic_error("unexpected token type in visit(LiteralExpr)");
+                default:
+                    throw compile_error("unexpected token type in visit(LiteralExpr)",
+                                        expr->literal.span);
             }
         } else if (UnaryMessageExpr* expr = dynamic_cast<UnaryMessageExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->message.value);
             Root<String> r_name(gc, make_string(gc, name));
             if (!module_lookup(*builder.r_module, *r_name)) {
-                // TODO: raise a compilation error and expose to katsu, ideally.
-                // should show the source of the issue, i.e. expr.message.span
-                throw std::invalid_argument("unknown module name, cannot invoke unary-message");
+                throw compile_error("unknown module name, cannot invoke unary-message",
+                                    expr->message.span);
             }
-            compile_expr(gc, builder, scope, *expr->target);
+            compile_expr(gc, builder, *expr->target);
             // INVOKE: <name>, <num args>
             builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -1 + 1);
             builder.emit_arg(gc, r_name.value());
@@ -284,17 +288,16 @@ namespace Katsu
             if (expr->messages.size() == 1) {
                 // Check for local mutable variables.
                 const std::string& name = std::get<std::string>(expr->messages[0].value);
-                const Scope::Binding* maybe_local = scope.lookup(name);
+                const Binding* maybe_local = builder.lookup(name);
                 if (maybe_local) {
-                    const Scope::Binding& local = *maybe_local;
+                    const Binding& local = *maybe_local;
                     if (local._mutable) {
                         // Ensure there's no target provided.
                         if (expr->target) {
-                            // TODO: raise compilation error to katsu instead.
-                            throw std::invalid_argument(
-                                "setting mutable variable requires no target");
+                            throw compile_error("setting mutable variable requires no target",
+                                                expr->span);
                         }
-                        compile_expr(gc, builder, scope, *expr->args[0]);
+                        compile_expr(gc, builder, *expr->args[0]);
                         // STORE_REF: <local index>
                         builder.emit_op(gc, OpCode::STORE_REF, /* stack_height_delta */ -1);
                         builder.emit_arg(gc, Value::fixnum(local.local_index));
@@ -311,28 +314,29 @@ namespace Katsu
                  std::get<std::string>(expr->messages[0].value) == "mut")) {
                 bool _mutable = std::get<std::string>(expr->messages[0].value) == "mut";
                 if (expr->target) {
-                    throw std::invalid_argument("let: / mut: require no target");
+                    throw compile_error("let: / mut: require no target", expr->span);
                 }
                 if (BinaryOpExpr* b = dynamic_cast<BinaryOpExpr*>(expr->args[0].get())) {
                     if (std::get<std::string>(b->op.value) == "=") {
                         if (NameExpr* n = dynamic_cast<NameExpr*>(b->left.get())) {
                             const std::string& name = std::get<std::string>(n->name.value);
                             Root<String> r_name(gc, make_string(gc, name));
-                            if (_mutable && scope.lookup(*r_name)) {
+                            if (_mutable && builder.lookup(*r_name)) {
                                 // TODO: maybe just allow?
-                                throw std::invalid_argument(
-                                    "cannot shadow mut: binding with another mut: binding");
+                                throw compile_error(
+                                    "cannot shadow mut: binding with another mut: binding",
+                                    expr->span);
                             }
                             // Compile initial value _without_ the new binding established.
-                            compile_expr(gc, builder, scope, *b->right);
+                            compile_expr(gc, builder, *b->right);
                             // Then add the binding.
                             uint32_t local_index = builder.num_regs++;
-                            scope.bindings.emplace(name,
-                                                   Scope::Binding{
-                                                       .name = name,
-                                                       ._mutable = _mutable,
-                                                       .local_index = local_index,
-                                                   });
+                            builder.bindings.emplace(name,
+                                                     Binding{
+                                                         .name = name,
+                                                         ._mutable = _mutable,
+                                                         .local_index = local_index,
+                                                     });
                             // Store the value (generated by the RHS generated code) into the newly
                             // allocated register.
                             if (_mutable) {
@@ -357,14 +361,13 @@ namespace Katsu
                 }
             }
             if (!module_lookup(*builder.r_module, *r_name)) {
-                // TODO: raise a compilation error and expose to katsu, ideally.
-                // should show the source of the issue, i.e. expr.op.span
-                throw std::invalid_argument("unknown module name (or mutable local variable "
-                                            "name), cannot invoke n-ary-message");
+                throw compile_error("unknown module name (or mutable local variable "
+                                    "name), cannot invoke n-ary-message",
+                                    expr->span);
             }
 
             if (expr->target) {
-                compile_expr(gc, builder, scope, *expr->target.value());
+                compile_expr(gc, builder, *expr->target.value());
             } else {
                 // Load the default receiver, which is always register 0.
                 // LOAD_REG: <local index>
@@ -372,7 +375,7 @@ namespace Katsu
                 builder.emit_arg(gc, Value::fixnum(0));
             }
             for (const std::unique_ptr<Expr>& arg : expr->args) {
-                compile_expr(gc, builder, scope, *arg);
+                compile_expr(gc, builder, *arg);
             }
             // INVOKE: <name>, <num args>
             builder.emit_op(gc,
@@ -381,28 +384,64 @@ namespace Katsu
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(expr->args.size()));
         } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
-            compile_expr(gc, builder, scope, *expr->inner);
+            compile_expr(gc, builder, *expr->inner);
         } else if (BlockExpr* expr = dynamic_cast<BlockExpr*>(&_expr)) {
-            // // TODO: use make_code() instead.
-            // Code* block_code = gc.alloc<Code>();
-            // block_code->v_module = r_code->v_module;
-            // // TODO: set up the rest
-            // // Value v_module;    // Module
-            // // Value v_num_regs;  // fixnum
-            // // Value v_num_data;  // fixnum
-            // // Value v_upreg_map; // Null for methods; Vector (of fixnum) for closures
-            // // // TODO: byte array inline?
-            // // Value v_insts; // Vector of fixnums
-            // // // TODO: arg array inline?
-            // // Value v_args; // Vector (of arbitrary values)
-            // Root<Code> r_block_code(gc, std::move(block_code));
+            // Block with no parameters still has one implicit parameter: `it`.
+
+            OptionalRoot<Vector> r_upreg_map(gc, make_vector(gc, 0));
+            Root<Vector> r_insts(gc, make_vector(gc, 0));
+            Root<Vector> r_args(gc, make_vector(gc, 0));
+            Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
+            CodeBuilder closure_builder{
+                .r_module = builder.r_module,
+                .num_regs = expr->parameters.empty()
+                                ? 1
+                                : (uint32_t)expr->parameters.size(), // TODO: check size_t?
+                .num_data = 0,
+                .r_upreg_map = r_upreg_map,
+                .r_insts = r_insts,
+                .r_args = r_args,
+                .r_upreg_loading = r_upreg_loading,
+                .bindings = {},
+                .base = &builder,
+            };
+            // Add param names as (immutable) bindings.
+            uint32_t local_index = 0;
             if (expr->parameters.empty()) {
-                // It still has an implicit parameter: `it`.
+                closure_builder.bindings.emplace(
+                    "it",
+                    Binding{.name = "it", ._mutable = false, .local_index = local_index++});
+            } else {
+                for (const std::string& param_name : expr->parameters) {
+                    closure_builder.bindings.emplace(param_name,
+                                                     Binding{.name = param_name,
+                                                             ._mutable = false,
+                                                             .local_index = local_index++});
+                }
             }
-            throw std::logic_error("not implemented yet - compiling BlockExpr");
+            compile_expr(gc, closure_builder, *expr->body);
+            Root<Code> r_closure_code(gc, closure_builder.finalize(gc));
+            uint64_t num_upreg_loads = closure_builder.r_upreg_loading->length;
+            // Sanity check!
+            if (num_upreg_loads != closure_builder.r_upreg_map->length) {
+                throw compile_error(
+                    "r_upreg_loading length != r_upreg_map length after compiling closure body",
+                    expr->span);
+            }
+            for (uint64_t i = 0; i < num_upreg_loads; i++) {
+                int64_t load_index =
+                    closure_builder.r_upreg_loading->v_array.obj_array()->components()[i].fixnum();
+                // TODO: check range
+                // LOAD_REG: <local index>
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_arg(gc, Value::fixnum(load_index));
+            }
+            builder.emit_op(gc,
+                            OpCode::MAKE_CLOSURE,
+                            /* stack_height_delta */ -(int64_t)num_upreg_loads + 1);
         } else if (DataExpr* expr = dynamic_cast<DataExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
-                compile_expr(gc, builder, scope, *component);
+                compile_expr(gc, builder, *component);
             }
             // MAKE_VECTOR: <num components>
             builder.emit_op(gc,
@@ -421,14 +460,14 @@ namespace Katsu
             // Drop all but the last component's result.
             for (size_t i = 0; i < expr->components.size(); i++) {
                 bool last = i == expr->components.size() - 1;
-                compile_expr(gc, builder, scope, *expr->components[i]);
+                compile_expr(gc, builder, *expr->components[i]);
                 if (!last) {
                     builder.emit_op(gc, OpCode::DROP, /* stack_height_delta */ -1);
                 }
             }
         } else if (TupleExpr* expr = dynamic_cast<TupleExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
-                compile_expr(gc, builder, scope, *component);
+                compile_expr(gc, builder, *component);
             }
             // MAKE_TUPLE: <num components>
             builder.emit_op(gc,
@@ -436,7 +475,7 @@ namespace Katsu
                             /* stack_height_delta */ -(int64_t)expr->components.size() + 1);
             builder.emit_arg(gc, Value::fixnum(expr->components.size()));
         } else {
-            throw std::logic_error("forgot a case");
+            throw compile_error("forgot an Expr subtype", expr->span);
         }
     }
 
@@ -447,7 +486,7 @@ namespace Katsu
         if (receiver) {
             std::stringstream ss;
             ss << "" << message << " takes no receiver";
-            throw std::invalid_argument(ss.str());
+            throw compile_error(ss.str(), span);
         }
 
         Expr* decl = &_decl;
@@ -460,11 +499,11 @@ namespace Katsu
             if (!b->parameters.empty()) {
                 std::stringstream ss;
                 ss << "" << message << " 'declaration' argument should not specify any parameters";
-                throw std::invalid_argument(ss.str());
+                throw compile_error(ss.str(), decl->span);
             }
             decl = b->body.get();
         } else {
-            throw std::logic_error("non-block decls for method:does: not yet implemented");
+            throw compile_error("non-block decls for method:does: not yet implemented", decl->span);
         }
 
         std::vector<std::string> method_name_parts{};
@@ -486,7 +525,7 @@ namespace Katsu
                     }
                 }
             }
-            throw std::invalid_argument(error_msg);
+            throw compile_error(error_msg, param_decl.span);
         };
 
         if (NameExpr* d = dynamic_cast<NameExpr*>(decl)) {
@@ -530,7 +569,7 @@ namespace Katsu
             // TODO: allow unary / binary ops too
             std::stringstream ss;
             ss << message << " 'declaration' argument should be a name or message";
-            throw std::invalid_argument(ss.str());
+            throw compile_error(ss.str(), decl->span);
         }
 
         Root<String> r_method_name(gc, concat_with_suffix(gc, method_name_parts, ":"));
@@ -540,13 +579,13 @@ namespace Katsu
             if (!b->parameters.empty()) {
                 std::stringstream ss;
                 ss << message << "'body' argument should not specify any parameters";
-                throw std::invalid_argument(ss.str());
+                throw compile_error(ss.str(), _body.span);
             }
             body = b->body.get();
         } else {
             std::stringstream ss;
             ss << message << "'body' argument should be a block";
-            throw std::invalid_argument(ss.str());
+            throw compile_error(ss.str(), _body.span);
         }
 
         MultiMethod* multimethod;
@@ -556,8 +595,9 @@ namespace Katsu
                 if (existing->is_obj_multimethod()) {
                     multimethod = existing->obj_multimethod();
                 } else {
-                    throw std::invalid_argument("method name is already defined in the current "
-                                                "context, but not as a multimethod");
+                    throw compile_error("method name is already defined in the current context, "
+                                        "but not as a multimethod",
+                                        span);
                 }
             } else {
                 // We know we're about to add at least one method!
@@ -575,7 +615,7 @@ namespace Katsu
         OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
         Root<Vector> r_insts(gc, make_vector(gc, 0));
         Root<Vector> r_args(gc, make_vector(gc, 0));
-        Root<Vector> r_seen_upvars(gc, make_vector(gc, 0));
+        Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = r_module,
             .num_regs = (uint32_t)param_names.size(), // TODO: check size_t?
@@ -583,20 +623,21 @@ namespace Katsu
             .r_upreg_map = r_upreg_map,
             .r_insts = r_insts,
             .r_args = r_args,
-            .r_seen_upvars = r_seen_upvars,
+            .r_upreg_loading = r_upreg_loading,
+            .bindings = {},
+            .base = nullptr,
         };
-        Scope scope = {.bindings = {}, .base = nullptr};
         // Add param names as (immutable) bindings.
         uint32_t local_index = 0;
         for (const std::string& param_name : param_names) {
-            scope.bindings.emplace(param_name,
-                                   Scope::Binding{
-                                       .name = param_name,
-                                       ._mutable = false,
-                                       .local_index = local_index++,
-                                   });
+            builder.bindings.emplace(param_name,
+                                     Binding{
+                                         .name = param_name,
+                                         ._mutable = false,
+                                         .local_index = local_index++,
+                                     });
         }
-        compile_expr(gc, builder, scope, *body);
+        compile_expr(gc, builder, *body);
 
         // Generate the method.
         ValueRoot r_param_matchers(gc, Value::null()); // TODO
@@ -634,7 +675,7 @@ namespace Katsu
         OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
         Root<Vector> r_insts(gc, make_vector(gc, 0));
         Root<Vector> r_args(gc, make_vector(gc, 0));
-        Root<Vector> r_seen_upvars(gc, make_vector(gc, 0));
+        Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = r_module,
             .num_regs = 0,
@@ -642,7 +683,9 @@ namespace Katsu
             .r_upreg_map = r_upreg_map,
             .r_insts = r_insts,
             .r_args = r_args,
-            .r_seen_upvars = r_seen_upvars,
+            .r_upreg_loading = r_upreg_loading,
+            .bindings = {},
+            .base = nullptr,
         };
 
         for (std::unique_ptr<Expr>& top_level_expr : module_top_level_exprs) {
@@ -677,11 +720,7 @@ namespace Katsu
                     continue;
                 }
             }
-            // Lexical state is maintained through the under-construction module. Each module
-            // top-level expression gets the same empty scope on top.
-            // TODO: is this actually workable if using a single CodeBuilder..?
-            Scope scope = {.bindings = {}, .base = nullptr};
-            compile_expr(gc, builder, scope, *top_level_expr);
+            compile_expr(gc, builder, *top_level_expr);
         }
 
         return builder.finalize(gc);

@@ -2,7 +2,8 @@ method: [adder: n0] does: [
     mut: n = n0
     let: delta = n0
     \x [
-        let: new-n = n + delta + x
+        let: s = x + delta
+        let: new-n = n + s
         set-n: new-n
         n
     ]
@@ -27,34 +28,59 @@ bytecode:
   store_reg 2
   load_reg 1 # note _reg_ and not _ref_, since this is setting up the closure!
   load_reg 2
-  make_closure <bytecode for [set-n ...]> up-reg-count:2
+  make_closure <bytecode for \x [...]>
 
-[set-n ...]
-===========
+####################
+# compiling \x [...]
+####################
+         x              # already in bindings
+             delta      # (1-up) upvar, not in bindings yet
+                        # - add to local bindings (pretend it's new let:)
+                        # - add new local binding to upreg-mapping
+                        # - add 1-up local index to list of closed-over variables (so adder knows how to make_closure)
+         x + delta      # invoke +:
+let: s = x + delta      # add local binding
+             n          # (1-up) upvar, not in bindings yet. do same ops as above.
+                 x      # already in bindings
+             n + x      # invoke +:
+let: new-n = n + x      # add local binding
+       new-n            # already in bindings
+set-n: new-n            # mutable n already in bindings
+n                       # already in bindings
+
+\x [ ... ]
+==========
 regs: -- arguments, then [closed-over regs and any locals] (in possibly any order)
 - 0: x
-- 1: ref: n
-- 2: delta
-- 3: new-n
+- 1: delta
+- 2: s
+- 3: ref:n
+- 4: new-n
+upreg-mapping:
+- upreg 0 -> reg 1
+- upreg 1 -> reg 3
+closed-over-vars (to generate make_closure code):
+- upreg 0 <- adder local 2 (delta)
+- upreg 1 <- adder local 1 (ref:n)
 module:
 - a: (whatever value)
-from the closure object itself:
-- upregs: {values of ref:n and delta from adder:}   <-- runtime values
-- upreg-mapping: upreg 0 -> reg 1; upreg 1 -> reg 2 <-- known at compile time
-- upreg-count: 2                                    <-- known at compile time
+from the closure object itself (at runtime):
+- upregs: {values of ref:n and delta from adder:}
 bytecode:
   <implicit>:
-    load upreg 0 (ref:n), store to 1 (per upreg-mapping)
-    load upreg 1 (delta), store to 2 (per upreg-mapping)
-  load_ref 1
-  load_reg 2
+    load upreg 0 (delta), store to 1 (per upreg-mapping)
+    load upreg 1 (ref:n), store to 3 (per upreg-mapping)
+  load_reg 0
+  load_reg 1
   invoke +:
+  store_reg 2
+  load_ref 3
   load_reg 0
   invoke +:
-  store_reg 3
-  load_reg 3
-  store_ref 1
-  load_ref 1
+  store_reg 4
+  load_reg 4
+  store_ref 3
+  load_ref 3
 
 let: a = (adder: 3)
 ===================
