@@ -153,7 +153,8 @@ namespace Katsu
         OptionalRoot<Module> r_module_base(gc, nullptr);
         Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
 
-        add_builtins(gc, r_module);
+        Builtins builtins(gc);
+        builtins.register_builtins(r_module);
 
         // std::cout << "=== INITIAL MODULE STATE ===\n";
         // pprint(r_module.value());

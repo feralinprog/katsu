@@ -60,6 +60,8 @@ namespace Katsu
     class RootProvider
     {
     public:
+        virtual ~RootProvider() = default;
+
         virtual void visit_roots(std::function<void(Value*)>& visitor) = 0;
     };
 

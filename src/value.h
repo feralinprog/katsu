@@ -668,8 +668,9 @@ namespace Katsu
 
         enum class Kind
         {
-            MIXIN = 0,
+            PRIMITIVE = 0,
             DATACLASS = 1,
+            MIXIN = 2,
         };
 
         Value v_name;  // String

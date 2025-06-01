@@ -156,12 +156,16 @@ namespace Katsu
         // Nothing to check for `sealed`.
         // TODO: check linearization? (at least some basic sanity checks)
         // TODO check Type components in r_subtypes
-        ASSERT_ARG(kind == Type::Kind::MIXIN || kind == Type::Kind::DATACLASS);
-        if (kind == Type::Kind::MIXIN) {
-            ASSERT_ARG_MSG(!r_slots, "MIXIN type must have no slots");
+        ASSERT_ARG(kind == Type::Kind::PRIMITIVE || kind == Type::Kind::DATACLASS ||
+                   kind == Type::Kind::MIXIN);
+        if (kind == Type::Kind::PRIMITIVE) {
+            ASSERT_ARG_MSG(!r_slots, "PRIMITIVE type must have no slots");
         }
         if (kind == Type::Kind::DATACLASS) {
             ASSERT_ARG_MSG(r_slots, "DATACLASS type must have a Vector of slots");
+        }
+        if (kind == Type::Kind::MIXIN) {
+            ASSERT_ARG_MSG(!r_slots, "MIXIN type must have no slots");
         }
 
         Type* type = gc.alloc<Type>();
@@ -565,9 +569,10 @@ namespace Katsu
                 pchild(o->v_subtypes, "v_subtypes = ");
                 pnative() << "kind = ";
                 switch (o->kind) {
-                    case Type::Kind::MIXIN: std::cout << "mixin\n"; break;
+                    case Type::Kind::PRIMITIVE: std::cout << "primitive\n"; break;
                     case Type::Kind::DATACLASS: std::cout << "dataclass\n"; break;
-                    default: std::cout << "??? (raw=" << static_cast<int>(o->kind) << "\n"; break;
+                    case Type::Kind::MIXIN: std::cout << "mixin\n"; break;
+                    default: std::cout << "??? (raw=" << static_cast<int>(o->kind) << ")\n"; break;
                 }
                 pchild(o->v_slots, "v_slots = ");
             } else if (value.is_obj_instance()) {
