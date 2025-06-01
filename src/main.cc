@@ -12,8 +12,14 @@ void usage()
 
 std::ostream& operator<<(std::ostream& s, const Katsu::SourceSpan& span)
 {
-    s << "<" << *span.file.path << "> (" << span.start.line + 1 << ":" << span.start.column + 1
-      << " to " << span.end.line + 1 << ":" << span.end.column + 1 << ")\n";
+    s << "<" << *span.file.path << ":";
+    s << span.start.line + 1 << ":" << span.start.column + 1;
+    s << "-";
+    // For convenience, follow vscode format (well, one of them...) for links with spans. Yes, the
+    // format is inconsistent between start/end formatting :(
+    // https://github.com/microsoft/vscode/blob/05edb9ac5410ee1d4118f2be70f019fb68937751/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkParsing.ts#L79
+    s << span.end.line + 1 << "." << span.end.column + 1;
+    s << ">";
     return s;
 }
 
