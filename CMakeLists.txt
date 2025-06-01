@@ -21,6 +21,7 @@ add_library(katsudon STATIC
   src/value_utils.cc
   src/compile.cc
   src/vm.cc
+  src/builtin.cc
   src/katsu.cc
 )
 target_include_directories(katsudon PUBLIC src/)
