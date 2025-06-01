@@ -1,13 +1,16 @@
+print: 10 + 20
+
 method: [adder: n0] does: [
     mut: n = n0
-    let: delta = n0
+    let: delta = n0 + 30
     \x [
         let: new-n = n + delta + x
-        set-n: new-n
+        n: new-n
         n
     ]
 ]
 
 let: a = (adder: 3)
+print: a
 print: (a call: 1)
 print: (a call: 2)

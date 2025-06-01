@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include <iostream>
 namespace Katsu
 {
     VM::VM(GC& _gc, uint64_t call_stack_size)
@@ -37,10 +38,28 @@ namespace Katsu
 
     void VM::visit_roots(std::function<void(Value*)>& visitor)
     {
-        // TODO: scan stack frames to add roots
+        Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
+        while (frame <= this->current_frame) {
+            visitor(&frame->v_code);
+            visitor(&frame->v_cleanup);
+            visitor(&frame->v_module);
+
+            for (uint32_t i = 0; i < frame->num_regs; i++) {
+                visitor(&frame->regs()[i]);
+            }
+
+            // Note that we don't need to go visit all the way to num_data.
+            // Only up to data_depth is guaranteed valid.
+            for (uint32_t i = 0; i < frame->data_depth; i++) {
+                visitor(&frame->data()[i]);
+            }
+
+            frame = reinterpret_cast<Frame*>(
+                align_up(reinterpret_cast<uint64_t>(frame) + frame->size(), TAG_BITS));
+        }
     }
 
-    ValueRoot VM::eval_toplevel(Root<Code>& r_code)
+    Value VM::eval_toplevel(Root<Code>& r_code)
     {
         if (this->current_frame) {
             throw std::logic_error("shouldn't already have a call frame if eval-ing at top level");
@@ -53,19 +72,17 @@ namespace Katsu
         uint32_t code_num_regs = r_code->num_regs;
         uint32_t code_num_data = r_code->num_data;
 
-        // auto next_frame_mem =
-        // reinterpret_cast<uint8_t*>(align_up(reinterpret_cast<uint64_t>(this->current_frame),
-        // TAG_BITS));
-        uint8_t* next_frame_mem = this->call_stack_mem;
-        uint64_t next_frame_size = sizeof(Frame) + (code_num_regs + code_num_data) * sizeof(Value);
-        if (next_frame_mem + next_frame_size > this->call_stack_mem + this->call_stack_size) {
+        Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
+        uint64_t frame_size = Frame::size(code_num_regs, code_num_data);
+        if (reinterpret_cast<uint8_t*>(frame) + frame_size >
+            this->call_stack_mem + this->call_stack_size) {
             throw std::runtime_error("stack overflow");
         }
 
         // Help with debugging.
-        std::memset(next_frame_mem, 0x56, next_frame_size);
+        std::memset(frame, 0x56, frame_size);
 
-        auto frame = reinterpret_cast<Frame*>(next_frame_mem);
+        frame->caller = nullptr;
         frame->v_code = r_code.value();
         frame->inst_spot = 0;
         frame->arg_spot = 0;
@@ -75,9 +92,14 @@ namespace Katsu
         frame->v_cleanup = Value::null();
         frame->is_cleanup = false;
         frame->v_module = r_code->v_module;
+        for (uint32_t i = 0; i < code_num_regs; i++) {
+            frame->regs()[i] = Value::null();
+        }
         this->current_frame = frame;
 
         while (true) {
+            this->print_vm_state();
+
             Code* frame_code = this->current_frame->v_code.obj_code();
             Array* frame_insts = frame_code->v_insts.obj_array();
             if (reinterpret_cast<uint8_t*>(this->current_frame) == this->call_stack_mem) {
@@ -85,12 +107,52 @@ namespace Katsu
                 bool finished_instructions = this->current_frame->inst_spot == frame_insts->length;
                 bool no_cleanup = this->current_frame->v_cleanup.is_null();
                 if (finished_instructions && no_cleanup) {
+                    if (this->current_frame->data_depth != 1) {
+                        throw std::logic_error("top level data_depth wasn't 1 when unwinding");
+                    }
                     Value v_return_value = this->current_frame->data()[0];
                     this->current_frame = nullptr;
-                    return ValueRoot(gc, std::move(v_return_value));
+                    return v_return_value;
                 }
             }
             single_step();
+        }
+    }
+
+    void pprint(Value value, bool initial_indent = true, int depth = 0);
+
+    void VM::print_vm_state()
+    {
+        Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
+        std::cout << "=== CALL STACK (GROWING TOP TO BOTTOM) ===\n";
+        while (frame <= this->current_frame) {
+            std::cout << "--- CALL FRAME ---\n";
+
+            std::cout << "v_code: ";
+            pprint(frame->v_code, /* initial_indent */ false);
+            std::cout << "inst_spot = " << frame->inst_spot << "\n";
+            std::cout << "arg_spot = " << frame->arg_spot << "\n";
+            std::cout << "num_regs = " << frame->num_regs << "\n";
+            std::cout << "num_data = " << frame->num_data << "\n";
+            std::cout << "data_depth = " << frame->data_depth << "\n";
+            std::cout << "v_cleanup: ";
+            pprint(frame->v_cleanup, /* initial_indent */ false);
+            std::cout << "is_cleanup = " << frame->is_cleanup << "\n";
+            // TODO: show v_module only if folding is possible, otherwise too noisy.
+
+            std::cout << "regs:\n";
+            for (uint32_t i = 0; i < frame->num_regs; i++) {
+                std::cout << "- @" << i << " = ";
+                pprint(frame->regs()[i], /* initial_indent */ false, /* depth */ 1);
+            }
+            std::cout << "data:\n";
+            for (uint32_t i = 0; i < frame->data_depth; i++) {
+                std::cout << "- " << i << " = ";
+                pprint(frame->data()[i], /* initial_indent */ false, /* depth */ 1);
+            }
+
+            frame = reinterpret_cast<Frame*>(
+                align_up(reinterpret_cast<uint64_t>(frame) + frame->size(), TAG_BITS));
         }
     }
 
@@ -101,17 +163,26 @@ namespace Katsu
         Array* frame_args = frame_code->v_args.obj_array();
 
         auto push = [this](Value value) -> void {
+            if (this->current_frame->data_depth == this->current_frame->num_data) {
+                throw std::logic_error("data stack overflow in frame");
+            }
             this->current_frame->data()[this->current_frame->data_depth++] = value;
         };
         auto pop = [this]() -> Value {
-            Value* v_top = &this->current_frame->data()[this->current_frame->data_depth];
+            if (this->current_frame->data_depth == 0) {
+                throw std::logic_error("data stack underflow in frame");
+            }
+            Value* v_top = &this->current_frame->data()[--this->current_frame->data_depth];
             Value v_popped = *v_top;
             *v_top = Value::null();
-            this->current_frame->data_depth--;
             return v_popped;
         };
 
         auto arg = [this, frame_args](int offset = 0) -> Value {
+            if (this->current_frame->arg_spot + offset < 0 ||
+                this->current_frame->arg_spot + offset >= frame_args->length) {
+                throw std::logic_error("arg() offset out of bounds");
+            }
             return frame_args->components()[this->current_frame->arg_spot + offset];
         };
 
@@ -120,7 +191,28 @@ namespace Katsu
 
         uint64_t num_insts = frame_insts->length;
         if (this->current_frame->inst_spot == num_insts) {
-            // TODO: unwind frame and/or invoke cleanup
+            if (this->current_frame->arg_spot != frame_args->length) {
+                throw std::logic_error("didn't use correct number of args by end of frame");
+            }
+
+            // Unwind the frame!
+            if (!this->current_frame->v_cleanup.is_null() || this->current_frame->is_cleanup) {
+                throw std::logic_error("unwinding with cleanup not yet implemented");
+            }
+            if (!this->current_frame->caller) {
+                throw std::logic_error("frame being unwound has no caller!");
+            }
+            if (this->current_frame->data_depth != 1) {
+                throw std::logic_error("data_depth must be 1 when unwinding");
+            }
+            Frame* caller = this->current_frame->caller;
+            if (caller->data_depth >= caller->num_data) {
+                throw std::logic_error("unwinding would overflow caller's data stack");
+            }
+            caller->data()[caller->data_depth++] = this->current_frame->data()[0];
+            this->current_frame = caller;
+
+            return;
         }
 
         if (this->current_frame->inst_spot > num_insts) [[unlikely]] {
@@ -160,9 +252,10 @@ namespace Katsu
                 break;
             }
             case OpCode::INIT_REF: {
+                // arg() is invalidated by any GC access, so acquire the local index ahead of time.
+                int64_t local_index = arg().fixnum();
                 ValueRoot r_ref(this->gc, pop());
-                this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref =
-                    Value::object(make_ref(this->gc, r_ref));
+                this->current_frame->regs()[local_index] = Value::object(make_ref(this->gc, r_ref));
                 shift_inst();
                 shift_arg();
                 break;
@@ -185,6 +278,9 @@ namespace Katsu
                 Value v_method =
                     module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
                 int64_t num_args = arg(+1).fixnum();
+                if (this->current_frame->data_depth < num_args) {
+                    throw std::logic_error("data stack underflow in frame");
+                }
                 this->current_frame->data_depth -= num_args;
 
                 shift_inst();
@@ -195,10 +291,19 @@ namespace Katsu
                              this->current_frame->data() + this->current_frame->data_depth);
                 break;
             }
+            case OpCode::DROP: {
+                pop();
+                shift_inst();
+                break;
+            }
             case OpCode::MAKE_TUPLE: {
+                // arg() is invalidated by any GC access, so acquire num_components ahead of time.
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Tuple* tuple = make_tuple_nofill(this->gc, num_components);
+                if (this->current_frame->data_depth < num_components) {
+                    throw std::logic_error("data stack underflow in frame");
+                }
                 this->current_frame->data_depth -= num_components;
                 for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
@@ -212,9 +317,13 @@ namespace Katsu
                 break;
             }
             case OpCode::MAKE_VECTOR: {
+                // arg() is invalidated by any GC access, so acquire num_components ahead of time.
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
-                Array* array = make_array_nofill(gc, num_components);
+                Array* array = make_array_nofill(this->gc, num_components);
+                if (this->current_frame->data_depth < num_components) {
+                    throw std::logic_error("data stack underflow in frame");
+                }
                 this->current_frame->data_depth -= num_components;
                 for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
@@ -222,31 +331,34 @@ namespace Katsu
                     array->components()[i] = *component;
                     *component = Value::null();
                 }
-                Vector* vec = make_vector(gc, /* length */ num_components, array);
+                Vector* vec = make_vector(this->gc, /* length */ num_components, array);
                 push(Value::object(vec));
                 shift_inst();
                 shift_arg();
                 break;
             }
             case OpCode::MAKE_CLOSURE: {
-                uint32_t num_upregs;
-                {
-                    Code* code = arg().obj_code();
-                    // TODO: check <= UINT32_MAX
-                    num_upregs = code->v_upreg_map.obj_array()->length;
+                // arg() is invalidated by any GC access, so acquire the closure's Code ahead of
+                // time.
+                Root<Code> r_code(this->gc, arg().obj_code());
+                uint64_t num_upregs = r_code->v_upreg_map.obj_array()->length;
+
+                Root<Array> r_upregs(this->gc,
+                                     make_array(this->gc, num_upregs)); // null-initialized
+                Closure* closure =
+                    make_closure(this->gc, /* r_code */ r_code, /* r_upregs */ r_upregs);
+
+                // Copy from the current stack frame's data stack into the closure's upregs.
+                if (this->current_frame->data_depth < num_upregs) {
+                    throw std::logic_error("data stack underflow in frame");
                 }
-
-                Root<Array> r_upregs(this->gc, make_array(gc, num_upregs)); // null-initialized
-
-                Root<Code> r_code(gc, arg().obj_code());
-                Closure* closure = make_closure(gc, /* r_code */ r_code, /* r_upregs */ r_upregs);
-
-                // Copy from the current stack frame registers into the closure's upregs.
+                this->current_frame->data_depth -= num_upregs;
                 Array* upregs = *r_upregs;
-                Array* upreg_map = arg().obj_code()->v_upreg_map.obj_array();
-                for (uint64_t i = 0; i < upreg_map->length; i++) {
-                    int64_t src = upreg_map->components()[i].fixnum();
-                    upregs->components()[i] = this->current_frame->regs()[src];
+                for (uint64_t i = 0; i < num_upregs; i++) {
+                    Value* upreg =
+                        &this->current_frame->data()[this->current_frame->data_depth + i];
+                    upregs->components()[i] = *upreg;
+                    *upreg = Value::null();
                 }
 
                 push(Value::object(closure));
@@ -306,18 +418,17 @@ namespace Katsu
             uint32_t code_num_regs = code->num_regs;
             uint32_t code_num_data = code->num_data;
 
-            uint8_t* next_frame_mem = reinterpret_cast<uint8_t*>(
-                align_up(reinterpret_cast<uint64_t>(this->current_frame), TAG_BITS));
-            uint64_t next_frame_size =
-                sizeof(Frame) + (code_num_regs + code_num_data) * sizeof(Value);
-            if (next_frame_mem + next_frame_size > this->call_stack_mem + this->call_stack_size) {
+            Frame* frame = this->current_frame->next();
+            size_t frame_size = Frame::size(code_num_regs, code_num_data);
+            if (reinterpret_cast<uint8_t*>(frame) + frame_size >
+                this->call_stack_mem + this->call_stack_size) {
                 throw std::runtime_error("stack overflow");
             }
 
             // Help with debugging.
-            std::memset(next_frame_mem, 0x56, next_frame_size);
+            std::memset(frame, 0x56, frame_size);
 
-            auto frame = reinterpret_cast<Frame*>(next_frame_mem);
+            frame->caller = this->current_frame;
             frame->v_code = method->v_code;
             frame->inst_spot = 0;
             frame->arg_spot = 0;
@@ -327,6 +438,12 @@ namespace Katsu
             frame->v_cleanup = Value::null();
             frame->is_cleanup = false;
             frame->v_module = code->v_module;
+            for (uint32_t i = 0; i < num_args; i++) {
+                frame->regs()[i] = args[i];
+            }
+            for (uint32_t i = num_args; i < code_num_regs; i++) {
+                frame->regs()[i] = Value::null();
+            }
             this->current_frame = frame;
         }
     }

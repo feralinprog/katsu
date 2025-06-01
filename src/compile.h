@@ -17,6 +17,8 @@ namespace Katsu
         const SourceSpan span;
     };
 
-    Code* compile_module(GC& gc, OptionalRoot<Module>& base,
+    Code* compile_into_module(GC& gc, Root<Module>& r_module,
+                              std::vector<std::unique_ptr<Expr>>& module_top_level_exprs);
+    Code* compile_module(GC& gc, OptionalRoot<Module>& r_base,
                          std::vector<std::unique_ptr<Expr>>& module_top_level_exprs);
 };

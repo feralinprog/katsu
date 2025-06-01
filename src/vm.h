@@ -34,19 +34,19 @@ namespace Katsu
      * +--------------+--------+----------------------------------------------------------+
      * | Name         | Opcode | Arguments ...                                            |
      * +--------------+--------+----------------------------------------------------------+
-     * | LOAD_REG     |  0x1   | (fixnum) local index                                     |
-     * | STORE_REG    |  0x2   | (fixnum) local index                                     |
-     * | LOAD_REF     |  0x3   | (fixnum) local index                                     |
-     * | STORE_REF    |  0x4   | (fixnum) local index                                     |
-     * | LOAD_VALUE   |  0x5   | value to load                                            |
-     * | INIT_REF     |  0x?   | (fixnum) local index                                     |
+     * | LOAD_REG     |  0x0   | (fixnum) local index                                     |
+     * | STORE_REG    |  0x1   | (fixnum) local index                                     |
+     * | LOAD_REF     |  0x2   | (fixnum) local index                                     |
+     * | STORE_REF    |  0x3   | (fixnum) local index                                     |
+     * | LOAD_VALUE   |  0x4   | value to load                                            |
+     * | INIT_REF     |  0x5   | (fixnum) local index                                     |
      * | LOAD_MODULE  |  0x6   | (string) name                                            |
      * | STORE_MODULE |  0x7   | (string) name                                            |
      * | INVOKE       |  0x8   | (string) name; (fixnum) num args                     (1) |
      * | DROP         |  0x9   | none                                                     |
      * | MAKE_TUPLE   |  0xA   | (fixnum) num components                                  |
      * | MAKE_VECTOR  |  0xB   | (fixnum) num components                                  |
-     * | MAKE_CLOSURE |  0xC   | TODO (represent closure 'template')                  (2) |
+     * | MAKE_CLOSURE |  0xC   | (closure) closure 'template'                         (2) |
      * +--------------+--------+----------------------------------------------------------+
      * Notes:
      * (1) This should probably refer to an actual multimethod object to avoid lookups...
@@ -112,6 +112,9 @@ namespace Katsu
 
     struct Frame
     {
+        // Frame which called this one, or nullptr if bottom of stack.
+        Frame* caller;
+
         Value v_code; // Code
 
         // Current index in the code's insts / args arrays.
@@ -145,6 +148,23 @@ namespace Katsu
         {
             return this->regs() + this->num_regs;
         }
+
+        // Number of bytes for the Frame and its trailing registers / data.
+        static size_t size(uint32_t num_regs, uint32_t num_data)
+        {
+            return sizeof(Frame) + (num_regs + num_data) * sizeof(Value);
+        }
+        inline size_t size()
+        {
+            return Frame::size(this->num_regs, this->num_data);
+        }
+
+        // Pointer to the Frame that would follow the current one in the call stack.
+        inline Frame* next()
+        {
+            return reinterpret_cast<Frame*>(
+                align_up(reinterpret_cast<uint64_t>(this) + this->size(), TAG_BITS));
+        }
     };
     static_assert(sizeof(Frame) % sizeof(Value) == 0);
 
@@ -154,11 +174,13 @@ namespace Katsu
         VM(GC& gc, uint64_t call_stack_size);
         ~VM();
 
-        ValueRoot eval_toplevel(Root<Code>& r_code);
+        Value eval_toplevel(Root<Code>& r_code);
 
         void visit_roots(std::function<void(Value*)>& visitor) override;
 
     private:
+        void print_vm_state();
+
         void single_step();
 
         // Look up the method_name in the module, following v_base until null.

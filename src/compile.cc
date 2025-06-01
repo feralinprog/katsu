@@ -72,7 +72,7 @@ namespace Katsu
             append(gc, this->r_args, r_arg);
         }
 
-        Binding* lookup(const std::string& name, size_t* depth = nullptr)
+        Binding* lookup(const std::string& name, size_t* depth)
         {
             size_t _depth = 0;
             CodeBuilder* cur = this;
@@ -89,7 +89,7 @@ namespace Katsu
             }
             return nullptr;
         }
-        Binding* lookup(String* name, size_t* depth = nullptr)
+        Binding* lookup(String* name, size_t* depth)
         {
             // TODO: check name->length against size_t?
             size_t _depth = 0;
@@ -149,7 +149,7 @@ namespace Katsu
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
-            const std::string& op_name = std::get<std::string>(expr->op.value);
+            const std::string& op_name = std::get<std::string>(expr->op.value) + ":";
             Root<String> r_name(gc, make_string(gc, op_name));
             if (!module_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("unknown module name, cannot invoke binaryop", expr->op.span);
@@ -288,8 +288,14 @@ namespace Katsu
             if (expr->messages.size() == 1) {
                 // Check for local mutable variables.
                 const std::string& name = std::get<std::string>(expr->messages[0].value);
-                const Binding* maybe_local = builder.lookup(name);
+                size_t var_depth;
+                const Binding* maybe_local = builder.lookup(name, &var_depth);
                 if (maybe_local) {
+                    if (var_depth > 0) {
+                        throw compile_error(
+                            "assignment of upvar (before _reading_ upvar) not implemented yet",
+                            expr->span);
+                    }
                     const Binding& local = *maybe_local;
                     if (local._mutable) {
                         // Ensure there's no target provided.
@@ -301,6 +307,9 @@ namespace Katsu
                         // STORE_REF: <local index>
                         builder.emit_op(gc, OpCode::STORE_REF, /* stack_height_delta */ -1);
                         builder.emit_arg(gc, Value::fixnum(local.local_index));
+                        // LOAD_VALUE: null
+                        builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                        builder.emit_arg(gc, Value::null());
                         return;
                     }
                     // TODO: maybe if module lookup fails after this, error message should
@@ -321,7 +330,7 @@ namespace Katsu
                         if (NameExpr* n = dynamic_cast<NameExpr*>(b->left.get())) {
                             const std::string& name = std::get<std::string>(n->name.value);
                             Root<String> r_name(gc, make_string(gc, name));
-                            if (_mutable && builder.lookup(*r_name)) {
+                            if (_mutable && builder.lookup(*r_name, nullptr)) {
                                 // TODO: maybe just allow?
                                 throw compile_error(
                                     "cannot shadow mut: binding with another mut: binding",
@@ -380,9 +389,9 @@ namespace Katsu
             // INVOKE: <name>, <num args>
             builder.emit_op(gc,
                             OpCode::INVOKE,
-                            /* stack_height_delta */ -(int64_t)expr->args.size() + 1);
+                            /* stack_height_delta */ -(int64_t)expr->args.size());
             builder.emit_arg(gc, r_name.value());
-            builder.emit_arg(gc, Value::fixnum(expr->args.size()));
+            builder.emit_arg(gc, Value::fixnum(1 + expr->args.size()));
         } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
             compile_expr(gc, builder, *expr->inner);
         } else if (BlockExpr* expr = dynamic_cast<BlockExpr*>(&_expr)) {
@@ -420,7 +429,7 @@ namespace Katsu
                 }
             }
             compile_expr(gc, closure_builder, *expr->body);
-            Root<Code> r_closure_code(gc, closure_builder.finalize(gc));
+            ValueRoot r_closure_code(gc, Value::object(closure_builder.finalize(gc)));
             uint64_t num_upreg_loads = closure_builder.r_upreg_loading->length;
             // Sanity check!
             if (num_upreg_loads != closure_builder.r_upreg_map->length) {
@@ -439,6 +448,7 @@ namespace Katsu
             builder.emit_op(gc,
                             OpCode::MAKE_CLOSURE,
                             /* stack_height_delta */ -(int64_t)num_upreg_loads + 1);
+            builder.emit_arg(gc, *r_closure_code);
         } else if (DataExpr* expr = dynamic_cast<DataExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
                 compile_expr(gc, builder, *component);
@@ -663,14 +673,11 @@ namespace Katsu
         append(gc, r_methods, r_method);
     }
 
-    Code* compile_module(GC& gc, OptionalRoot<Module>& base,
-                         std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
+    Code* compile_into_module(GC& gc, Root<Module>& r_module,
+                              std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
         // TODO: for future -- first find all multimethod definitions, add them to module (with zero
         // methods defined), and then go and compile everything.
-
-        Root<Module> r_module(gc, make_module(gc, base, /* capacity */ 0));
-        // `base` must be assumed to be an invalid pointer now.
 
         OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
         Root<Vector> r_insts(gc, make_vector(gc, 0));
@@ -687,6 +694,12 @@ namespace Katsu
             .bindings = {},
             .base = nullptr,
         };
+        // TODO: something less hacky? All Code is built assuming that local @0 is the default
+        // receiver. For top level code, there isn't really a default receiver (other than null, I
+        // suppose).
+        builder.num_regs++;
+        // The VM loads call frame registers with nulls when setting up a frame, so we don't need to
+        // have bytecode actually write a null into local @0.
 
         for (std::unique_ptr<Expr>& top_level_expr : module_top_level_exprs) {
             // TODO: handle method:does:[::] as a builtin, looked up in module.
@@ -718,11 +731,60 @@ namespace Katsu
                                    *expr->args[1],
                                    expr->args[2].get());
                     continue;
+                } else if (expr->messages.size() == 1 &&
+                           std::get<std::string>(expr->messages[0].value) == "let") {
+                    if (expr->target) {
+                        throw compile_error("let: requires no target", expr->span);
+                    }
+                    if (BinaryOpExpr* b = dynamic_cast<BinaryOpExpr*>(expr->args[0].get())) {
+                        if (std::get<std::string>(b->op.value) == "=") {
+                            if (NameExpr* n = dynamic_cast<NameExpr*>(b->left.get())) {
+                                const std::string& name = std::get<std::string>(n->name.value);
+                                Root<String> r_name(gc, make_string(gc, name));
+                                // Compile initial value _without_ the new binding established.
+                                compile_expr(gc, builder, *b->right);
+                                // Then add the (module) binding.
+                                // TODO: this is weird. what value do we put in the module initially
+                                // (during compile time)?
+                                ValueRoot r_init(gc, Value::null());
+                                append(gc, r_module, r_name, r_init);
+                                // STORE_MODULE: <name>
+                                builder.emit_op(gc,
+                                                OpCode::STORE_MODULE,
+                                                /* stack_height_delta */ -1);
+                                builder.emit_arg(gc, r_name.value());
+                                // LOAD:VALUE: null
+                                builder.emit_op(gc,
+                                                OpCode::LOAD_VALUE,
+                                                /* stack_height_delta */ +1);
+                                builder.emit_arg(gc, Value::null());
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
             compile_expr(gc, builder, *top_level_expr);
         }
 
+        // If the top level expressions were all definitions, there may be no code to execute (and
+        // to get a value from). In this case, just add stub code to load null.
+        if (builder.r_insts->length == 0) {
+            // LOAD_VALUE: null
+            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+            builder.emit_arg(gc, Value::null());
+        }
+
         return builder.finalize(gc);
+    }
+
+    Code* compile_module(GC& gc, OptionalRoot<Module>& r_base,
+                         std::vector<std::unique_ptr<Expr>>& module_top_level_exprs,
+                         Module*& out_module)
+    {
+        Root<Module> r_module(gc, make_module(gc, r_base, /* capacity */ 0));
+        Code* code = compile_into_module(gc, r_module, module_top_level_exprs);
+        out_module = *r_module;
+        return code;
     }
 };

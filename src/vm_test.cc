@@ -43,12 +43,12 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
                                 /* r_insts */ r_insts,
                                 /* r_args */ r_args));
 
-    ValueRoot r_result = vm.eval_toplevel(r_code);
-    CHECK(*r_result == Value::fixnum(1234));
+    Value v_result = vm.eval_toplevel(r_code);
+    CHECK(v_result == Value::fixnum(1234));
 
     // Evaluate again -- VM should be able to handle this easily.
-    ValueRoot r_result_2 = vm.eval_toplevel(r_code);
-    CHECK(*r_result_2 == Value::fixnum(1234));
+    Value v_result_2 = vm.eval_toplevel(r_code);
+    CHECK(v_result_2 == Value::fixnum(1234));
 }
 
 Value test__fixnum_add(VM& vm, int64_t num_args, Value* args)
@@ -128,11 +128,11 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                       make_code(gc,
                                 /* r_module */ r_module,
                                 /* num_regs */ 1,
-                                /* num_data */ 1,
+                                /* num_data */ 2,
                                 /* r_upreg_map */ r_upreg_map,
                                 /* r_insts */ r_insts,
                                 /* r_args */ r_args));
 
-    ValueRoot r_result = vm.eval_toplevel(r_code);
-    CHECK(*r_result == Value::fixnum(15));
+    Value v_result = vm.eval_toplevel(r_code);
+    CHECK(v_result == Value::fixnum(15));
 }
