@@ -1,4 +1,4 @@
-print: 10 + 20
+pretty-print: 10 + 20
 
 method: [adder: n0] does: [
     mut: n = n0
@@ -11,6 +11,6 @@ method: [adder: n0] does: [
 ]
 
 let: a = (adder: 3)
-print: a
-print: (a call: 1)
-print: (a call: 2)
+pretty-print: a
+pretty-print: (a call: 0)
+pretty-print: (a call: 2)
