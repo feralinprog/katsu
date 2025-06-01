@@ -549,8 +549,7 @@ namespace Katsu
                 spans.push_back(sep.span);
             }
 
-            return std::make_unique<SequenceExpr>(SourceSpan::combine(spans),
-                                                  std::move(components));
+            return std::make_unique<TupleExpr>(SourceSpan::combine(spans), std::move(components));
         }
 
         int precedence(const Token& token) override
