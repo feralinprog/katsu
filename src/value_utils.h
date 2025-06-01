@@ -36,10 +36,10 @@ namespace Katsu
     // Make a Closure with specified fields.
     Closure* make_closure(GC& gc, Root<Code>& r_code, Root<Array>& r_upregs);
     // Make a Method with specified fields.
-    // `native_handler` is optional.
+    // `native_handler` and `intrinsic_handler` are optional.
     Method* make_method(GC& gc, ValueRoot& r_param_matchers, OptionalRoot<Type>& r_return_type,
                         OptionalRoot<Code>& r_code, Root<Vector>& r_attributes,
-                        NativeHandler native_handler);
+                        NativeHandler native_handler, IntrinsicHandler intrinsic_handler);
     // Make a MultiMethod with specified fields.
     MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, Root<Vector>& r_methods,
                                   Root<Vector>& r_attributes);

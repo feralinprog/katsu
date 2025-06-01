@@ -620,11 +620,23 @@ namespace Katsu
 
     // Pointer to a function which takes an array of Values, calculates a result, and returns it.
     // The input values may be temporary locations in a call frame; copy them before calling into
-    // any VM functionality. Furthermore, the input values may not be GC roots; add them as roots
+    // any VM functionality. Furthermore, the input values may not be live; add them as GC roots
     // before using any GC functionality (which may induce a collection).
+    // Native handlers should avoid using any eval-style functions; such functionality should
+    // instead be implemented using intrinsic handlers so as to reify the Katsu call stack.
     class VM;
-    typedef Value (*NativeHandler)(VM&, int64_t, Value*);
-    // typedef Value *IntrinsicHandler(int64_t, Value*);
+    typedef Value (*NativeHandler)(VM& vm, int64_t nargs, Value* args);
+    // Pointer to a function which takes a VM and all its runtime state and is allowed to
+    // arbitrarily modify that state, for instance by adding or removing call frames. The handler
+    // must also update the top-of-call-stack instruction and argument position(s) as necessary so
+    // that the positions indicate the next instruction to execute. The input values are already
+    // popped from the top call-frame's data stack, so copy them before calling into any VM
+    // functionality. Furthermore, add them as GC roots before using any GC functionality (which may
+    // induce a collection). If the handler raises an exception, it must ensure that the VM is left
+    // in a state where pushing one more value to the data stack allows that value to be treated as
+    // the result of the handler invocation. (For instance, not modifying the data stack at all
+    // meets this criterion.)
+    typedef void (*IntrinsicHandler)(VM& vm, bool tail_call, int64_t nargs, Value* args);
 
     struct Method : public Object
     {
@@ -635,8 +647,9 @@ namespace Katsu
         Value v_return_type;    // Type or Null
         Value v_code;           // Code, or Null if referring to a native method
         // Arbitrary extra values attached by user.
-        Value v_attributes;           // Vector
-        NativeHandler native_handler; // optional (nullptr)
+        Value v_attributes;                 // Vector
+        NativeHandler native_handler;       // optional (nullptr)
+        IntrinsicHandler intrinsic_handler; // optional (nullptr)
 
         // Size in bytes.
         static inline uint64_t size()

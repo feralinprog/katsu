@@ -115,16 +115,19 @@ namespace Katsu
 
     Method* make_method(GC& gc, ValueRoot& r_param_matchers, OptionalRoot<Type>& r_return_type,
                         OptionalRoot<Code>& r_code, Root<Vector>& r_attributes,
-                        NativeHandler native_handler)
+                        NativeHandler native_handler, IntrinsicHandler intrinsic_handler)
     {
-        // No way to check native_handler.
+        // No way to check native_handler or intrinsic_handler.
 #if DEBUG_ASSERTIONS
         {
             bool has_code = r_code;
             bool has_native_handler = native_handler != nullptr;
-            int options_selected = (has_code ? 1 : 0) + (has_native_handler ? 1 : 0);
+            bool has_intrinsic_handler = intrinsic_handler != nullptr;
+            int options_selected =
+                (has_code ? 1 : 0) + (has_native_handler ? 1 : 0) + (has_intrinsic_handler ? 1 : 0);
             ASSERT_ARG_MSG(options_selected == 1,
-                           "exactly one of r_code and native_handler must be instantiated");
+                           "exactly one of r_code, native_handler, and intrinsic_handler must be "
+                           "instantiated");
         }
 #endif
 
@@ -134,6 +137,7 @@ namespace Katsu
         method->v_code = r_code.value();
         method->v_attributes = r_attributes.value();
         method->native_handler = native_handler;
+        method->intrinsic_handler = intrinsic_handler;
         return method;
     }
 
@@ -500,9 +504,10 @@ namespace Katsu
                                    /* extra_depth */ +1);
                             break;
                         }
-                        case INVOKE: {
-                            std::cout << "invoke #" << args->components()[arg_spot + 1].fixnum()
-                                      << " ";
+                        case INVOKE:
+                        case INVOKE_TAIL: {
+                            std::cout << "invoke" << (inst == INVOKE ? "" : "-tail") << " #"
+                                      << args->components()[arg_spot + 1].fixnum() << " ";
                             pchild(args->components()[arg_spot],
                                    "",
                                    /* initial_indent */ false,
@@ -553,6 +558,7 @@ namespace Katsu
                 pchild(o->v_code, "v_code = ");
                 pchild(o->v_attributes, "v_attributes = ");
                 pnative() << "native_handler = " << (void*)o->native_handler << "\n";
+                pnative() << "intrinsic_handler = " << (void*)o->intrinsic_handler << "\n";
             } else if (value.is_obj_multimethod()) {
                 MultiMethod* o = value.obj_multimethod();
                 std::cout << "*multimethod\n";

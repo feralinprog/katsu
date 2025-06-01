@@ -258,7 +258,8 @@ namespace Katsu
                 shift_arg();
                 break;
             }
-            case OpCode::INVOKE: {
+            case OpCode::INVOKE:
+            case OpCode::INVOKE_TAIL: {
                 Value v_method =
                     module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
                 int64_t num_args = arg(+1).fixnum();
@@ -266,10 +267,11 @@ namespace Katsu
                            "data stack underflow in frame");
                 this->current_frame->data_depth -= num_args;
 
-                shift_inst();
-                shift_arg(2);
+                bool tail_call = inst == OpCode::INVOKE_TAIL;
 
+                // invoke() takes care of shifting the instruction / arg spots.
                 this->invoke(v_method,
+                             tail_call,
                              num_args,
                              this->current_frame->data() + this->current_frame->data_depth);
                 break;
@@ -280,7 +282,8 @@ namespace Katsu
                 break;
             }
             case OpCode::MAKE_TUPLE: {
-                // arg() is invalidated by any GC access, so acquire num_components ahead of time.
+                // arg() is invalidated by any GC access, so acquire num_components ahead of
+                // time.
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Tuple* tuple = make_tuple_nofill(this->gc, num_components);
@@ -299,7 +302,8 @@ namespace Katsu
                 break;
             }
             case OpCode::MAKE_VECTOR: {
-                // arg() is invalidated by any GC access, so acquire num_components ahead of time.
+                // arg() is invalidated by any GC access, so acquire num_components ahead of
+                // time.
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Array* array = make_array_nofill(this->gc, num_components);
@@ -359,7 +363,7 @@ namespace Katsu
         return *lookup;
     }
 
-    void VM::invoke(Value v_callable, int64_t num_args, Value* args)
+    void VM::invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args)
     {
         if (!v_callable.is_obj_multimethod()) {
             // TODO: make this a katsu runtime error instead
@@ -377,14 +381,26 @@ namespace Katsu
         Method* method = v_method.obj_method();
 
         if (method->v_code.is_null()) {
-            // Native handler.
-            ASSERT_MSG(method->native_handler, "method must have v_code or a native_handler");
-            Value v_result = method->native_handler(*this, num_args, args);
-            auto push = [this](Value value) -> void {
-                this->current_frame->data()[this->current_frame->data_depth++] = value;
-            };
-            push(v_result);
+            // Native or intrinsic handler.
+            if (method->native_handler) {
+                this->current_frame->inst_spot++;
+                this->current_frame->arg_spot += 2;
+                Value v_result = method->native_handler(*this, num_args, args);
+                auto push = [this](Value value) -> void {
+                    this->current_frame->data()[this->current_frame->data_depth++] = value;
+                };
+                push(v_result);
+            } else if (method->intrinsic_handler) {
+                // Handler takes care of updating inst_spot / arg_spot.
+                method->intrinsic_handler(*this, tail_call, num_args, args);
+            } else {
+                ASSERT_MSG(false,
+                           "method must have v_code or a native_handler or intrinsic_handler");
+            }
         } else {
+            this->current_frame->inst_spot++;
+            this->current_frame->arg_spot += 2;
+
             // Bytecode body.
             Code* code = method->v_code.obj_code();
             ASSERT_MSG(code->v_upreg_map.is_null(), "method's v_code's v_upreg_map should be null");

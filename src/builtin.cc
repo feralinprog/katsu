@@ -6,7 +6,8 @@
 namespace Katsu
 {
     // TODO: param matchers / return type
-    void add_native(GC& gc, Root<Module>& r_module, const std::string& name, NativeHandler handler)
+    void add_native(GC& gc, Root<Module>& r_module, const std::string& name,
+                    NativeHandler native_handler)
     {
         // TODO: check if name exists already in module!
 
@@ -25,7 +26,8 @@ namespace Katsu
                                                          r_return_type,
                                                          r_code,
                                                          r_attributes,
-                                                         handler)));
+                                                         native_handler,
+                                                         /* intrinsic_handler */ nullptr)));
             append(gc, r_methods, r_method);
         }
         Root<Vector> r_attributes(gc, make_vector(gc, 0));

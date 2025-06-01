@@ -16,12 +16,13 @@ namespace Katsu
      * - LOAD_MODULE: load a value by name from the call frame's module onto stack
      * - STORE_MODULE: pop from stack to module variable
      * - INVOKE: look up (by name) a multimethod in the global multimethod store, pop arguments, and
-     *   call the method (the lookup should probably be pre-calculated...)
+     *      call the method (the lookup should probably be pre-calculated...)
+     * - INVOKE_TAIL: do the same thing, but as a tail-call
      * - DROP: pop a value from the stack
      * - MAKE_TUPLE: pop some values from the stack, push new tuple with those values
      * - MAKE_VECTOR: pop some values from the stack, push new tuple with those values
      * - MAKE_CLOSURE: push a closure object (which refers to some closed-over variables) to the
-     *   stack
+     *      stack
      *
      * Bytecode format: there are separate instruction and value regions (which should be right next
      * to each other anyway to keep cache warm) -- and also an offside array of SourceSpan per
@@ -43,10 +44,11 @@ namespace Katsu
      * | LOAD_MODULE  |  0x6   | (string) name                                            |
      * | STORE_MODULE |  0x7   | (string) name                                            |
      * | INVOKE       |  0x8   | (string) name; (fixnum) num args                     (1) |
-     * | DROP         |  0x9   | none                                                     |
-     * | MAKE_TUPLE   |  0xA   | (fixnum) num components                                  |
-     * | MAKE_VECTOR  |  0xB   | (fixnum) num components                                  |
-     * | MAKE_CLOSURE |  0xC   | (closure) closure 'template'                         (2) |
+     * | INVOKE_TAIL  |  0x9   | (string) name; (fixnum) num args                     (1) |
+     * | DROP         |  0xA   | none                                                     |
+     * | MAKE_TUPLE   |  0xB   | (fixnum) num components                                  |
+     * | MAKE_VECTOR  |  0xC   | (fixnum) num components                                  |
+     * | MAKE_CLOSURE |  0xD   | (closure) closure 'template'                         (2) |
      * +--------------+--------+----------------------------------------------------------+
      * Notes:
      * (1) This should probably refer to an actual multimethod object to avoid lookups...
@@ -104,6 +106,7 @@ namespace Katsu
         LOAD_MODULE,
         STORE_MODULE,
         INVOKE,
+        INVOKE_TAIL,
         DROP,
         MAKE_TUPLE,
         MAKE_VECTOR,
@@ -187,8 +190,9 @@ namespace Katsu
         static Value& module_lookup_or_fail(Value v_module, String* name);
 
         // Invoke a value (which could be a closure or multimethod) with some arguments. The
-        // arguments may be just past the end of the current frame's data stack.
-        void invoke(Value v_callable, int64_t num_args, Value* args);
+        // arguments may be just past the end of the current frame's data stack. This also takes
+        // responsibility for updating the top call frame's instruction and argument spots.
+        void invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args);
 
         GC& gc;
         // Memory region for the call stack.

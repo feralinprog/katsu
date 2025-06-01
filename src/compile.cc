@@ -136,6 +136,7 @@ namespace Katsu
         }
     };
 
+    // TODO: track tail-position and emit INVOKE_TAIL when requested
     void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr)
     {
         if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
@@ -647,13 +648,15 @@ namespace Katsu
         OptionalRoot<Code> r_opt_code(gc, std::move(code));
         Root<Vector> r_attributes(gc, make_vector(gc, 0)); // TODO: support attributes for methods
         NativeHandler native_handler = nullptr;            // not a native handler
+        IntrinsicHandler intrinsic_handler = nullptr;      // nor an intrinsic handler
         ValueRoot r_method(gc,
                            Value::object(make_method(gc,
                                                      r_param_matchers,
                                                      r_return_type,
                                                      r_opt_code,
                                                      r_attributes,
-                                                     native_handler)));
+                                                     native_handler,
+                                                     intrinsic_handler)));
 
         Root<Vector> r_methods(gc, r_multimethod->v_methods.obj_vector());
         // TODO: refactor into util function to add to multimethod. Need to do other things like:

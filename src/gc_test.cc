@@ -261,7 +261,8 @@ TEST_CASE("GC follows internal references", "[gc]")
         obj->v_return_type = v_pointees[1];
         obj->v_code = v_pointees[2];
         obj->v_attributes = v_pointees[3];
-        obj->native_handler = reinterpret_cast<NativeHandler>(0x12345678); // not used by GC
+        obj->native_handler = reinterpret_cast<NativeHandler>(0x12345678);       // not used by GC
+        obj->intrinsic_handler = reinterpret_cast<IntrinsicHandler>(0x87654321); // not used by GC
 
         Value v_obj = Value::object(obj);
         single_root_collect(&v_obj);
@@ -273,6 +274,7 @@ TEST_CASE("GC follows internal references", "[gc]")
         CHECK_POINTEE(2, obj->v_code);
         CHECK_POINTEE(3, obj->v_attributes);
         CHECK(reinterpret_cast<uint64_t>(obj->native_handler) == 0x12345678);
+        CHECK(reinterpret_cast<uint64_t>(obj->intrinsic_handler) == 0x87654321);
     }
 
     SECTION("MultiMethod")

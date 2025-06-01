@@ -82,7 +82,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                                       /* r_return_type */ r_return_type,
                                       /* r_code */ r_method_code,
                                       /* r_attributes */ r_method_attributes,
-                                      /* native_handler */ &test__fixnum_add));
+                                      /* native_handler */ &test__fixnum_add,
+                                      /* intrinsic_handler */ nullptr));
 
     Vector* methods = make_vector(gc, /* capacity */ 1);
     methods->length = 1;
