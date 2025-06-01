@@ -39,7 +39,7 @@ int main(int argc, char** argv)
         std::cerr << "Parse error: " << e.what() << "\n";
         std::cerr << "at " << e.span << "\n";
     } catch (const Katsu::compile_error& e) {
-        std::cerr << "Parse error: " << e.what() << "\n";
+        std::cerr << "Compilation error: " << e.what() << "\n";
         std::cerr << "at " << e.span << "\n";
     }
     return EXIT_SUCCESS;

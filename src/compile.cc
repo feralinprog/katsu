@@ -1,7 +1,9 @@
 #include "compile.h"
 
+#include "assertions.h"
 #include "value_utils.h"
 #include "vm.h"
+
 #include <cstring>
 #include <map>
 #include <vector>
