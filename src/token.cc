@@ -1,5 +1,7 @@
 #include "token.h"
 
+#include "assertions.h"
+
 namespace Katsu
 {
     std::ostream& operator<<(std::ostream& s, TokenType type)
@@ -25,7 +27,7 @@ namespace Katsu
             case TokenType::OPERATOR: s << "OPERATOR"; break;
             case TokenType::INTEGER: s << "INTEGER"; break;
             case TokenType::STRING: s << "STRING"; break;
-            default: throw std::runtime_error("forgot a case");
+            default: ALWAYS_ASSERT_MSG(false, "forgot a TokenType");
         }
         return s;
     }

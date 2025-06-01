@@ -1,10 +1,11 @@
 #include "parser.h"
 
+#include "assertions.h"
+#include "span.h"
+
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
-
-#include "span.h"
 
 namespace Katsu
 {
@@ -22,10 +23,8 @@ namespace Katsu
         while (token.type == TokenType::NEWLINE) {
             token = stream.consume();
         }
-        if (token.type == TokenType::END) {
-            throw std::runtime_error(
-                "parse() requires there to be a remaining token that is not NEWLINE or EOF");
-        }
+        ASSERT_MSG(token.type != TokenType::END,
+                   "there must be a remaining token that is not NEWLINE or EOF");
 
         const auto& prefix_it = this->prefix_parselets.find(token.type);
         if (prefix_it == this->prefix_parselets.end()) {
@@ -423,9 +422,7 @@ namespace Katsu
         std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
                                     std::unique_ptr<Expr> left, const Token& token) override
         {
-            if (token.type != TokenType::OPERATOR) {
-                throw std::runtime_error("wrong token type");
-            }
+            ASSERT(token.type == TokenType::OPERATOR);
 
             const auto& prec_it = this->infix_precedence.find(std::get<std::string>(token.value));
             if (prec_it == this->infix_precedence.end()) {
@@ -459,9 +456,7 @@ namespace Katsu
 
         int precedence(const Token& token) override
         {
-            if (token.type != TokenType::OPERATOR) {
-                throw std::runtime_error("wrong token type");
-            }
+            ASSERT(token.type == TokenType::OPERATOR);
 
             const auto& prec_it = this->infix_precedence.find(std::get<std::string>(token.value));
             if (prec_it == this->infix_precedence.end()) {

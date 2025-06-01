@@ -1,6 +1,8 @@
 #pragma once
 
+#include "assertions.h"
 #include "value.h"
+
 #include <functional>
 #include <vector>
 
@@ -40,6 +42,11 @@
 #endif
 #if DEBUG_GC_FILL
 #include <cstring>
+#endif
+
+#if DEBUG_GC_VERIFY_ROOT_ORDERING
+// Root ordering verification is implemented via ASSERTions.
+static_assert(DEBUG_ASSERTIONS);
 #endif
 
 namespace Katsu
@@ -167,12 +174,10 @@ namespace Katsu
 #endif
         {
 #if DEBUG_GC_VERIFY_ROOT_ORDERING
-            if (this->gc.roots.empty()) {
-                throw std::logic_error("GC roots are empty while destructing ValueRoot");
-            }
-            if (this->gc.roots.back() != &this->root) {
-                throw std::logic_error("GC roots are out of order while destructing ValueRoot");
-            }
+            ASSERT_MSG(!this->gc.roots.empty(),
+                       "GC roots must be empty while destructing ValueRoot");
+            ASSERT_MSG(this->gc.roots.back() == &this->root,
+                       "GC roots must be in order while destructing ValueRoot");
 #endif
             this->gc.roots.pop_back();
         }
@@ -201,9 +206,7 @@ namespace Katsu
             : gc(_gc)
             , root(Value::object(value))
         {
-            if (!value) {
-                throw std::logic_error("attempted to create Root from nullptr");
-            }
+            ASSERT_MSG(value, "cannot create Root from nullptr");
             this->gc.roots.push_back(&this->root);
             value = nullptr;
         }
@@ -217,12 +220,9 @@ namespace Katsu
 #endif
         {
 #if DEBUG_GC_VERIFY_ROOT_ORDERING
-            if (this->gc.roots.empty()) {
-                throw std::logic_error("GC roots are empty while destructing Root");
-            }
-            if (this->gc.roots.back() != &this->root) {
-                throw std::logic_error("GC roots are out of order while destructing Root");
-            }
+            ASSERT_MSG(!this->gc.roots.empty(), "GC roots must be nonempty while destructing Root");
+            ASSERT_MSG(this->gc.roots.back() == &this->root,
+                       "GC roots must be in order while destructing Root");
 #endif
             this->gc.roots.pop_back();
         }
@@ -269,12 +269,10 @@ namespace Katsu
 #endif
         {
 #if DEBUG_GC_VERIFY_ROOT_ORDERING
-            if (this->gc.roots.empty()) {
-                throw std::logic_error("GC roots are empty while destructing OptionalRoot");
-            }
-            if (this->gc.roots.back() != &this->root) {
-                throw std::logic_error("GC roots are out of order while destructing OptionalRoot");
-            }
+            ASSERT_MSG(!this->gc.roots.empty(),
+                       "GC roots must be nonempty while destructing OptionalRoot");
+            ASSERT_MSG(this->gc.roots.back() == &this->root,
+                       "GC roots are must be in order while destructing OptionalRoot");
 #endif
             this->gc.roots.pop_back();
         }
@@ -296,9 +294,7 @@ namespace Katsu
 
         inline T* operator->()
         {
-            if (!*this) {
-                throw std::logic_error("dereferencing null OptionalRoot!");
-            }
+            ASSERT(*this);
             return this->root.template value<Object*>()->template object<T*>();
         }
 

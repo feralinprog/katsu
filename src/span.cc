@@ -1,5 +1,7 @@
 #include "span.h"
 
+#include "assertions.h"
+
 #include <stdexcept>
 
 namespace Katsu
@@ -15,15 +17,13 @@ namespace Katsu
 
     SourceSpan SourceSpan::combine(const std::vector<SourceSpan>& spans)
     {
-        if (spans.empty()) {
-            throw std::invalid_argument("spans must be nonempty");
-        }
+        ASSERT_ARG(!spans.empty());
         const SourceFile file = spans[0].file;
+#if DEBUG_ASSERTIONS
         for (const SourceSpan& span : spans) {
-            if (span.file != file) {
-                throw std::invalid_argument("all spans must have the same .file");
-            }
+            ASSERT_ARG_MSG(span.file == file, "all spans must have the same .file");
         }
+#endif
 
         SourceLocation min = spans[0].start;
         SourceLocation max = spans[0].end;

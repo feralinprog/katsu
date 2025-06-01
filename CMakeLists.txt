@@ -26,6 +26,7 @@ add_library(katsudon STATIC
 target_include_directories(katsudon PUBLIC src/)
 # TODO: hook this up to ./run somehow... need to able to run tests both with and without DEBUG_GC_COLLECT_EVERY_ALLOC.
 target_compile_options(katsudon PUBLIC
+  # -DDEBUG_ASSERTIONS=0
   # -DDEBUG_GC_LOG
   # -DDEBUG_GC_FILL=0
   -DDEBUG_GC_COLLECT_EVERY_ALLOC

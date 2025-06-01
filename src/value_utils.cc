@@ -1,5 +1,7 @@
 #include "value_utils.h"
 
+#include "assertions.h"
+
 #include <cstring>
 
 namespace Katsu
@@ -52,10 +54,10 @@ namespace Katsu
     Vector* make_vector(GC& gc, uint64_t length, Root<Array>& r_array)
     {
         Vector* vec = gc.alloc<Vector>();
+#if DEBUG_ASSERTIONS
         Array* array = *r_array;
-        if (length > array->length) {
-            throw std::invalid_argument("length must be at most r_array length");
-        }
+        ASSERT_ARG(length <= array->length);
+#endif
         vec->length = length;
         vec->v_array = r_array.value();
         return vec;
@@ -112,19 +114,16 @@ namespace Katsu
                         OptionalRoot<Code>& r_code, Root<Vector>& r_attributes,
                         NativeHandler native_handler)
     {
-        // if (!r_param_matchers->is_obj_vector()) {
-        //     throw std::invalid_argument("r_param_matchers must be a Vector");
-        // }
         // No way to check native_handler.
+#if DEBUG_ASSERTIONS
         {
             bool has_code = r_code;
             bool has_native_handler = native_handler != nullptr;
             int options_selected = (has_code ? 1 : 0) + (has_native_handler ? 1 : 0);
-            if (options_selected != 1) {
-                throw std::invalid_argument(
-                    "exactly one of r_code and native_handler must be instantiated");
-            }
+            ASSERT_ARG_MSG(options_selected == 1,
+                           "exactly one of r_code and native_handler must be instantiated");
         }
+#endif
 
         Method* method = gc.alloc<Method>();
         method->v_param_matchers = *r_param_matchers;
@@ -154,14 +153,12 @@ namespace Katsu
         // Nothing to check for `sealed`.
         // TODO: check linearization? (at least some basic sanity checks)
         // TODO check Type components in r_subtypes
-        if (!(kind == Type::Kind::MIXIN || kind == Type::Kind::DATACLASS)) {
-            throw std::invalid_argument("kind must be MIXIN or DATACLASS");
+        ASSERT_ARG(kind == Type::Kind::MIXIN || kind == Type::Kind::DATACLASS);
+        if (kind == Type::Kind::MIXIN) {
+            ASSERT_ARG_MSG(!r_slots, "MIXIN type must have no slots");
         }
-        if (kind == Type::Kind::MIXIN && r_slots) {
-            throw std::invalid_argument("r_slots must be null for MIXIN type");
-        }
-        if (kind == Type::Kind::DATACLASS && !r_slots) {
-            throw std::invalid_argument("r_slots must be a Vector for DATACLASS type");
+        if (kind == Type::Kind::DATACLASS) {
+            ASSERT_ARG_MSG(r_slots, "DATACLASS type must have a Vector of slots");
         }
 
         Type* type = gc.alloc<Type>();
@@ -178,9 +175,7 @@ namespace Katsu
     DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type)
     {
         Type* type = *r_type;
-        if (type->kind != Type::Kind::DATACLASS) {
-            throw std::invalid_argument("r_type must be a DATACLASS-kind type");
-        }
+        ASSERT_ARG(type->kind == Type::Kind::DATACLASS);
 
         uint64_t num_slots = type->v_slots.obj_vector()->length;
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
@@ -221,9 +216,7 @@ namespace Katsu
         Module* module = *r_module;
 
         uint64_t array_capacity = module->v_array.obj_array()->length;
-        if (array_capacity % 2 != 0) {
-            throw std::logic_error("module backing array has odd length!");
-        }
+        ASSERT_MSG(array_capacity % 2 == 0, "module backing array should have even length");
         uint64_t entries_capacity = array_capacity / 2;
         if (module->length == entries_capacity) {
             // Reallocate the backing array! The original backing array (and module) are kept alive

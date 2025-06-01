@@ -1,5 +1,7 @@
 #include "lexer.h"
 
+#include "assertions.h"
+
 #include <cctype>
 #include <stdexcept>
 #include <string>
@@ -13,18 +15,13 @@ namespace Katsu
 
     char Lexer::peek()
     {
-        if (this->eof()) {
-            throw std::runtime_error("get() must not be called if eof()");
-        }
-
+        ASSERT(!this->eof());
         return (*this->source.source)[this->loc.index];
     }
 
     char Lexer::get()
     {
-        if (this->eof()) {
-            throw std::runtime_error("get() must not be called if eof()");
-        }
+        ASSERT(!this->eof());
 
         char cur = this->peek();
 
@@ -41,9 +38,7 @@ namespace Katsu
 
     Token Lexer::next()
     {
-        if (this->loc.index > this->source_len) {
-            throw std::runtime_error("lexer got out of bounds");
-        }
+        ASSERT_MSG(this->loc.index <= this->source_len, "lexer got out of bounds");
 
         if (this->eof()) {
             return Token{

@@ -48,9 +48,8 @@ namespace Katsu
         uint32_t stack_height;
         void bump_stack(int64_t delta)
         {
-            if (delta < 0 && this->stack_height < -delta) {
-                throw std::logic_error("data stack underflow during compilation");
-            }
+            // Don't underflow the stack.
+            ASSERT(delta >= 0 || this->stack_height >= -delta);
             this->stack_height += delta;
             if (this->stack_height > this->num_data) {
                 this->num_data = this->stack_height;
@@ -143,7 +142,7 @@ namespace Katsu
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
             if (!module_lookup(*builder.r_module, *r_name)) {
-                throw compile_error("unknown module name, cannot invoke unaryop", expr->op.span);
+                throw compile_error("name is not defined in module", expr->op.span);
             }
             compile_expr(gc, builder, *expr->arg);
             // INVOKE: <name>, <num args>
@@ -154,7 +153,7 @@ namespace Katsu
             const std::string& op_name = std::get<std::string>(expr->op.value) + ":";
             Root<String> r_name(gc, make_string(gc, op_name));
             if (!module_lookup(*builder.r_module, *r_name)) {
-                throw compile_error("unknown module name, cannot invoke binaryop", expr->op.span);
+                throw compile_error("name is not defined in module", expr->op.span);
             }
             compile_expr(gc, builder, *expr->left);
             compile_expr(gc, builder, *expr->right);
@@ -178,10 +177,8 @@ namespace Katsu
                 // If this is an upvar access, we need to make sure it's tracked in the upreg map
                 // and loading vector.
                 if (var_depth > 0) {
-                    if (var_depth != 1) {
-                        throw compile_error("upvar depth more than 1 not implemented yet",
-                                            expr->name.span);
-                    }
+                    // TODO: handle upvar depth more than 1.
+                    ASSERT(var_depth == 1);
 
                     // Add it for tracking!
 
@@ -196,11 +193,9 @@ namespace Katsu
                                              });
                     local = &builder.bindings[name];
 
-                    if (!builder.r_upreg_map) {
-                        throw compile_error("shouldn't be able to have var_depth > 0 when builder "
-                                            "is missing r_upreg_map",
-                                            expr->name.span);
-                    }
+                    // If var_depth > 0, we should be compiling a closure, so the builder should
+                    // have r_upreg_map populated.
+                    ASSERT(builder.r_upreg_map);
                     Root<Vector> r_upreg_map(gc, *builder.r_upreg_map);
                     ValueRoot r_local_index(gc, Value::fixnum(local->local_index));
                     append(gc, r_upreg_map, r_local_index);
@@ -220,7 +215,7 @@ namespace Katsu
                 builder.emit_op(gc, OpCode::LOAD_MODULE, /* stack_height_delta */ +1);
                 builder.emit_arg(gc, r_name.value());
             } else {
-                throw compile_error("unknown local or module name, cannot load name",
+                throw compile_error("name is not defined in module or in local scope",
                                     expr->name.span);
             }
         } else if (LiteralExpr* expr = dynamic_cast<LiteralExpr*>(&_expr)) {
@@ -240,20 +235,20 @@ namespace Katsu
                     break;
                 }
                 case TokenType::SYMBOL: {
-                    throw compile_error("visit(LiteralExpr) SYMBOL handling not implemented",
-                                        expr->literal.span);
+                    // TODO: implement SYMBOL compilation
+                    ASSERT_MSG(false, "not implemented");
                     break;
                 }
-                default:
-                    throw compile_error("unexpected token type in visit(LiteralExpr)",
-                                        expr->literal.span);
+                default: {
+                    ASSERT_MSG(false, "unexpected token type");
+                    break;
+                }
             }
         } else if (UnaryMessageExpr* expr = dynamic_cast<UnaryMessageExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->message.value);
             Root<String> r_name(gc, make_string(gc, name));
             if (!module_lookup(*builder.r_module, *r_name)) {
-                throw compile_error("unknown module name, cannot invoke unary-message",
-                                    expr->message.span);
+                throw compile_error("name is not defined in module", expr->message.span);
             }
             compile_expr(gc, builder, *expr->target);
             // INVOKE: <name>, <num args>
@@ -293,11 +288,9 @@ namespace Katsu
                 size_t var_depth;
                 const Binding* maybe_local = builder.lookup(name, &var_depth);
                 if (maybe_local) {
-                    if (var_depth > 0) {
-                        throw compile_error(
-                            "assignment of upvar (before _reading_ upvar) not implemented yet",
-                            expr->span);
-                    }
+                    // TODO: implement upvar assignment before access
+                    ASSERT_MSG(var_depth == 0,
+                               "assignment of upvar (before _reading_ upvar) not implemented yet");
                     const Binding& local = *maybe_local;
                     if (local._mutable) {
                         // Ensure there's no target provided.
@@ -372,9 +365,9 @@ namespace Katsu
                 }
             }
             if (!module_lookup(*builder.r_module, *r_name)) {
-                throw compile_error("unknown module name (or mutable local variable "
-                                    "name), cannot invoke n-ary-message",
-                                    expr->span);
+                throw compile_error(
+                    "name is not defined in module (and is also not <a mutable local>:)",
+                    expr->span);
             }
 
             if (expr->target) {
@@ -433,12 +426,7 @@ namespace Katsu
             compile_expr(gc, closure_builder, *expr->body);
             ValueRoot r_closure_code(gc, Value::object(closure_builder.finalize(gc)));
             uint64_t num_upreg_loads = closure_builder.r_upreg_loading->length;
-            // Sanity check!
-            if (num_upreg_loads != closure_builder.r_upreg_map->length) {
-                throw compile_error(
-                    "r_upreg_loading length != r_upreg_map length after compiling closure body",
-                    expr->span);
-            }
+            ASSERT(num_upreg_loads == closure_builder.r_upreg_map->length);
             for (uint64_t i = 0; i < num_upreg_loads; i++) {
                 int64_t load_index =
                     closure_builder.r_upreg_loading->v_array.obj_array()->components()[i].fixnum();
@@ -487,7 +475,7 @@ namespace Katsu
                             /* stack_height_delta */ -(int64_t)expr->components.size() + 1);
             builder.emit_arg(gc, Value::fixnum(expr->components.size()));
         } else {
-            throw compile_error("forgot an Expr subtype", expr->span);
+            ASSERT_MSG(false, "forgot an Expr subtype");
         }
     }
 
@@ -515,7 +503,8 @@ namespace Katsu
             }
             decl = b->body.get();
         } else {
-            throw compile_error("non-block decls for method:does: not yet implemented", decl->span);
+            // TODO: implement non-block method declarations
+            ASSERT_MSG(false, "non-block decls for method:does: not implemented");
         }
 
         std::vector<std::string> method_name_parts{};

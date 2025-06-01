@@ -1,18 +1,20 @@
 #include "vm.h"
 
+#include "assertions.h"
 #include "value_utils.h"
+
 #include <algorithm>
 #include <cstring>
 
 #include <iostream>
+
 namespace Katsu
 {
     VM::VM(GC& _gc, uint64_t call_stack_size)
         : gc(_gc)
     {
-        if ((call_stack_size & TAG_MASK) != 0) {
-            throw std::invalid_argument("call_stack_size must be TAG_BITS-aligned");
-        }
+        ASSERT_ARG_MSG((call_stack_size & TAG_MASK) == 0,
+                       "call_stack_size must be TAG_BITS-aligned");
 
         this->call_stack_mem =
             reinterpret_cast<uint8_t*>(aligned_alloc(1 << TAG_BITS, call_stack_size));
@@ -61,13 +63,10 @@ namespace Katsu
 
     Value VM::eval_toplevel(Root<Code>& r_code)
     {
-        if (this->current_frame) {
-            throw std::logic_error("shouldn't already have a call frame if eval-ing at top level");
-        }
+        ASSERT_MSG(!this->current_frame,
+                   "shouldn't already have a call frame if eval-ing at top level");
 
-        if (r_code->v_insts.obj_array()->length == 0) {
-            throw std::invalid_argument("code must not be empty");
-        }
+        ASSERT_MSG(r_code->v_insts.obj_array()->length > 0, "code must not be empty");
 
         uint32_t code_num_regs = r_code->num_regs;
         uint32_t code_num_data = r_code->num_data;
@@ -76,7 +75,7 @@ namespace Katsu
         uint64_t frame_size = Frame::size(code_num_regs, code_num_data);
         if (reinterpret_cast<uint8_t*>(frame) + frame_size >
             this->call_stack_mem + this->call_stack_size) {
-            throw std::runtime_error("stack overflow");
+            throw std::runtime_error("katsu stack overflow");
         }
 
         // Help with debugging.
@@ -107,9 +106,7 @@ namespace Katsu
                 bool finished_instructions = this->current_frame->inst_spot == frame_insts->length;
                 bool no_cleanup = this->current_frame->v_cleanup.is_null();
                 if (finished_instructions && no_cleanup) {
-                    if (this->current_frame->data_depth != 1) {
-                        throw std::logic_error("top level data_depth wasn't 1 when unwinding");
-                    }
+                    ASSERT(this->current_frame->data_depth == 1);
                     Value v_return_value = this->current_frame->data()[0];
                     this->current_frame = nullptr;
                     return v_return_value;
@@ -163,15 +160,12 @@ namespace Katsu
         Array* frame_args = frame_code->v_args.obj_array();
 
         auto push = [this](Value value) -> void {
-            if (this->current_frame->data_depth == this->current_frame->num_data) {
-                throw std::logic_error("data stack overflow in frame");
-            }
+            ASSERT_MSG(this->current_frame->data_depth < this->current_frame->num_data,
+                       "data stack overflow in frame");
             this->current_frame->data()[this->current_frame->data_depth++] = value;
         };
         auto pop = [this]() -> Value {
-            if (this->current_frame->data_depth == 0) {
-                throw std::logic_error("data stack underflow in frame");
-            }
+            ASSERT_MSG(this->current_frame->data_depth > 0, "data stack underflow in frame");
             Value* v_top = &this->current_frame->data()[--this->current_frame->data_depth];
             Value v_popped = *v_top;
             *v_top = Value::null();
@@ -179,10 +173,8 @@ namespace Katsu
         };
 
         auto arg = [this, frame_args](int offset = 0) -> Value {
-            if (this->current_frame->arg_spot + offset < 0 ||
-                this->current_frame->arg_spot + offset >= frame_args->length) {
-                throw std::logic_error("arg() offset out of bounds");
-            }
+            ASSERT(this->current_frame->arg_spot + offset >= 0 &&
+                   this->current_frame->arg_spot + offset < frame_args->length);
             return frame_args->components()[this->current_frame->arg_spot + offset];
         };
 
@@ -191,24 +183,18 @@ namespace Katsu
 
         uint64_t num_insts = frame_insts->length;
         if (this->current_frame->inst_spot == num_insts) {
-            if (this->current_frame->arg_spot != frame_args->length) {
-                throw std::logic_error("didn't use correct number of args by end of frame");
-            }
+            // Make sure all arguments were used.
+            ASSERT(this->current_frame->arg_spot == frame_args->length);
 
             // Unwind the frame!
-            if (!this->current_frame->v_cleanup.is_null() || this->current_frame->is_cleanup) {
-                throw std::logic_error("unwinding with cleanup not yet implemented");
-            }
-            if (!this->current_frame->caller) {
-                throw std::logic_error("frame being unwound has no caller!");
-            }
-            if (this->current_frame->data_depth != 1) {
-                throw std::logic_error("data_depth must be 1 when unwinding");
-            }
+            // TODO: implement unwinding with cleanup
+            ASSERT_MSG(this->current_frame->v_cleanup.is_null() && !this->current_frame->is_cleanup,
+                       "unwinding with cleanup not yet implemented");
+            ASSERT(this->current_frame->caller);
+            ASSERT(this->current_frame->data_depth == 1);
             Frame* caller = this->current_frame->caller;
-            if (caller->data_depth >= caller->num_data) {
-                throw std::logic_error("unwinding would overflow caller's data stack");
-            }
+            ASSERT_MSG(caller->data_depth < caller->num_data,
+                       "unwinding would overflow caller's data stack");
             caller->data()[caller->data_depth++] = this->current_frame->data()[0];
             this->current_frame = caller;
 
@@ -216,7 +202,7 @@ namespace Katsu
         }
 
         if (this->current_frame->inst_spot > num_insts) [[unlikely]] {
-            throw std::logic_error("got beyond instructions in frame");
+            ASSERT_MSG(false, "shifted beyond instructions array in call frame");
         }
 
         int64_t inst = frame_insts->components()[this->current_frame->inst_spot].fixnum();
@@ -278,9 +264,8 @@ namespace Katsu
                 Value v_method =
                     module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
                 int64_t num_args = arg(+1).fixnum();
-                if (this->current_frame->data_depth < num_args) {
-                    throw std::logic_error("data stack underflow in frame");
-                }
+                ASSERT_MSG(this->current_frame->data_depth >= num_args,
+                           "data stack underflow in frame");
                 this->current_frame->data_depth -= num_args;
 
                 shift_inst();
@@ -301,9 +286,8 @@ namespace Katsu
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Tuple* tuple = make_tuple_nofill(this->gc, num_components);
-                if (this->current_frame->data_depth < num_components) {
-                    throw std::logic_error("data stack underflow in frame");
-                }
+                ASSERT_MSG(this->current_frame->data_depth >= num_components,
+                           "data stack underflow in frame");
                 this->current_frame->data_depth -= num_components;
                 for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
@@ -321,9 +305,8 @@ namespace Katsu
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Array* array = make_array_nofill(this->gc, num_components);
-                if (this->current_frame->data_depth < num_components) {
-                    throw std::logic_error("data stack underflow in frame");
-                }
+                ASSERT_MSG(this->current_frame->data_depth >= num_components,
+                           "data stack underflow in frame");
                 this->current_frame->data_depth -= num_components;
                 for (int64_t i = 0; i < num_components; i++) {
                     Value* component =
@@ -349,9 +332,8 @@ namespace Katsu
                     make_closure(this->gc, /* r_code */ r_code, /* r_upregs */ r_upregs);
 
                 // Copy from the current stack frame's data stack into the closure's upregs.
-                if (this->current_frame->data_depth < num_upregs) {
-                    throw std::logic_error("data stack underflow in frame");
-                }
+                ASSERT_MSG(this->current_frame->data_depth >= num_upregs,
+                           "data stack underflow in frame");
                 this->current_frame->data_depth -= num_upregs;
                 Array* upregs = *r_upregs;
                 for (uint64_t i = 0; i < num_upregs; i++) {
@@ -367,7 +349,7 @@ namespace Katsu
                 break;
             }
             default: {
-                throw std::logic_error("shouldn't get here");
+                ALWAYS_ASSERT_MSG(false, "forgot an OpCode");
             }
         }
     }
@@ -375,11 +357,8 @@ namespace Katsu
     Value& VM::module_lookup_or_fail(Value v_module, String* name)
     {
         Value* lookup = module_lookup(v_module.obj_module(), name);
-        if (lookup) {
-            return *lookup;
-        } else {
-            throw std::logic_error("didn't find invocation name in module");
-        }
+        ASSERT_MSG(lookup, "didn't find invocation name in module");
+        return *lookup;
     }
 
     void VM::invoke(Value v_callable, int64_t num_args, Value* args)
@@ -393,6 +372,7 @@ namespace Katsu
         // TODO: actually do a proper multimethod dispatch
         Vector* methods = multimethod->v_methods.obj_vector();
         if (methods->length == 0) {
+            // TODO: make this a katsu runtime error instead
             throw std::runtime_error("need a method in multimethod");
         }
         Value v_method = methods->v_array.obj_array()->components()[0];
@@ -400,9 +380,7 @@ namespace Katsu
 
         if (method->v_code.is_null()) {
             // Native handler.
-            if (!method->native_handler) {
-                throw std::logic_error("method must have v_code or a native_handler");
-            }
+            ASSERT_MSG(method->native_handler, "method must have v_code or a native_handler");
             Value v_result = method->native_handler(*this, num_args, args);
             auto push = [this](Value value) -> void {
                 this->current_frame->data()[this->current_frame->data_depth++] = value;
@@ -411,9 +389,7 @@ namespace Katsu
         } else {
             // Bytecode body.
             Code* code = method->v_code.obj_code();
-            if (!code->v_upreg_map.is_null()) {
-                throw std::logic_error("method's v_code's v_upreg_map should be null");
-            }
+            ASSERT_MSG(code->v_upreg_map.is_null(), "method's v_code's v_upreg_map should be null");
 
             uint32_t code_num_regs = code->num_regs;
             uint32_t code_num_data = code->num_data;
@@ -422,7 +398,7 @@ namespace Katsu
             size_t frame_size = Frame::size(code_num_regs, code_num_data);
             if (reinterpret_cast<uint8_t*>(frame) + frame_size >
                 this->call_stack_mem + this->call_stack_size) {
-                throw std::runtime_error("stack overflow");
+                throw std::runtime_error("katsu stack overflow");
             }
 
             // Help with debugging.

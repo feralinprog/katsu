@@ -1,5 +1,7 @@
 #include "gc.h"
 
+#include "assertions.h"
+
 #include <cstring>
 #include <map>
 
@@ -13,9 +15,7 @@ namespace Katsu
         , mem_opp(nullptr)
         , spot(0)
     {
-        if ((size & TAG_MASK) != 0) {
-            throw std::invalid_argument("size must be TAG_BITS-aligned");
-        }
+        ASSERT_ARG_MSG((size & TAG_MASK) == 0, "size must be TAG_BITS-aligned");
 
         this->mem = reinterpret_cast<uint8_t*>(aligned_alloc(1 << TAG_BITS, size));
         if (!this->mem) {
@@ -155,7 +155,7 @@ namespace Katsu
                         obj_size = DataclassInstance::size(get_num_slots(v->v_type));
                         break;
                     }
-                    default: [[unlikely]] throw std::logic_error("missed an object tag?");
+                    default: [[unlikely]] ALWAYS_ASSERT_MSG(false, "missed an object tag?");
                 }
 #if DEBUG_GC_LOG
                 std::cout << "GC: copying obj size=" << obj_size << "(0x" << std::hex << obj_size
@@ -184,7 +184,7 @@ namespace Katsu
             if (node->tag() == Tag::OBJECT) {
                 move_obj(node);
             } else if (!node->is_inline()) [[unlikely]] {
-                throw std::logic_error("can only move object reference or inline value");
+                ALWAYS_ASSERT_MSG(false, "can only move object reference or inline value");
             }
         };
 
@@ -316,7 +316,7 @@ namespace Katsu
                     obj_size = DataclassInstance::size(num_slots);
                     break;
                 }
-                default: throw std::logic_error("missed an object tag?");
+                default: ALWAYS_ASSERT_MSG(false, "missed an object tag?");
             }
             queue += align_up(obj_size, TAG_BITS);
         }

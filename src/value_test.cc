@@ -26,9 +26,10 @@ TEST_CASE("fixnum tagging/untagging", "[value]")
     CHECK_THROWS_AS(Value::fixnum(INT64_MIN), std::out_of_range);
 
     // Check the exception message once:
-    CHECK_THROWS_MATCHES(Value::fixnum(FIXNUM_MAX + 1),
-                         std::out_of_range,
-                         Message("input is too large an integer to be represented as a fixnum"));
+    CHECK_THROWS_MATCHES(
+        Value::fixnum(FIXNUM_MAX + 1),
+        std::out_of_range,
+        MessageMatches(EndsWith("input is too large an integer to be represented as a fixnum")));
 }
 
 TEST_CASE("float tagging/untagging", "[value]")
@@ -59,7 +60,7 @@ TEST_CASE("object tagging/untagging", "[value]")
         Object* unaligned = reinterpret_cast<Object*>(reinterpret_cast<uint8_t*>(aligned) + offset);
         CHECK_THROWS_MATCHES(Value::object(unaligned),
                              std::invalid_argument,
-                             Message("object pointer is not TAG_BITS-aligned"));
+                             MessageMatches(EndsWith("object pointer is not TAG_BITS-aligned")));
     }
 
     free(aligned);
@@ -115,8 +116,10 @@ template <> Value make<Object*>()
             CHECK_NOTHROW(v.value<T2>());                                               \
         } else {                                                                        \
             std::stringstream ss;                                                       \
-            ss << "expected " << tag_str(make<T2>().tag());                             \
-            CHECK_THROWS_MATCHES(v.value<T2>(), std::runtime_error, Message(ss.str())); \
+            ss << "ASSERT(value.tag() == Tag::" << TAG_STR(make<T2>().tag()) << ")";    \
+            CHECK_THROWS_MATCHES(v.value<T2>(),                                         \
+                                 std::logic_error,                                      \
+                                 MessageMatches(EndsWith(ss.str())));                   \
         }                                                                               \
     }
 
@@ -139,13 +142,17 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     CHECK(obj.is_forwarding());
     CHECK_FALSE(obj.is_object());
     CHECK(obj.forwarding() == reinterpret_cast<void*>(0x1234));
-    CHECK_THROWS_MATCHES(obj.tag(), std::logic_error, Message("not an object"));
+    CHECK_THROWS_MATCHES(obj.tag(),
+                         std::logic_error,
+                         MessageMatches(EndsWith("ASSERT(this->is_object())")));
 
     // VECTOR is arbitrary.
     REQUIRE_NOTHROW(obj.set_object(ObjectTag::VECTOR));
     CHECK_FALSE(obj.is_forwarding());
     CHECK(obj.is_object());
-    CHECK_THROWS_MATCHES(obj.forwarding(), std::logic_error, Message("not a forwarding pointer"));
+    CHECK_THROWS_MATCHES(obj.forwarding(),
+                         std::logic_error,
+                         MessageMatches(EndsWith("ASSERT(this->is_forwarding())")));
     CHECK(obj.tag() == ObjectTag::VECTOR);
 
     free(&obj);
@@ -297,21 +304,23 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(DataclassInstance, Type)        \
     F(DataclassInstance, DataclassInstance)
 
-#define OBJECT_TAG_TESTCASE(T1, T2)                                                         \
-    TEST_CASE("object() helper checks object tags - " #T1 " and " #T2, "[object]")          \
-    {                                                                                       \
-        Object& obj = *reinterpret_cast<Object*>(malloc(sizeof(Object)));                   \
-        REQUIRE_NOTHROW(obj.set_object(T1::CLASS_TAG));                                     \
-                                                                                            \
-        if (std::is_same<T1, T2>::value) {                                                  \
-            CHECK(obj.object<T2*>() == reinterpret_cast<T2*>(&obj));                        \
-        } else {                                                                            \
-            std::stringstream ss;                                                           \
-            ss << "expected " << object_tag_str(T2::CLASS_TAG);                             \
-            CHECK_THROWS_MATCHES(obj.object<T2*>(), std::runtime_error, Message(ss.str())); \
-        }                                                                                   \
-                                                                                            \
-        free(&obj);                                                                         \
+#define OBJECT_TAG_TESTCASE(T1, T2)                                                             \
+    TEST_CASE("object() helper checks object tags - " #T1 " and " #T2, "[object]")              \
+    {                                                                                           \
+        Object& obj = *reinterpret_cast<Object*>(malloc(sizeof(Object)));                       \
+        REQUIRE_NOTHROW(obj.set_object(T1::CLASS_TAG));                                         \
+                                                                                                \
+        if (std::is_same<T1, T2>::value) {                                                      \
+            CHECK(obj.object<T2*>() == reinterpret_cast<T2*>(&obj));                            \
+        } else {                                                                                \
+            std::stringstream ss;                                                               \
+            ss << "ASSERT(object.tag() == ObjectTag::" << OBJECT_TAG_STR(T2::CLASS_TAG) << ")"; \
+            CHECK_THROWS_MATCHES(obj.object<T2*>(),                                             \
+                                 std::logic_error,                                              \
+                                 MessageMatches(EndsWith(ss.str())));                           \
+        }                                                                                       \
+                                                                                                \
+        free(&obj);                                                                             \
     }
 
 EACH_OBJECT_PAIR(OBJECT_TAG_TESTCASE)

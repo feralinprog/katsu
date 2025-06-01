@@ -1,5 +1,7 @@
 #pragma once
 
+#include "assertions.h"
+
 #include <bit>
 #include <cstdint>
 #include <stdexcept>
@@ -58,6 +60,17 @@ namespace Katsu
             case Tag::_NULL: return "null";
             case Tag::OBJECT: return "object";
             default: return "!unknown!";
+        }
+    }
+    static const char* TAG_STR(Tag tag)
+    {
+        switch (tag) {
+            case Tag::FIXNUM: return "FIXNUM";
+            case Tag::FLOAT: return "FLOAT";
+            case Tag::BOOL: return "BOOL";
+            case Tag::_NULL: return "_NULL";
+            case Tag::OBJECT: return "OBJECT";
+            default: return "!UNKNOWN!";
         }
     }
 
@@ -120,6 +133,24 @@ namespace Katsu
             default: return "!unknown!";
         }
     }
+    static const char* OBJECT_TAG_STR(ObjectTag tag)
+    {
+        switch (tag) {
+            case ObjectTag::REF: return "REF";
+            case ObjectTag::TUPLE: return "TUPLE";
+            case ObjectTag::ARRAY: return "ARRAY";
+            case ObjectTag::VECTOR: return "VECTOR";
+            case ObjectTag::MODULE: return "MODULE";
+            case ObjectTag::STRING: return "STRING";
+            case ObjectTag::CODE: return "CODE";
+            case ObjectTag::CLOSURE: return "CLOSURE";
+            case ObjectTag::METHOD: return "METHOD";
+            case ObjectTag::MULTIMETHOD: return "MULTIMETHOD";
+            case ObjectTag::TYPE: return "TYPE";
+            case ObjectTag::INSTANCE: return "INSTANCE";
+            default: return "!UNKNOWN!";
+        }
+    }
 
     // Template declaration here, since it's used in `object()` below. Specializations are defined
     // later.
@@ -151,9 +182,7 @@ namespace Katsu
         inline void set_forwarding(void* p)
         {
             const uint64_t raw = reinterpret_cast<uint64_t>(p);
-            if ((raw & 0x1) != 0) {
-                throw std::logic_error("forwarding pointer is not aligned");
-            }
+            ASSERT_MSG((raw & 0x1) == 0, "forwarding pointer is not aligned");
             this->header = raw | 0x1LL;
         }
         inline void set_object(ObjectTag tag)
@@ -172,16 +201,12 @@ namespace Katsu
 
         inline void* forwarding() const
         {
-            if (!this->is_forwarding()) {
-                throw std::logic_error("not a forwarding pointer");
-            }
+            ASSERT(this->is_forwarding());
             return reinterpret_cast<void*>(this->header & ~0x1LL);
         }
         inline ObjectTag tag() const
         {
-            if (!this->is_object()) {
-                throw std::logic_error("not an object");
-            }
+            ASSERT(this->is_object());
             return static_cast<ObjectTag>(this->header >> 1);
         }
 
@@ -391,10 +416,9 @@ namespace Katsu
 
         static Value fixnum(int64_t num)
         {
-            if (num < FIXNUM_MIN || num > FIXNUM_MAX) {
-                throw std::out_of_range(
-                    "input is too large an integer to be represented as a fixnum");
-            }
+            ASSERT_EXC_MSG(num >= FIXNUM_MIN && num <= FIXNUM_MAX,
+                           std::out_of_range,
+                           "input is too large an integer to be represented as a fixnum");
             // The input is encoded in 64-bit 2s-complement; to produce INLINE_BITS-bit
             // 2s-complement instead, mask off the upper INLINE_BITS number of bits as an unsigned
             // 64-bit integer.
@@ -415,9 +439,7 @@ namespace Katsu
         static Value object(Object* object)
         {
             uint64_t raw = reinterpret_cast<uint64_t>(object);
-            if ((raw & TAG_MASK) != 0) {
-                throw std::invalid_argument("object pointer is not TAG_BITS-aligned");
-            }
+            ASSERT_ARG_MSG((raw & TAG_MASK) == 0, "object pointer is not TAG_BITS-aligned");
             return Value(Tag::OBJECT, raw >> TAG_BITS);
         }
 
@@ -704,9 +726,7 @@ namespace Katsu
     // Specializations for static_value():
     template <> inline int64_t static_value<int64_t>(Value value)
     {
-        if (value.tag() != Tag::FIXNUM) {
-            throw std::runtime_error("expected fixnum");
-        }
+        ASSERT(value.tag() == Tag::FIXNUM);
         // The fixnum value is encoded as INLINE_BITS-bit 2s-complement, so sign extend back to
         // 64-bit 2s-complement.
         uint64_t raw = value.raw_value();
@@ -715,9 +735,7 @@ namespace Katsu
     }
     template <> inline float static_value<float>(Value value)
     {
-        if (value.tag() != Tag::FLOAT) {
-            throw std::runtime_error("expected float");
-        }
+        ASSERT(value.tag() == Tag::FLOAT);
         uint64_t raw_value = value.raw_value();
         // Narrowing is ok here; raw_value should have upper 32 bits zeroized.
         uint32_t raw_float = raw_value;
@@ -725,109 +743,79 @@ namespace Katsu
     }
     template <> inline bool static_value<bool>(Value value)
     {
-        if (value.tag() != Tag::BOOL) {
-            throw std::runtime_error("expected bool");
-        }
+        ASSERT(value.tag() == Tag::BOOL);
         return value.raw_value() != 0;
     }
     template <> inline Null static_value<Null>(Value value)
     {
-        if (value.tag() != Tag::_NULL) {
-            throw std::runtime_error("expected null");
-        }
+        ASSERT(value.tag() == Tag::_NULL);
         return Null{};
     }
     template <> inline Object* static_value<Object*>(Value value)
     {
-        if (value.tag() != Tag::OBJECT) {
-            throw std::runtime_error("expected object");
-        }
+        ASSERT(value.tag() == Tag::OBJECT);
         return reinterpret_cast<Object*>(value.raw_value() << TAG_BITS);
     }
 
     // Specializations for static_object():
     template <> inline Ref* static_object<Ref*>(Object& object)
     {
-        if (object.tag() != ObjectTag::REF) {
-            throw std::runtime_error("expected ref");
-        }
+        ASSERT(object.tag() == ObjectTag::REF);
         return reinterpret_cast<Ref*>(&object);
     }
     template <> inline Tuple* static_object<Tuple*>(Object& object)
     {
-        if (object.tag() != ObjectTag::TUPLE) {
-            throw std::runtime_error("expected tuple");
-        }
+        ASSERT(object.tag() == ObjectTag::TUPLE);
         return reinterpret_cast<Tuple*>(&object);
     }
     template <> inline Array* static_object<Array*>(Object& object)
     {
-        if (object.tag() != ObjectTag::ARRAY) {
-            throw std::runtime_error("expected array");
-        }
+        ASSERT(object.tag() == ObjectTag::ARRAY);
         return reinterpret_cast<Array*>(&object);
     }
     template <> inline Vector* static_object<Vector*>(Object& object)
     {
-        if (object.tag() != ObjectTag::VECTOR) {
-            throw std::runtime_error("expected vector");
-        }
+        ASSERT(object.tag() == ObjectTag::VECTOR);
         return reinterpret_cast<Vector*>(&object);
     }
     template <> inline Module* static_object<Module*>(Object& object)
     {
-        if (object.tag() != ObjectTag::MODULE) {
-            throw std::runtime_error("expected module");
-        }
+        ASSERT(object.tag() == ObjectTag::MODULE);
         return reinterpret_cast<Module*>(&object);
     }
     template <> inline String* static_object<String*>(Object& object)
     {
-        if (object.tag() != ObjectTag::STRING) {
-            throw std::runtime_error("expected string");
-        }
+        ASSERT(object.tag() == ObjectTag::STRING);
         return reinterpret_cast<String*>(&object);
     }
     template <> inline Code* static_object<Code*>(Object& object)
     {
-        if (object.tag() != ObjectTag::CODE) {
-            throw std::runtime_error("expected code");
-        }
+        ASSERT(object.tag() == ObjectTag::CODE);
         return reinterpret_cast<Code*>(&object);
     }
     template <> inline Closure* static_object<Closure*>(Object& object)
     {
-        if (object.tag() != ObjectTag::CLOSURE) {
-            throw std::runtime_error("expected closure");
-        }
+        ASSERT(object.tag() == ObjectTag::CLOSURE);
         return reinterpret_cast<Closure*>(&object);
     }
     template <> inline Method* static_object<Method*>(Object& object)
     {
-        if (object.tag() != ObjectTag::METHOD) {
-            throw std::runtime_error("expected method");
-        }
+        ASSERT(object.tag() == ObjectTag::METHOD);
         return reinterpret_cast<Method*>(&object);
     }
     template <> inline MultiMethod* static_object<MultiMethod*>(Object& object)
     {
-        if (object.tag() != ObjectTag::MULTIMETHOD) {
-            throw std::runtime_error("expected multimethod");
-        }
+        ASSERT(object.tag() == ObjectTag::MULTIMETHOD);
         return reinterpret_cast<MultiMethod*>(&object);
     }
     template <> inline Type* static_object<Type*>(Object& object)
     {
-        if (object.tag() != ObjectTag::TYPE) {
-            throw std::runtime_error("expected type");
-        }
+        ASSERT(object.tag() == ObjectTag::TYPE);
         return reinterpret_cast<Type*>(&object);
     }
     template <> inline DataclassInstance* static_object<DataclassInstance*>(Object& object)
     {
-        if (object.tag() != ObjectTag::INSTANCE) {
-            throw std::runtime_error("expected instance");
-        }
+        ASSERT(object.tag() == ObjectTag::INSTANCE);
         return reinterpret_cast<DataclassInstance*>(&object);
     }
 };
