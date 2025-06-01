@@ -75,4 +75,8 @@ namespace Katsu
     // Concate all the given strings (each with a given suffix applied -- commonly ":").
     String* concat_with_suffix(GC& gc, const std::vector<std::string>& parts,
                                const std::string& each_suffix);
+
+    // Pretty-print a value (to stdout), with an optional initial indent and an initial indentation
+    // depth.
+    void pprint(Value value, bool initial_indent = true, int depth = 0);
 };

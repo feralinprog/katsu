@@ -116,8 +116,6 @@ namespace Katsu
         }
     }
 
-    void pprint(Value value, bool initial_indent = true, int depth = 0);
-
     void VM::print_vm_state()
     {
         Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
