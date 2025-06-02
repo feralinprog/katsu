@@ -200,6 +200,16 @@ namespace Katsu
         std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
                                     const Token& token) override
         {
+            // Support syntax `()` -> empty tuple.
+            while (stream.current_has_type(TokenType::NEWLINE)) {
+                stream.consume();
+            }
+            if (stream.current_has_type(TokenType::RPAREN)) {
+                Token rparen = stream.consume();
+                std::vector<std::unique_ptr<Expr>> components{};
+                return std::make_unique<TupleExpr>(SourceSpan::combine({token.span, rparen.span}),
+                                                   std::move(components));
+            }
             std::unique_ptr<Expr> inner = parser.parse(stream, 0 /* precedence */);
             Token rparen = expect(stream, TokenType::RPAREN);
             return std::make_unique<ParenExpr>(
@@ -230,6 +240,9 @@ namespace Katsu
         std::unique_ptr<Expr> parse(TokenStream& stream, const PrattParser& parser,
                                     const Token& token) override
         {
+            while (stream.current_has_type(TokenType::NEWLINE)) {
+                stream.consume();
+            }
             if (stream.current_has_type(TokenType::RCURLY)) {
                 Token rcurly = stream.consume();
                 std::vector<std::unique_ptr<Expr>> components{};

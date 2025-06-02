@@ -179,19 +179,19 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::object(tuple));
     }
 
-    // SECTION("tuple - empty")
-    // {
-    //     input("()");
-    //     Tuple* tuple = make_tuple(gc, 0);
-    //     check(Value::object(tuple));
-    // }
+    SECTION("tuple - empty")
+    {
+        input("()");
+        Tuple* tuple = make_tuple(gc, 0);
+        check(Value::object(tuple));
+    }
 
-    // SECTION("tuple - empty with newlines")
-    // {
-    //     input("(\n)");
-    //     Tuple* tuple = make_tuple(gc, 0);
-    //     check(Value::object(tuple));
-    // }
+    SECTION("tuple - empty with newlines")
+    {
+        input("(\n)");
+        Tuple* tuple = make_tuple(gc, 0);
+        check(Value::object(tuple));
+    }
 
     // TODO: array
 
@@ -244,11 +244,11 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::object(make_vector(gc, 0)));
     }
 
-    // SECTION("vector - empty with newlines")
-    // {
-    //     input("{\n}");
-    //     check(Value::object(make_vector(gc, 0)));
-    // }
+    SECTION("vector - empty with newlines")
+    {
+        input("{\n}");
+        check(Value::object(make_vector(gc, 0)));
+    }
 
     // TODO: module
 
@@ -390,13 +390,13 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"(\x [x + 5] call*: (10,))");
         check(Value::fixnum(15));
     }
-    // SECTION("call*: - closure with empty tuple")
-    // {
-    //     input(R"(\x [x + 5] call*: ())");
-    //     CHECK_THROWS_MATCHES(run(),
-    //                          std::runtime_error,
-    //                          Message("call*: arguments must be non-empty"));
-    // }
+    SECTION("call*: - closure with empty tuple")
+    {
+        input(R"(\x [x + 5] call*: ())");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("call*: arguments must be non-empty"));
+    }
     SECTION("call*: - closure with multiple parameters")
     {
         input(R"(\a b c [a + b + c] call*: (1, 2, 3))");
@@ -407,13 +407,13 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"([it + 5] call*: (10,))");
         check(Value::fixnum(15));
     }
-    // SECTION("call*: - closure with default 'it' parameter and empty tuple")
-    // {
-    //     input(R"([it + 5] call*: ())");
-    //     CHECK_THROWS_MATCHES(run(),
-    //                          std::runtime_error,
-    //                          Message("call*: arguments must be non-empty"));
-    // }
+    SECTION("call*: - closure with default 'it' parameter and empty tuple")
+    {
+        input(R"([it + 5] call*: ())");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("call*: arguments must be non-empty"));
+    }
     SECTION("call*: - closure but not enough arguments")
     {
         input(R"(\a b [a + b] call*: (10,))");
