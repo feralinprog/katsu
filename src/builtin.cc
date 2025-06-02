@@ -196,21 +196,6 @@ namespace Katsu
                   /* args */ args_tuple->components());
     }
 
-    Builtins::Builtins(GC& _gc)
-        : gc(_gc)
-    {
-        for (size_t i = 0; i < BuiltinId::NUM_BUILTINS; i++) {
-            this->builtin_values[i] = Value::null();
-        }
-        this->gc.root_providers.push_back(this);
-    }
-
-    Builtins::~Builtins()
-    {
-        this->gc.root_providers.erase(
-            std::find(this->gc.root_providers.begin(), this->gc.root_providers.end(), this));
-    }
-
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Vector> r_bases(gc, make_vector(gc, 0));
@@ -223,31 +208,31 @@ namespace Katsu
                                        r_slots));
     }
 
-    void Builtins::_register(BuiltinId id, Root<String>& r_name, Root<Module>& r_module,
-                             ValueRoot& r_value)
+    void _register(VM& vm, BuiltinId id, Root<String>& r_name, Root<Module>& r_module,
+                   ValueRoot& r_value)
     {
-        ASSERT(this->builtin_values[id] == Value::null());
-        this->builtin_values[id] = *r_value;
-        append(this->gc, r_module, r_name, r_value);
+        ASSERT(vm.builtin_values[id] == Value::null());
+        vm.builtin_values[id] = *r_value;
+        append(vm.gc, r_module, r_name, r_value);
     }
-    void Builtins::_register(BuiltinId id, const std::string& name, Root<Module>& r_module,
-                             Value value)
+    void _register(VM& vm, BuiltinId id, const std::string& name, Root<Module>& r_module,
+                   Value value)
     {
-        ValueRoot r_value(this->gc, std::move(value));
-        Root<String> r_name(this->gc, make_string(gc, name));
-        this->_register(id, r_name, r_module, r_value);
+        ValueRoot r_value(vm.gc, std::move(value));
+        Root<String> r_name(vm.gc, make_string(vm.gc, name));
+        _register(vm, id, r_name, r_module, r_value);
     }
 
-    void Builtins::register_builtins(Root<Module>& r_module)
+    void register_builtins(VM& vm, Root<Module>& r_module)
     {
-        this->_register(BuiltinId::_null, "null", r_module, Value::null());
-        this->_register(BuiltinId::_true, "t", r_module, Value::_bool(true));
-        this->_register(BuiltinId::_false, "f", r_module, Value::_bool(false));
+        _register(vm, BuiltinId::_null, "null", r_module, Value::null());
+        _register(vm, BuiltinId::_true, "t", r_module, Value::_bool(true));
+        _register(vm, BuiltinId::_false, "f", r_module, Value::_bool(false));
 
-        auto register_base_type = [this, &r_module](BuiltinId id, const std::string& name) {
-            Root<String> r_name(this->gc, make_string(this->gc, name));
-            ValueRoot r_type(this->gc, make_base_type(this->gc, r_name));
-            this->_register(id, r_name, r_module, r_type);
+        auto register_base_type = [&vm, &r_module](BuiltinId id, const std::string& name) {
+            Root<String> r_name(vm.gc, make_string(vm.gc, name));
+            ValueRoot r_type(vm.gc, make_base_type(vm.gc, r_name));
+            _register(vm, id, r_name, r_module, r_type);
         };
 
         // TODO: Number?
@@ -265,12 +250,13 @@ namespace Katsu
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
 
-        add_native(this->gc, r_module, "+:", &plus_);
-        add_native(this->gc, r_module, "pretty-print:", &pretty_print_);
-        add_intrinsic(this->gc, r_module, "then:else:", &then_else_);
-        add_intrinsic(this->gc, r_module, "call", &call);
-        add_intrinsic(this->gc, r_module, "call:", &call_);
-        add_intrinsic(this->gc, r_module, "call*:", &call_star_);
+        add_native(vm.gc, r_module, "+:", &plus_);
+        add_native(vm.gc, r_module, "pretty-print:", &pretty_print_);
+        add_intrinsic(vm.gc, r_module, "then:else:", &then_else_);
+        add_intrinsic(vm.gc, r_module, "call", &call);
+        add_intrinsic(vm.gc, r_module, "call:", &call_);
+        add_intrinsic(vm.gc, r_module, "call*:", &call_star_);
+        // add_native(vm.gc, r_module, "type", &type);
 
         /*
          * TODO:
@@ -316,12 +302,5 @@ namespace Katsu
          * - anything for FFI!
          * - anything for delimited continuations
          */
-    }
-
-    void Builtins::visit_roots(std::function<void(Value*)>& visitor)
-    {
-        for (Value& builtin : this->builtin_values) {
-            visitor(&builtin);
-        }
     }
 };

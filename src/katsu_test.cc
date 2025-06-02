@@ -82,8 +82,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         OptionalRoot<Module> r_module_base(gc, nullptr);
         Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
 
-        Builtins builtins(gc);
-        builtins.register_builtins(r_module);
+        register_builtins(vm, r_module);
 
         std::unique_ptr<Expr> top_level_expr =
             parser->parse(stream, 0 /* precedence */, true /* is_toplevel */);

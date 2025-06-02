@@ -25,6 +25,10 @@ namespace Katsu
 
         this->current_frame = nullptr;
 
+        for (size_t i = 0; i < BuiltinId::NUM_BUILTINS; i++) {
+            this->builtin_values[i] = Value::null();
+        }
+
         this->gc.root_providers.push_back(this);
     }
 
@@ -40,6 +44,10 @@ namespace Katsu
 
     void VM::visit_roots(std::function<void(Value*)>& visitor)
     {
+        for (Value& builtin : this->builtin_values) {
+            visitor(&builtin);
+        }
+
         Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
         while (frame <= this->current_frame) {
             visitor(&frame->v_code);

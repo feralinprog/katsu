@@ -188,6 +188,31 @@ namespace Katsu
     };
     static_assert(sizeof(Frame) % sizeof(Value) == 0);
 
+    enum BuiltinId
+    {
+        _null,
+        _true,
+        _false,
+
+        _Fixnum,
+        _Float,
+        _Bool,
+        _Null,
+        _Tuple,
+        _Array,
+        _Vector,
+        _Module,
+        _String,
+        _Code,
+        _Closure,
+        _Method,
+        _MultiMethod,
+        _Type,
+
+        // Keep this last!
+        NUM_BUILTINS,
+    };
+
     class VM : public RootProvider
     {
     public:
@@ -197,6 +222,12 @@ namespace Katsu
         Value eval_toplevel(Root<Code>& r_code);
 
         void visit_roots(std::function<void(Value*)>& visitor) override;
+
+        GC& gc;
+
+        // Builtin values that we need convenient access to (and which are GC'ed).
+        // Indexed by BuiltinId.
+        Value builtin_values[BuiltinId::NUM_BUILTINS];
 
     private:
         friend class OpenVM;
@@ -219,7 +250,6 @@ namespace Katsu
         // responsibility for updating the top call frame's instruction and argument spots.
         void invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args);
 
-        GC& gc;
         // Memory region for the call stack.
         // Hosts contiguous `Frame`s.
         uint8_t* call_stack_mem;
