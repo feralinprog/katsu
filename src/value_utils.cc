@@ -155,9 +155,9 @@ namespace Katsu
         return multimethod;
     }
 
-    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
-                    Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
-                    OptionalRoot<Vector>& r_slots)
+    Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+                        Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
+                        OptionalRoot<Vector>& r_slots)
     {
         // TODO: check Type components in r_bases
         // Nothing to check for `sealed`.

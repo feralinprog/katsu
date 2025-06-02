@@ -218,14 +218,14 @@ namespace Katsu
         Root<Vector> r_subtypes(gc, make_vector(gc, 0));
         OptionalRoot<Vector> r_slots(gc, nullptr);
         Root<Type> r_type(gc,
-                          make_type(gc,
-                                    r_name,
-                                    r_bases,
-                                    /* sealed */ true,
-                                    r_linearization,
-                                    r_subtypes,
-                                    Type::Kind::PRIMITIVE,
-                                    r_slots));
+                          make_type_raw(gc,
+                                        r_name,
+                                        r_bases,
+                                        /* sealed */ true,
+                                        r_linearization,
+                                        r_subtypes,
+                                        Type::Kind::PRIMITIVE,
+                                        r_slots));
         ValueRoot rv_type(gc, r_type.value());
         // TODO: automatically compute C3 linearization (in make_type()?)
         append(gc, r_linearization, rv_type);

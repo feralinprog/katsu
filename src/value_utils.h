@@ -44,10 +44,11 @@ namespace Katsu
     // Make a MultiMethod with specified fields.
     MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, Root<Vector>& r_methods,
                                   Root<Vector>& r_attributes);
-    // Make a Type with specified fields.
-    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
-                    Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
-                    OptionalRoot<Vector>& r_slots);
+    // Make a Type with specified fields. This doesn't calculate the linearization or ensure that
+    // each supertype has the new type as a subtype.
+    Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+                        Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
+                        OptionalRoot<Vector>& r_slots);
     // Make a DataclassInstance with specified dataclass, with slots uninitialized.
     DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type);
 
