@@ -31,8 +31,9 @@ namespace Katsu
     // Make a String with contents copied from a source string.
     String* make_string(GC& gc, const std::string& src);
     // Make a Code with specified fields.
-    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_regs, uint32_t num_data,
-                    OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts, Root<Array>& r_args);
+    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
+                    uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,
+                    Root<Array>& r_args);
     // Make a Closure with specified fields.
     Closure* make_closure(GC& gc, Root<Code>& r_code, Root<Array>& r_upregs);
     // Make a Method with specified fields.

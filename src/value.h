@@ -587,6 +587,8 @@ namespace Katsu
         static const ObjectTag CLASS_TAG = ObjectTag::CODE;
 
         Value v_module; // Module
+        // Mostly for error checking -- not actually used for 'control' purposes.
+        uint32_t num_params;
         uint32_t num_regs;
         uint32_t num_data;
         Value v_upreg_map; // Null for methods; Array (of fixnums) for closures

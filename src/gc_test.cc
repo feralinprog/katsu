@@ -218,6 +218,7 @@ TEST_CASE("GC follows internal references", "[gc]")
         // Set up object.
         Code* obj = gc.alloc<Code>();
         obj->v_module = v_pointees[0];
+        obj->num_params = 0x567;    // not used by the GC
         obj->num_regs = 0x12345678; // not used by the GC
         obj->num_data = 0xAABBCCDD; // not used by the GC
         obj->v_upreg_map = v_pointees[1];
@@ -230,6 +231,7 @@ TEST_CASE("GC follows internal references", "[gc]")
         // Unpack and verify object.
         REQUIRE_NOTHROW(obj = v_obj.obj_code());
         CHECK_POINTEE(0, obj->v_module);
+        CHECK(obj->num_params == 0x567);
         CHECK(obj->num_regs == 0x12345678);
         CHECK(obj->num_data == 0xAABBCCDD);
         CHECK_POINTEE(1, obj->v_upreg_map);

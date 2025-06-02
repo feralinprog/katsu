@@ -215,6 +215,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input("[ it + 1 ]");
         check_pprint(R"(*closure
   v_code = *code
+    num_params = 1
     num_regs = 1
     num_data = 2
     v_upreg_map = *array: length=0

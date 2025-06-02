@@ -26,6 +26,8 @@ namespace Katsu
         // This way we can append/grow, then copy into Arrays to finalize the Code.
 
         Root<Module>& r_module;
+        // Number of parameters.
+        uint32_t num_params;
         // Number of locals.
         uint32_t num_regs;
         // Max size of data stack (kept up to date using emit_op().)
@@ -128,6 +130,7 @@ namespace Katsu
 
             return make_code(gc,
                              this->r_module,
+                             this->num_params,
                              this->num_regs,
                              this->num_data,
                              r_upreg_map_arr,
@@ -399,6 +402,9 @@ namespace Katsu
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder closure_builder{
                 .r_module = builder.r_module,
+                .num_params = expr->parameters.empty()
+                                  ? 1
+                                  : (uint32_t)expr->parameters.size(), // TODO: check size_t?
                 .num_regs = expr->parameters.empty()
                                 ? 1
                                 : (uint32_t)expr->parameters.size(), // TODO: check size_t?
@@ -620,7 +626,8 @@ namespace Katsu
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = r_module,
-            .num_regs = (uint32_t)param_names.size(), // TODO: check size_t?
+            .num_params = (uint32_t)param_names.size(), // TODO: check size_t?
+            .num_regs = (uint32_t)param_names.size(),   // TODO: check size_t?
             .num_data = 0,
             .r_upreg_map = r_upreg_map,
             .r_insts = r_insts,

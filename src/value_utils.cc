@@ -91,12 +91,15 @@ namespace Katsu
         return str;
     }
 
-    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_regs, uint32_t num_data,
-                    OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts, Root<Array>& r_args)
+    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
+                    uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,
+                    Root<Array>& r_args)
     {
+        ASSERT_ARG(num_params <= num_regs);
         // TODO: check that insts are fixnums of the right range?
         Code* code = gc.alloc<Code>();
         code->v_module = r_module.value();
+        code->num_params = num_params;
         code->num_regs = num_regs;
         code->num_data = num_data;
         code->v_upreg_map = r_upreg_map.value();
@@ -442,6 +445,7 @@ namespace Katsu
                 std::cout << "*code\n";
                 // TODO: add back if there's some way to fold. By default, too noisy.
                 // pchild(o->v_module, "v_module = ");
+                pnative() << "num_params = " << o->num_params << "\n";
                 pnative() << "num_regs = " << o->num_regs << "\n";
                 pnative() << "num_data = " << o->num_data << "\n";
                 pchild(o->v_upreg_map, "v_upreg_map = ");
