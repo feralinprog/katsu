@@ -214,22 +214,13 @@ namespace Katsu
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Vector> r_bases(gc, make_vector(gc, 0));
-        Root<Vector> r_linearization(gc, make_vector(gc, 1));
-        Root<Vector> r_subtypes(gc, make_vector(gc, 0));
         OptionalRoot<Vector> r_slots(gc, nullptr);
-        Root<Type> r_type(gc,
-                          make_type_raw(gc,
-                                        r_name,
-                                        r_bases,
-                                        /* sealed */ true,
-                                        r_linearization,
-                                        r_subtypes,
-                                        Type::Kind::PRIMITIVE,
-                                        r_slots));
-        ValueRoot rv_type(gc, r_type.value());
-        // TODO: automatically compute C3 linearization (in make_type()?)
-        append(gc, r_linearization, rv_type);
-        return r_type.value();
+        return Value::object(make_type(gc,
+                                       r_name,
+                                       r_bases,
+                                       /* sealed */ true,
+                                       Type::Kind::PRIMITIVE,
+                                       r_slots));
     }
 
     void Builtins::_register(BuiltinId id, Root<String>& r_name, Root<Module>& r_module,
@@ -259,6 +250,7 @@ namespace Katsu
             this->_register(id, r_name, r_module, r_type);
         };
 
+        // TODO: Number?
         register_base_type(BuiltinId::_Fixnum, "Fixnum");
         register_base_type(BuiltinId::_Float, "Float");
         register_base_type(BuiltinId::_Bool, "Bool");
@@ -272,9 +264,6 @@ namespace Katsu
         register_base_type(BuiltinId::_Closure, "Closure");
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
-
-        // TODO: Number?
-        // TODO: DataclassType?
 
         add_native(this->gc, r_module, "+:", &plus_);
         add_native(this->gc, r_module, "pretty-print:", &pretty_print_);

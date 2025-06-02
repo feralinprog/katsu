@@ -81,4 +81,30 @@ namespace Katsu
     // Pretty-print a value (to stdout), with an optional initial indent and an initial indentation
     // depth.
     void pprint(Value value, bool initial_indent = true, int depth = 0);
+
+    // Check if a vector contains a given value, by value equality (e.g. object identity, not deep
+    // equality of any sort).
+    bool vector_contains(Vector* vector, Value value);
+
+    // Check if a vector contains a given value, by value equality (e.g. object identity, not deep
+    // equality of any sort), starting at the given start_index. (This start index may be past the
+    // end of the vector.)
+    bool vector_contains_starting_at(Vector* vector, Value value, uint64_t start_index);
+
+    // Calculate combined linearization from a vector of linearization vectors, appending to the
+    // provided r_merged vector. Returns true on success, or else false if C3 linearization is not
+    // possible (and in this case, the merge result may only be partial; r_merged is not restored to
+    // its initial value).
+    // Does not modify any of the provided linearizations, or the vector of linearizations.
+    bool c3_merge(GC& gc, Root<Vector>& r_linearizations, Root<Vector>& r_merged);
+
+    // Calculate the C3 linearization of the type and its bases. The value in
+    // r_type->v_linearization is ignored.
+    // See https://www.python.org/download/releases/2.3/mro/ for more on C3 linearization.
+    Vector* c3_linearization(GC& gc, Root<Type>& r_type);
+
+    // Make a Type with specified fields. This also calculates the type's linearization and ensures
+    // that each supertype has the new type as a subtype.
+    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+                    Type::Kind kind, OptionalRoot<Vector>& r_slots);
 };

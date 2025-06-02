@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <sstream>
 
 namespace Katsu
@@ -608,4 +609,217 @@ namespace Katsu
         std::vector<Object*> objects_seen{};
         pprint(objects_seen, value, depth, "", initial_indent);
     }
+
+    bool vector_contains(Vector* vector, Value value)
+    {
+        Value* components = vector->v_array.obj_array()->components();
+        for (uint64_t i = 0; i < vector->length; i++) {
+            if (components[i] == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool vector_contains_starting_at(Vector* vector, Value value, uint64_t start_index)
+    {
+        Value* components = vector->v_array.obj_array()->components();
+        for (uint64_t i = start_index; i < vector->length; i++) {
+            if (components[i] == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /*
+     * Python (writable pseudocode!) for C3 linearization:
+     *
+     * def c3_linearization(type: TypeValue) -> list[TypeValue]:
+     *     # Calculate linearization, or None if not possible.
+     *     def c3_merge(linearizations: list[list[TypeValue]]) -> Optional[list[TypeValue]]:
+     *         # Should start with all nonempty linearizations.
+     *         assert all(linearizations), linearizations
+     *         merged = []
+     *         while any(linearizations):
+     *             head = None
+     *             for lin in linearizations:
+     *                 candidate = lin[0]
+     *                 if all(candidate not in lin[1:] for lin in linearizations):
+     *                     head = candidate
+     *                     break
+     *             if head:
+     *                 merged.append(head)
+     *                 for lin in linearizations:
+     *                     if lin and lin[0] == head:
+     *                         lin.remove(head)
+     *                 linearizations = [lin for lin in linearizations if lin]
+     *             else:
+     *                 return None
+     *         return merged
+     *
+     *     for base in type.bases:
+     *         if type in base.linearization:
+     *             raise ValueError(f"Inheritance cycle starting from {type}")
+     *
+     *     if type.bases:
+     *         base_linearization = c3_merge(
+     *             [list(base.linearization) for base in type.bases] + [list(type.bases)]
+     *         )
+     *         if base_linearization is None:
+     *             raise ValueError(f"Could not determine linearization of {type}")
+     *     else:
+     *         base_linearization = []
+     *
+     *     return [type] + base_linearization
+     */
+
+    bool c3_merge(GC& gc, Root<Vector>& r_linearizations, Root<Vector>& r_merged)
+    {
+        // Start at the left of each linearization.
+        size_t spots[r_linearizations->length];
+        for (size_t i = 0; i < r_linearizations->length; i++) {
+            spots[i] = 0;
+        }
+
+        while (true) {
+            // Find the first head possible from any linearization.
+            // "candidate" = any linearization[current spot] value.
+            // "head" = any candidate which for every linearization is _not_ in
+            //     linearization[current spot + 1:] (using Pythonish syntax).
+            bool candidates_remaining = false;
+            std::optional<Value> head = std::nullopt;
+            for (size_t i = 0; i < r_linearizations->length; i++) {
+                Vector* linearization =
+                    r_linearizations->v_array.obj_array()->components()[i].obj_vector();
+                if (spots[i] == linearization->length) {
+                    // Already consumed this full linearization.
+                    continue;
+                }
+                // There are still candidates to consider.
+                candidates_remaining = true;
+
+                Value candidate = linearization->v_array.obj_array()->components()[spots[i]];
+                // Check if this candidate is a head.
+                bool is_head = true;
+                for (size_t j = 0; j < r_linearizations->length; j++) {
+                    Vector* other_linearization =
+                        r_linearizations->v_array.obj_array()->components()[j].obj_vector();
+                    if (vector_contains_starting_at(other_linearization, candidate, spots[j] + 1)) {
+                        // Not a head!
+                        is_head = false;
+                        break;
+                    }
+                }
+
+                if (is_head) {
+                    head = candidate;
+                    break;
+                }
+            }
+
+            if (!candidates_remaining) {
+                // Successfully merged.
+                return true;
+            }
+
+            if (head.has_value()) {
+                Value v_head = *head;
+                ValueRoot r_head(gc, std::move(v_head));
+                append(gc, r_merged, r_head);
+                v_head = *r_head;
+                // Ratchet past this head as the candidate in any linearization.
+                for (size_t i = 0; i < r_linearizations->length; i++) {
+                    Vector* linearization =
+                        r_linearizations->v_array.obj_array()->components()[i].obj_vector();
+                    if (spots[i] == linearization->length) {
+                        // Already consumed this full linearization.
+                        continue;
+                    }
+                    Value candidate = linearization->v_array.obj_array()->components()[spots[i]];
+                    if (candidate == v_head) {
+                        spots[i]++;
+                    }
+                }
+            } else {
+                // C3 linearization is not possible.
+                return false;
+            }
+        }
+    }
+
+    Vector* c3_linearization(GC& gc, Root<Type>& r_type)
+    {
+        Vector* bases = r_type->v_bases.obj_vector();
+        Value* bases_components = bases->v_array.obj_array()->components();
+        for (uint64_t i = 0; i < bases->length; i++) {
+            Type* base = bases_components[i].obj_type();
+            if (vector_contains(base->v_linearization.obj_vector(), r_type.value())) {
+                // TODO: let katsu deal with it, and also provide r_type info.
+                throw std::runtime_error("inheritance cycle starting from {type}");
+            }
+        }
+
+        // Best guess for initial capacity. Doesn't have to be exact.
+        Root<Vector> r_merged(gc, make_vector(gc, 1 + bases->length + 1));
+        ValueRoot rv_type(gc, r_type.value());
+        append(gc, r_merged, rv_type);
+
+        bases = r_type->v_bases.obj_vector();
+        Root<Vector> r_linearizations(gc, make_vector(gc, /* capacity */ bases->length + 1));
+        Value* linearizations_components = r_linearizations->v_array.obj_array()->components();
+        bases = r_type->v_bases.obj_vector();
+        bases_components = bases->v_array.obj_array()->components();
+        for (uint64_t i = 0; i < bases->length; i++) {
+            Type* base = bases_components[i].obj_type();
+            linearizations_components[i] = base->v_linearization;
+        }
+        linearizations_components[bases->length] = r_type->v_bases;
+        r_linearizations->length = bases->length + 1;
+
+        bool merged = c3_merge(gc, r_linearizations, r_merged);
+        if (!merged) {
+            // TODO: let katsu deal with it, and also provide r_type info.
+            throw std::runtime_error("could not determine linearization of {type}");
+        }
+
+        return *r_merged;
+    }
+
+    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+                    Type::Kind kind, OptionalRoot<Vector>& r_slots)
+    {
+        // TODO: the r_linearization will just be thrown away later. Ideally don't even allocate it.
+        Root<Vector> r_init_linearization(gc, make_vector(gc, /* capacity */ 0));
+        Root<Vector> r_subtypes(gc, make_vector(gc, 0));
+        Root<Type> r_type(gc,
+                          make_type_raw(gc,
+                                        r_name,
+                                        r_bases,
+                                        sealed,
+                                        r_init_linearization,
+                                        r_subtypes,
+                                        kind,
+                                        r_slots));
+
+        Vector* linearization = c3_linearization(gc, r_type);
+        r_type->v_linearization = Value::object(linearization);
+
+        uint32_t linearization_length = linearization->length;
+        Root<Array> lin_arr(gc, linearization->v_array.obj_array());
+        // Ensure r_type is in the subtypes of each type in the linearization.
+        // (Don't add r_type to its own bases, though. It's always the first in the linearization)
+        for (uint32_t i = 1; i < linearization_length; i++) {
+            Value v_base = lin_arr->components()[i];
+            Type* base = v_base.obj_type();
+            Root<Vector> r_base_subtypes(gc, base->v_subtypes.obj_vector());
+            ValueRoot rv_type(gc, r_type.value());
+            append(gc, r_base_subtypes, rv_type);
+        }
+
+        return *r_type;
+    }
+
+    // NOTE: when porting over try_set_bases(), make sure to also update supertypes' subtype
+    // vectors...
 };
