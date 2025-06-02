@@ -71,26 +71,12 @@ namespace Katsu
         uint32_t code_num_regs = r_code->num_regs;
         uint32_t code_num_data = r_code->num_data;
 
-        Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
-        uint64_t frame_size = Frame::size(code_num_regs, code_num_data);
-        if (reinterpret_cast<uint8_t*>(frame) + frame_size >
-            this->call_stack_mem + this->call_stack_size) {
-            throw std::runtime_error("katsu stack overflow");
-        }
-
-        // Help with debugging.
-        std::memset(frame, 0x56, frame_size);
-
-        frame->caller = nullptr;
-        frame->v_code = r_code.value();
-        frame->inst_spot = 0;
-        frame->arg_spot = 0;
-        frame->num_regs = code_num_regs;
-        frame->num_data = code_num_data;
-        frame->data_depth = 0;
-        frame->v_cleanup = Value::null();
-        frame->is_cleanup = false;
-        frame->v_module = r_code->v_module;
+        Frame* frame = this->alloc_frame(code_num_regs,
+                                         code_num_data,
+                                         r_code.value(),
+                                         /* v_cleanup */ Value::null(),
+                                         /* is_cleanup */ false,
+                                         r_code->v_module);
         for (uint32_t i = 0; i < code_num_regs; i++) {
             frame->regs()[i] = Value::null();
         }
@@ -363,6 +349,34 @@ namespace Katsu
         return *lookup;
     }
 
+    Frame* VM::alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_cleanup,
+                           bool is_cleanup, Value v_module)
+    {
+        Frame* frame = this->current_frame ? this->current_frame->next()
+                                           : reinterpret_cast<Frame*>(this->call_stack_mem);
+        size_t frame_size = Frame::size(num_regs, num_data);
+        if (reinterpret_cast<uint8_t*>(frame) + frame_size >
+            this->call_stack_mem + this->call_stack_size) {
+            throw std::runtime_error("katsu stack overflow");
+        }
+
+        // Help with debugging.
+        std::memset(frame, 0x56, frame_size);
+
+        frame->caller = this->current_frame;
+        frame->v_code = v_code;
+        frame->inst_spot = 0;
+        frame->arg_spot = 0;
+        frame->num_regs = num_regs;
+        frame->num_data = num_data;
+        frame->data_depth = 0;
+        frame->v_cleanup = Value::null();
+        frame->is_cleanup = false;
+        frame->v_module = v_module;
+        // regs() / data() is up to caller to initialize as desired.
+        return frame;
+    }
+
     void VM::invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args)
     {
         if (!v_callable.is_obj_multimethod()) {
@@ -404,34 +418,18 @@ namespace Katsu
             // Bytecode body.
             Code* code = method->v_code.obj_code();
             ASSERT_MSG(code->v_upreg_map.is_null(), "method's v_code's v_upreg_map should be null");
+            ASSERT(num_args == code->num_params);
 
-            uint32_t code_num_regs = code->num_regs;
-            uint32_t code_num_data = code->num_data;
-
-            Frame* frame = this->current_frame->next();
-            size_t frame_size = Frame::size(code_num_regs, code_num_data);
-            if (reinterpret_cast<uint8_t*>(frame) + frame_size >
-                this->call_stack_mem + this->call_stack_size) {
-                throw std::runtime_error("katsu stack overflow");
-            }
-
-            // Help with debugging.
-            std::memset(frame, 0x56, frame_size);
-
-            frame->caller = this->current_frame;
-            frame->v_code = method->v_code;
-            frame->inst_spot = 0;
-            frame->arg_spot = 0;
-            frame->num_regs = code_num_regs;
-            frame->num_data = code_num_data;
-            frame->data_depth = 0;
-            frame->v_cleanup = Value::null();
-            frame->is_cleanup = false;
-            frame->v_module = code->v_module;
+            Frame* frame = this->alloc_frame(code->num_regs,
+                                             code->num_data,
+                                             method->v_code,
+                                             /* v_cleanup */ Value::null(),
+                                             /* is_cleanup */ false,
+                                             code->v_module);
             for (uint32_t i = 0; i < num_args; i++) {
                 frame->regs()[i] = args[i];
             }
-            for (uint32_t i = num_args; i < code_num_regs; i++) {
+            for (uint32_t i = num_args; i < code->num_regs; i++) {
                 frame->regs()[i] = Value::null();
             }
             this->current_frame = frame;
