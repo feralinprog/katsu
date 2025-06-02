@@ -169,8 +169,8 @@ namespace Katsu
             std::unique_ptr<Expr> top_level_expr =
                 parser->parse(stream, 0 /* precedence */, true /* is_toplevel */);
 
-            std::cout << "=== MODULE STATE ===\n";
-            pprint(r_module.value());
+            // std::cout << "=== MODULE STATE ===\n";
+            // pprint(r_module.value());
             std::cout << "=== PARSED ===\n";
             ExprPrinter printer(0);
             top_level_expr->accept(printer);
