@@ -638,7 +638,8 @@ namespace Katsu
     // in a state where pushing one more value to the data stack allows that value to be treated as
     // the result of the handler invocation. (For instance, not modifying the data stack at all
     // meets this criterion.)
-    typedef void (*IntrinsicHandler)(VM& vm, bool tail_call, int64_t nargs, Value* args);
+    class OpenVM;
+    typedef void (*IntrinsicHandler)(OpenVM& vm, bool tail_call, int64_t nargs, Value* args);
 
     struct Method : public Object
     {

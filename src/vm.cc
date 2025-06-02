@@ -409,7 +409,8 @@ namespace Katsu
                 push(v_result);
             } else if (method->intrinsic_handler) {
                 // Handler takes care of updating inst_spot / arg_spot.
-                method->intrinsic_handler(*this, tail_call, num_args, args);
+                OpenVM open(*this);
+                method->intrinsic_handler(open, tail_call, num_args, args);
             } else {
                 ASSERT_MSG(false,
                            "method must have v_code or a native_handler or intrinsic_handler");

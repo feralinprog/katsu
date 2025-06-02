@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_all.hpp>
 #include <catch2/matchers/catch_matchers_predicate.hpp>
 #include <catch2/matchers/catch_matchers_templated.hpp>
 
@@ -168,11 +169,48 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::object(tuple));
     }
 
+    SECTION("tuple - trailing comma")
+    {
+        input("1, 2, 3,");
+        Tuple* tuple = make_tuple(gc, 3);
+        tuple->components()[0] = Value::fixnum(1);
+        tuple->components()[1] = Value::fixnum(2);
+        tuple->components()[2] = Value::fixnum(3);
+        check(Value::object(tuple));
+    }
+
+    // SECTION("tuple - empty")
+    // {
+    //     input("()");
+    //     Tuple* tuple = make_tuple(gc, 0);
+    //     check(Value::object(tuple));
+    // }
+
+    // SECTION("tuple - empty with newlines")
+    // {
+    //     input("(\n)");
+    //     Tuple* tuple = make_tuple(gc, 0);
+    //     check(Value::object(tuple));
+    // }
+
     // TODO: array
 
     SECTION("vector")
     {
         input("{ 1; 2; 3 }");
+        Root<Vector> r_vector(gc, make_vector(gc, 3));
+        ValueRoot v1(gc, Value::fixnum(1));
+        ValueRoot v2(gc, Value::fixnum(2));
+        ValueRoot v3(gc, Value::fixnum(3));
+        append(gc, r_vector, v1);
+        append(gc, r_vector, v2);
+        append(gc, r_vector, v3);
+        check(r_vector.value());
+    }
+
+    SECTION("vector - trailing semicolon")
+    {
+        input("{ 1; 2; 3; }");
         Root<Vector> r_vector(gc, make_vector(gc, 3));
         ValueRoot v1(gc, Value::fixnum(1));
         ValueRoot v2(gc, Value::fixnum(2));
@@ -199,6 +237,18 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         append(gc, r_vector, v3);
         check(r_vector.value());
     }
+
+    SECTION("vector - empty")
+    {
+        input("{}");
+        check(Value::object(make_vector(gc, 0)));
+    }
+
+    // SECTION("vector - empty with newlines")
+    // {
+    //     input("{\n}");
+    //     check(Value::object(make_vector(gc, 0)));
+    // }
 
     // TODO: module
 
@@ -259,5 +309,135 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input("pretty-print: 1234");
         check(Value::null());
         CHECK(capture.str() == "fixnum 1234\n");
+    }
+
+    SECTION("then:else: - true condition")
+    {
+        input(R"(t then: ["true result"] else: ["false result"])");
+        check(Value::object(make_string(gc, "true result")));
+    }
+    SECTION("then:else: - false condition")
+    {
+        input(R"(f then: ["true result"] else: ["false result"])");
+        check(Value::object(make_string(gc, "false result")));
+    }
+    SECTION("then:else: - non-bool condition")
+    {
+        input(R"(1234 then: ["true result"] else: ["false result"])");
+        check(Value::object(make_string(gc, "false result")));
+    }
+    SECTION("then:else: - body with parameters")
+    {
+        input(R"(t then: \a b [a + b] else: ["false result"])");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("called a closure with wrong number of arguments"));
+    }
+
+    SECTION("call - closure")
+    {
+        input(R"(["closure result"] call)");
+        check(Value::object(make_string(gc, "closure result")));
+    }
+    SECTION("call - closure with default 'it' parameter")
+    {
+        input(R"([it] call)");
+        check(Value::null());
+    }
+    SECTION("call - closure with explicit single parameter")
+    {
+        input(R"(\x [x] call)");
+        check(Value::null());
+    }
+    SECTION("call - non-closure")
+    {
+        input(R"(1234 call)");
+        check(Value::fixnum(1234));
+    }
+    SECTION("call - closure but wrong parameter count")
+    {
+        input(R"(\a b ["closure result"] call)");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("called a closure with wrong number of arguments"));
+    }
+
+    SECTION("call: - closure")
+    {
+        input(R"(\x [x + 5] call: 10)");
+        check(Value::fixnum(15));
+    }
+    SECTION("call: - closure with default 'it' parameter")
+    {
+        input(R"([it + 5] call: 10)");
+        check(Value::fixnum(15));
+    }
+    SECTION("call: - non-closure")
+    {
+        input(R"(1234 call: 10)");
+        check(Value::fixnum(1234));
+    }
+    SECTION("call: - closure but wrong parameter count")
+    {
+        input(R"(\a b [a + b] call: 10)");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("called a closure with wrong number of arguments"));
+    }
+
+    SECTION("call*: - closure")
+    {
+        input(R"(\x [x + 5] call*: (10,))");
+        check(Value::fixnum(15));
+    }
+    // SECTION("call*: - closure with empty tuple")
+    // {
+    //     input(R"(\x [x + 5] call*: ())");
+    //     CHECK_THROWS_MATCHES(run(),
+    //                          std::runtime_error,
+    //                          Message("call*: arguments must be non-empty"));
+    // }
+    SECTION("call*: - closure with multiple parameters")
+    {
+        input(R"(\a b c [a + b + c] call*: (1, 2, 3))");
+        check(Value::fixnum(6));
+    }
+    SECTION("call*: - closure with default 'it' parameter")
+    {
+        input(R"([it + 5] call*: (10,))");
+        check(Value::fixnum(15));
+    }
+    // SECTION("call*: - closure with default 'it' parameter and empty tuple")
+    // {
+    //     input(R"([it + 5] call*: ())");
+    //     CHECK_THROWS_MATCHES(run(),
+    //                          std::runtime_error,
+    //                          Message("call*: arguments must be non-empty"));
+    // }
+    SECTION("call*: - closure but not enough arguments")
+    {
+        input(R"(\a b [a + b] call*: (10,))");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("called a closure with wrong number of arguments"));
+    }
+    SECTION("call*: - closure but too many arguments")
+    {
+        input(R"(\a b [a + b] call*: (10, 20, 30))");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("called a closure with wrong number of arguments"));
+    }
+    SECTION("call*: - arguments not a tuple")
+    {
+        input(R"(\a b [a + b] call*: { 10; 20; 30 })");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("call*: arguments must be a tuple"));
+    }
+    SECTION("call*: - callable not a closure")
+    {
+        input(R"("not callable" call*: (10, 20))");
+        check(Value::object(make_string(gc, "not callable")));
     }
 }

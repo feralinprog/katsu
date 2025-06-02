@@ -2,6 +2,7 @@
 
 #include "assert.h"
 #include "value_utils.h"
+#include "vm.h"
 
 namespace Katsu
 {
@@ -38,17 +39,159 @@ namespace Katsu
         append(gc, r_module, r_name, r_multimethod);
     }
 
-    Value plus(VM& vm, int64_t nargs, Value* args)
+    // TODO: param matchers / return type
+    void add_intrinsic(GC& gc, Root<Module>& r_module, const std::string& name,
+                       IntrinsicHandler intrinsic_handler)
     {
+        // TODO: check if name exists already in module!
+
+        Root<String> r_name(gc, make_string(gc, name));
+
+        Root<Vector> r_methods(gc, make_vector(gc, 1));
+        {
+            ValueRoot r_param_matchers(gc, Value::null()); // TODO
+            OptionalRoot<Type> r_return_type(gc, nullptr); // TODO
+            OptionalRoot<Code> r_code(gc, nullptr);        // native!
+            Root<Vector> r_attributes(gc, make_vector(gc, 0));
+
+            ValueRoot r_method(
+                gc,
+                Value::object(make_method(gc,
+                                          r_param_matchers,
+                                          r_return_type,
+                                          r_code,
+                                          r_attributes,
+                                          /* native_handler */ nullptr,
+                                          /* intrinsic_handler */ intrinsic_handler)));
+            append(gc, r_methods, r_method);
+        }
+        Root<Vector> r_attributes(gc, make_vector(gc, 0));
+
+        ValueRoot r_multimethod(
+            gc,
+            Value::object(make_multimethod(gc, r_name, r_methods, r_attributes)));
+        append(gc, r_module, r_name, r_multimethod);
+    }
+
+    Value plus_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a +: b
         ASSERT(nargs == 2);
         return Value::fixnum(args[0].fixnum() + args[1].fixnum());
     }
 
-    Value pprint(VM& vm, int64_t nargs, Value* args)
+    Value pretty_print_(VM& vm, int64_t nargs, Value* args)
     {
+        // _ pretty-print: val
         ASSERT(nargs == 2);
         pprint(args[1]);
         return Value::null();
+    }
+
+    void call_impl(OpenVM& vm, bool tail_call, Value v_callable, int64_t nargs, Value* args)
+    {
+        // TODO: tail-calls
+        ASSERT_MSG(!tail_call, "tail calls not implemented");
+        Frame* frame = vm.frame();
+        if (v_callable.is_obj_closure()) {
+            Closure* closure = v_callable.obj_closure();
+            ASSERT(closure->v_code.is_obj_code());
+            ASSERT(closure->v_upregs.is_obj_array());
+            Code* code = closure->v_code.obj_code();
+            ASSERT(code->v_upreg_map.is_obj_array());
+            Array* upregs = closure->v_upregs.obj_array();
+            Array* upreg_map = code->v_upreg_map.obj_array();
+            ASSERT(upregs->length == upreg_map->length);
+
+            if ((nargs == 0 && code->num_params != 1) || (nargs > 0 && code->num_params != nargs)) {
+                // TODO: Katsu error instead, should be able to handle it
+                throw std::runtime_error("called a closure with wrong number of arguments");
+            }
+
+            Frame* next = vm.alloc_frame(code->num_regs,
+                                         code->num_data,
+                                         Value::object(code),
+                                         /* v_cleanup */ Value::null(),
+                                         /* is_cleanup */ false,
+                                         code->v_module);
+
+            // In the closure's frame:
+            // - local 0...n are the call arguments (which may just be <null>, in the special case
+            // of 0 args and 1 param)
+            // - upreg_map points where to load upregs
+            // - all other regs null-initialized
+            ASSERT(next->num_regs > 0);
+            // Copy arguments:
+            if (nargs == 0) {
+                next->regs()[0] = Value::null();
+            }
+            for (uint32_t i = 0; i < nargs; i++) {
+                next->regs()[i] = args[i];
+            }
+            // Null-initialize the rest (since we don't know which are upregs):
+            for (uint32_t i = nargs; i < next->num_regs; i++) {
+                next->regs()[i] = Value::null();
+            }
+            // Finally, load upregs:
+            for (uint64_t i = 0; i < upreg_map->length; i++) {
+                Value upreg = upregs->components()[i];
+                int64_t dst = upreg_map->components()[i].fixnum();
+                ASSERT(dst >= 0 && dst < next->num_regs);
+                next->regs()[dst] = upreg;
+            }
+
+            frame->inst_spot++;
+            frame->arg_spot += 2;
+            vm.set_frame(next);
+        } else {
+            // Just push the callable; it returns itself.
+            // TODO: what if multimethod or method? should actually be callable
+            frame->inst_spot++;
+            frame->arg_spot += 2;
+            frame->data()[frame->data_depth++] = v_callable;
+        }
+    }
+
+    void then_else_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // cond then: tbody else: fbody
+        ASSERT(nargs == 3);
+        Value body = (args[0].is_bool() && args[0]._bool()) ? args[1] : args[2];
+        call_impl(vm, tail_call, /* v_callable */ body, /* nargs */ 0, /* args */ nullptr);
+    }
+
+    void call(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // value call
+        ASSERT(nargs == 1);
+        call_impl(vm, tail_call, /* v_callable */ args[0], /* nargs */ 0, /* args */ nullptr);
+    }
+
+    void call_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // value call: arg
+        ASSERT(nargs == 2);
+        call_impl(vm, tail_call, /* v_callable */ args[0], /* nargs */ 1, /* args */ &args[1]);
+    }
+
+    void call_star_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // value call*: args
+        ASSERT(nargs == 2);
+        Value v_callable = args[0];
+        Value v_args = args[1];
+        if (!v_args.is_obj_tuple()) {
+            throw std::runtime_error("call*: arguments must be a tuple");
+        }
+        Tuple* args_tuple = v_args.obj_tuple();
+        if (args_tuple->length == 0) {
+            throw std::runtime_error("call*: arguments must be non-empty");
+        }
+        call_impl(vm,
+                  tail_call,
+                  v_callable,
+                  /* nargs */ args_tuple->length,
+                  /* args */ args_tuple->components());
     }
 
     Builtins::Builtins(GC& _gc)
@@ -131,15 +274,15 @@ namespace Katsu
         // TODO: Number?
         // TODO: DataclassType?
 
-        add_native(this->gc, r_module, "+:", &plus);
-        add_native(this->gc, r_module, "pretty-print:", &pprint);
+        add_native(this->gc, r_module, "+:", &plus_);
+        add_native(this->gc, r_module, "pretty-print:", &pretty_print_);
+        add_intrinsic(this->gc, r_module, "then:else:", &then_else_);
+        add_intrinsic(this->gc, r_module, "call", &call);
+        add_intrinsic(this->gc, r_module, "call:", &call_);
+        add_intrinsic(this->gc, r_module, "call*:", &call_star_);
 
         /*
          * TODO:
-         * - if:then:else:
-         * - call
-         * - call:
-         * - call*:
          * - cleanup:
          * - panic!:
          * - method:does:

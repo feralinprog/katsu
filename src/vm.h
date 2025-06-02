@@ -184,6 +184,8 @@ namespace Katsu
         void visit_roots(std::function<void(Value*)>& visitor) override;
 
     private:
+        friend class OpenVM;
+
         void print_vm_state();
 
         void single_step();
@@ -210,5 +212,42 @@ namespace Katsu
 
         // null, or points into the call_stack_mem.
         Frame* current_frame;
+    };
+
+    // This should only be used by intrinsic handlers.
+    class OpenVM
+    {
+    public:
+        OpenVM(VM& _vm)
+            : vm(_vm)
+            , gc(_vm.gc)
+        {}
+
+        // Get the bottom and top of the call stack.
+        inline Frame* bottom_frame()
+        {
+            return reinterpret_cast<Frame*>(this->vm.call_stack_mem);
+        }
+        inline Frame* frame()
+        {
+            return this->vm.current_frame;
+        }
+
+        // Set the current top-of-stack call frame.
+        inline void set_frame(Frame* current_frame)
+        {
+            this->vm.current_frame = current_frame;
+        }
+
+        // See VM::alloc_frame().
+        inline Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code,
+                                  Value v_cleanup, bool is_cleanup, Value v_module)
+        {
+            return this->vm
+                .alloc_frame(num_regs, num_data, v_code, v_cleanup, is_cleanup, v_module);
+        }
+
+        VM& vm;
+        GC& gc;
     };
 };
