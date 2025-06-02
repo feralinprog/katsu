@@ -169,7 +169,22 @@ namespace Katsu
                 align_up(reinterpret_cast<uint64_t>(this) + this->size(), TAG_BITS));
         }
 
-        // TODO: add inline push / pop / pop_many functions.
+        inline void push(Value value)
+        {
+            ASSERT_MSG(this->data_depth < this->num_data, "data stack overflow in frame");
+            this->data()[this->data_depth++] = value;
+        }
+        inline Value pop()
+        {
+            ASSERT_MSG(this->data_depth > 0, "data stack underflow in frame");
+            return this->data()[--this->data_depth];
+        }
+        inline Value* pop_many(uint32_t num_values)
+        {
+            ASSERT_MSG(this->data_depth >= num_values, "data stack underflow in frame");
+            this->data_depth -= num_values;
+            return this->data() + this->data_depth;
+        }
     };
     static_assert(sizeof(Frame) % sizeof(Value) == 0);
 

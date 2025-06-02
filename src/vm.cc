@@ -143,19 +143,6 @@ namespace Katsu
         Array* frame_insts = frame_code->v_insts.obj_array();
         Array* frame_args = frame_code->v_args.obj_array();
 
-        auto push = [this](Value value) -> void {
-            ASSERT_MSG(this->current_frame->data_depth < this->current_frame->num_data,
-                       "data stack overflow in frame");
-            this->current_frame->data()[this->current_frame->data_depth++] = value;
-        };
-        auto pop = [this]() -> Value {
-            ASSERT_MSG(this->current_frame->data_depth > 0, "data stack underflow in frame");
-            Value* v_top = &this->current_frame->data()[--this->current_frame->data_depth];
-            Value v_popped = *v_top;
-            *v_top = Value::null();
-            return v_popped;
-        };
-
         auto arg = [this, frame_args](int offset = 0) -> Value {
             ASSERT(this->current_frame->arg_spot + offset >= 0 &&
                    this->current_frame->arg_spot + offset < frame_args->length);
@@ -179,7 +166,7 @@ namespace Katsu
             Frame* caller = this->current_frame->caller;
             ASSERT_MSG(caller->data_depth < caller->num_data,
                        "unwinding would overflow caller's data stack");
-            caller->data()[caller->data_depth++] = this->current_frame->data()[0];
+            caller->push(this->current_frame->data()[0]);
             this->current_frame = caller;
 
             return;
@@ -192,31 +179,33 @@ namespace Katsu
         int64_t inst = frame_insts->components()[this->current_frame->inst_spot].fixnum();
         switch (inst) {
             case OpCode::LOAD_REG: {
-                push(this->current_frame->regs()[arg().fixnum()]);
+                this->current_frame->push(this->current_frame->regs()[arg().fixnum()]);
                 shift_inst();
                 shift_arg();
                 break;
             }
             case OpCode::STORE_REG: {
-                this->current_frame->regs()[arg().fixnum()] = pop();
+                this->current_frame->regs()[arg().fixnum()] = this->current_frame->pop();
                 shift_inst();
                 shift_arg();
                 break;
             }
             case OpCode::LOAD_REF: {
-                push(this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref);
+                this->current_frame->push(
+                    this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref);
                 shift_inst();
                 shift_arg();
                 break;
             }
             case OpCode::STORE_REF: {
-                this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref = pop();
+                this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref =
+                    this->current_frame->pop();
                 shift_inst();
                 shift_arg();
                 break;
             }
             case OpCode::LOAD_VALUE: {
-                push(arg());
+                this->current_frame->push(arg());
                 shift_inst();
                 shift_arg();
                 break;
@@ -224,14 +213,15 @@ namespace Katsu
             case OpCode::INIT_REF: {
                 // arg() is invalidated by any GC access, so acquire the local index ahead of time.
                 int64_t local_index = arg().fixnum();
-                ValueRoot r_ref(this->gc, pop());
+                ValueRoot r_ref(this->gc, this->current_frame->pop());
                 this->current_frame->regs()[local_index] = Value::object(make_ref(this->gc, r_ref));
                 shift_inst();
                 shift_arg();
                 break;
             }
             case OpCode::LOAD_MODULE: {
-                push(module_lookup_or_fail(this->current_frame->v_module, arg().obj_string()));
+                this->current_frame->push(
+                    module_lookup_or_fail(this->current_frame->v_module, arg().obj_string()));
                 shift_inst();
                 shift_arg();
                 break;
@@ -239,7 +229,7 @@ namespace Katsu
             case OpCode::STORE_MODULE: {
                 Value& slot =
                     module_lookup_or_fail(this->current_frame->v_module, arg().obj_string());
-                slot = pop();
+                slot = this->current_frame->pop();
                 shift_inst();
                 shift_arg();
                 break;
@@ -249,21 +239,17 @@ namespace Katsu
                 Value v_method =
                     module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
                 int64_t num_args = arg(+1).fixnum();
-                ASSERT_MSG(this->current_frame->data_depth >= num_args,
-                           "data stack underflow in frame");
-                this->current_frame->data_depth -= num_args;
+                // TODO: check uint32_t
+                Value* args = this->current_frame->pop_many(num_args);
 
                 bool tail_call = inst == OpCode::INVOKE_TAIL;
 
                 // invoke() takes care of shifting the instruction / arg spots.
-                this->invoke(v_method,
-                             tail_call,
-                             num_args,
-                             this->current_frame->data() + this->current_frame->data_depth);
+                this->invoke(v_method, tail_call, num_args, args);
                 break;
             }
             case OpCode::DROP: {
-                pop();
+                this->current_frame->pop();
                 shift_inst();
                 break;
             }
@@ -273,16 +259,12 @@ namespace Katsu
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Tuple* tuple = make_tuple_nofill(this->gc, num_components);
-                ASSERT_MSG(this->current_frame->data_depth >= num_components,
-                           "data stack underflow in frame");
-                this->current_frame->data_depth -= num_components;
+                // TODO: check uint32_t
+                Value* components = this->current_frame->pop_many(num_components);
                 for (int64_t i = 0; i < num_components; i++) {
-                    Value* component =
-                        &this->current_frame->data()[this->current_frame->data_depth + i];
-                    tuple->components()[i] = *component;
-                    *component = Value::null();
+                    tuple->components()[i] = components[i];
                 }
-                push(Value::object(tuple));
+                this->current_frame->push(Value::object(tuple));
                 shift_inst();
                 shift_arg();
                 break;
@@ -293,17 +275,13 @@ namespace Katsu
                 auto num_components = arg().fixnum();
                 // TODO: check >= 0
                 Array* array = make_array_nofill(this->gc, num_components);
-                ASSERT_MSG(this->current_frame->data_depth >= num_components,
-                           "data stack underflow in frame");
-                this->current_frame->data_depth -= num_components;
+                // TODO: check uint32_t
+                Value* components = this->current_frame->pop_many(num_components);
                 for (int64_t i = 0; i < num_components; i++) {
-                    Value* component =
-                        &this->current_frame->data()[this->current_frame->data_depth + i];
-                    array->components()[i] = *component;
-                    *component = Value::null();
+                    array->components()[i] = components[i];
                 }
                 Vector* vec = make_vector(this->gc, /* length */ num_components, array);
-                push(Value::object(vec));
+                this->current_frame->push(Value::object(vec));
                 shift_inst();
                 shift_arg();
                 break;
@@ -320,18 +298,14 @@ namespace Katsu
                     make_closure(this->gc, /* r_code */ r_code, /* r_upregs */ r_upregs);
 
                 // Copy from the current stack frame's data stack into the closure's upregs.
-                ASSERT_MSG(this->current_frame->data_depth >= num_upregs,
-                           "data stack underflow in frame");
-                this->current_frame->data_depth -= num_upregs;
+                // TODO: check uint32_t
+                Value* upreg_vals = this->current_frame->pop_many(num_upregs);
                 Array* upregs = *r_upregs;
                 for (uint64_t i = 0; i < num_upregs; i++) {
-                    Value* upreg =
-                        &this->current_frame->data()[this->current_frame->data_depth + i];
-                    upregs->components()[i] = *upreg;
-                    *upreg = Value::null();
+                    upregs->components()[i] = upreg_vals[i];
                 }
 
-                push(Value::object(closure));
+                this->current_frame->push(Value::object(closure));
                 shift_inst();
                 shift_arg();
                 break;
@@ -403,10 +377,7 @@ namespace Katsu
                 this->current_frame->inst_spot++;
                 this->current_frame->arg_spot += 2;
                 Value v_result = method->native_handler(*this, num_args, args);
-                auto push = [this](Value value) -> void {
-                    this->current_frame->data()[this->current_frame->data_depth++] = value;
-                };
-                push(v_result);
+                this->current_frame->push(v_result);
             } else if (method->intrinsic_handler) {
                 // Handler takes care of updating inst_spot / arg_spot.
                 OpenVM open(*this);
