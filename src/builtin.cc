@@ -4,6 +4,8 @@
 #include "value_utils.h"
 #include "vm.h"
 
+#include <algorithm>
+
 namespace Katsu
 {
     // TODO: param matchers / return type
