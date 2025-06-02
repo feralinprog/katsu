@@ -168,6 +168,8 @@ namespace Katsu
             return reinterpret_cast<Frame*>(
                 align_up(reinterpret_cast<uint64_t>(this) + this->size(), TAG_BITS));
         }
+
+        // TODO: add inline push / pop / pop_many functions.
     };
     static_assert(sizeof(Frame) % sizeof(Value) == 0);
 

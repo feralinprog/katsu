@@ -397,6 +397,9 @@ namespace Katsu
         if (method->v_code.is_null()) {
             // Native or intrinsic handler.
             if (method->native_handler) {
+                // Note that we cannot support tail-calls here. However, it's not really an issue,
+                // since native handler shouldn't add to the Katsu call stack themselves; as soon as
+                // the handler returns the Katsu call frame should be complete as well.
                 this->current_frame->inst_spot++;
                 this->current_frame->arg_spot += 2;
                 Value v_result = method->native_handler(*this, num_args, args);
@@ -412,6 +415,8 @@ namespace Katsu
                            "method must have v_code or a native_handler or intrinsic_handler");
             }
         } else {
+            // TODO: support tail-calls for bytecode
+            ASSERT_MSG(!tail_call, "tail-call not implemented");
             this->current_frame->inst_spot++;
             this->current_frame->arg_spot += 2;
 
