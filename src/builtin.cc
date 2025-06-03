@@ -259,14 +259,13 @@ namespace Katsu
 
     bool is_subtype(Type* a, Type* b)
     {
-        ASSERT(a->v_linearization.is_obj_vector());
-        ASSERT(b->v_linearization.is_obj_vector());
-        Vector* lin_a = a->v_linearization.obj_vector();
-        Vector* lin_b = b->v_linearization.obj_vector();
+        ASSERT(a->v_linearization.is_obj_array());
+        ASSERT(b->v_linearization.is_obj_array());
+        Array* lin_a = a->v_linearization.obj_array();
+        Array* lin_b = b->v_linearization.obj_array();
         // Neat, eh?
         return lin_a->length >= lin_b->length &&
-               lin_a->v_array.obj_array()->components()[lin_a->length - lin_b->length] ==
-                   lin_b->v_array.obj_array()->components()[0];
+               lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
     }
 
     Value native__subtype_p_(VM& vm, int64_t nargs, Value* args)
