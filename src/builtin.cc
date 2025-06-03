@@ -285,7 +285,7 @@ namespace Katsu
 
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
-        Root<Vector> r_bases(gc, make_vector(gc, 0));
+        Root<Array> r_bases(gc, make_array(gc, 0));
         OptionalRoot<Vector> r_slots(gc, nullptr);
         return Value::object(make_type(gc,
                                        r_name,

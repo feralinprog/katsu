@@ -79,30 +79,22 @@ TEST_CASE("c3 merge", "[value-utils]")
     ValueRoot F(gc, Value::object(make_string(gc, "F")));
     ValueRoot O(gc, Value::object(make_string(gc, "O")));
 
-    Root<Vector> bases_A(gc, make_vector(gc, 0));
-    append(gc, bases_A, B);
-    append(gc, bases_A, C);
-    Root<Vector> bases_B(gc, make_vector(gc, 0));
-    append(gc, bases_B, D);
-    append(gc, bases_B, E);
-    Root<Vector> bases_C(gc, make_vector(gc, 0));
-    append(gc, bases_C, D);
-    append(gc, bases_C, F);
-    Root<Vector> bases_D(gc, make_vector(gc, 0));
-    append(gc, bases_D, O);
-    Root<Vector> bases_E(gc, make_vector(gc, 0));
-    append(gc, bases_E, O);
-    Root<Vector> bases_F(gc, make_vector(gc, 0));
-    append(gc, bases_F, O);
-    Root<Vector> bases_O(gc, make_vector(gc, 0));
-
-    ValueRoot v_bases_A(gc, bases_A.value());
-    ValueRoot v_bases_B(gc, bases_B.value());
-    ValueRoot v_bases_C(gc, bases_C.value());
-    ValueRoot v_bases_D(gc, bases_D.value());
-    ValueRoot v_bases_E(gc, bases_E.value());
-    ValueRoot v_bases_F(gc, bases_F.value());
-    ValueRoot v_bases_O(gc, bases_O.value());
+    Root<Array> bases_A(gc, make_array(gc, 2));
+    bases_A->components()[0] = *B;
+    bases_A->components()[1] = *C;
+    Root<Array> bases_B(gc, make_array(gc, 2));
+    bases_B->components()[0] = *D;
+    bases_B->components()[1] = *E;
+    Root<Array> bases_C(gc, make_array(gc, 2));
+    bases_C->components()[0] = *D;
+    bases_C->components()[1] = *F;
+    Root<Array> bases_D(gc, make_array(gc, 1));
+    bases_D->components()[0] = *O;
+    Root<Array> bases_E(gc, make_array(gc, 1));
+    bases_E->components()[0] = *O;
+    Root<Array> bases_F(gc, make_array(gc, 1));
+    bases_F->components()[0] = *O;
+    Root<Array> bases_O(gc, make_array(gc, 0));
 
     Root<Vector> L_A(gc, make_vector(gc, 0));
     Root<Vector> L_B(gc, make_vector(gc, 0));
@@ -111,14 +103,6 @@ TEST_CASE("c3 merge", "[value-utils]")
     Root<Vector> L_E(gc, make_vector(gc, 0));
     Root<Vector> L_F(gc, make_vector(gc, 0));
     Root<Vector> L_O(gc, make_vector(gc, 0));
-
-    ValueRoot v_L_A(gc, L_A.value());
-    ValueRoot v_L_B(gc, L_B.value());
-    ValueRoot v_L_C(gc, L_C.value());
-    ValueRoot v_L_D(gc, L_D.value());
-    ValueRoot v_L_E(gc, L_E.value());
-    ValueRoot v_L_F(gc, L_F.value());
-    ValueRoot v_L_O(gc, L_O.value());
 
     // Start calculating linearizations in topological order:
     //   O -> D -> E -> F -> B -> C -> A
@@ -129,8 +113,8 @@ TEST_CASE("c3 merge", "[value-utils]")
 
     // O
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_bases_O);
+        Root<Array> r_linearizations(gc, make_array(gc, 1));
+        r_linearizations->components()[0] = bases_O.value();
         append(gc, L_O, O);
         REQUIRE(c3_merge(gc, r_linearizations, L_O));
     }
@@ -138,12 +122,13 @@ TEST_CASE("c3 merge", "[value-utils]")
         REQUIRE(L_O->length == 1);
         CHECK(L_O->v_array.obj_array()->components()[0] == *O);
     }
+    Root<Array> arr_L_O(gc, vector_to_array(gc, L_O));
 
     // D (O)
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_L_O);
-        append(gc, r_linearizations, v_bases_D);
+        Root<Array> r_linearizations(gc, make_array(gc, 2));
+        r_linearizations->components()[0] = arr_L_O.value();
+        r_linearizations->components()[1] = bases_D.value();
         append(gc, L_D, D);
         REQUIRE(c3_merge(gc, r_linearizations, L_D));
     }
@@ -152,12 +137,13 @@ TEST_CASE("c3 merge", "[value-utils]")
         CHECK(L_D->v_array.obj_array()->components()[0] == *D);
         CHECK(L_D->v_array.obj_array()->components()[1] == *O);
     }
+    Root<Array> arr_L_D(gc, vector_to_array(gc, L_D));
 
     // E (O)
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_L_O);
-        append(gc, r_linearizations, v_bases_E);
+        Root<Array> r_linearizations(gc, make_array(gc, 2));
+        r_linearizations->components()[0] = arr_L_O.value();
+        r_linearizations->components()[1] = bases_E.value();
         append(gc, L_E, E);
         REQUIRE(c3_merge(gc, r_linearizations, L_E));
     }
@@ -166,12 +152,13 @@ TEST_CASE("c3 merge", "[value-utils]")
         CHECK(L_E->v_array.obj_array()->components()[0] == *E);
         CHECK(L_E->v_array.obj_array()->components()[1] == *O);
     }
+    Root<Array> arr_L_E(gc, vector_to_array(gc, L_E));
 
     // F (O)
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_L_O);
-        append(gc, r_linearizations, v_bases_F);
+        Root<Array> r_linearizations(gc, make_array(gc, 2));
+        r_linearizations->components()[0] = arr_L_O.value();
+        r_linearizations->components()[1] = bases_F.value();
         append(gc, L_F, F);
         REQUIRE(c3_merge(gc, r_linearizations, L_F));
     }
@@ -180,13 +167,14 @@ TEST_CASE("c3 merge", "[value-utils]")
         CHECK(L_F->v_array.obj_array()->components()[0] == *F);
         CHECK(L_F->v_array.obj_array()->components()[1] == *O);
     }
+    Root<Array> arr_L_F(gc, vector_to_array(gc, L_F));
 
     // B (D, E)
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_L_D);
-        append(gc, r_linearizations, v_L_E);
-        append(gc, r_linearizations, v_bases_B);
+        Root<Array> r_linearizations(gc, make_array(gc, 3));
+        r_linearizations->components()[0] = arr_L_D.value();
+        r_linearizations->components()[1] = arr_L_E.value();
+        r_linearizations->components()[2] = bases_B.value();
         append(gc, L_B, B);
         REQUIRE(c3_merge(gc, r_linearizations, L_B));
     }
@@ -197,13 +185,14 @@ TEST_CASE("c3 merge", "[value-utils]")
         CHECK(L_B->v_array.obj_array()->components()[2] == *E);
         CHECK(L_B->v_array.obj_array()->components()[3] == *O);
     }
+    Root<Array> arr_L_B(gc, vector_to_array(gc, L_B));
 
     // C (D, F)
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_L_D);
-        append(gc, r_linearizations, v_L_F);
-        append(gc, r_linearizations, v_bases_C);
+        Root<Array> r_linearizations(gc, make_array(gc, 3));
+        r_linearizations->components()[0] = arr_L_D.value();
+        r_linearizations->components()[1] = arr_L_F.value();
+        r_linearizations->components()[2] = bases_C.value();
         append(gc, L_C, C);
         REQUIRE(c3_merge(gc, r_linearizations, L_C));
     }
@@ -214,13 +203,14 @@ TEST_CASE("c3 merge", "[value-utils]")
         CHECK(L_C->v_array.obj_array()->components()[2] == *F);
         CHECK(L_C->v_array.obj_array()->components()[3] == *O);
     }
+    Root<Array> arr_L_C(gc, vector_to_array(gc, L_C));
 
     // A (B, C)
     {
-        Root<Vector> r_linearizations(gc, make_vector(gc, 0));
-        append(gc, r_linearizations, v_L_B);
-        append(gc, r_linearizations, v_L_C);
-        append(gc, r_linearizations, v_bases_A);
+        Root<Array> r_linearizations(gc, make_array(gc, 3));
+        r_linearizations->components()[0] = arr_L_B.value();
+        r_linearizations->components()[1] = arr_L_C.value();
+        r_linearizations->components()[2] = bases_A.value();
         append(gc, L_A, A);
         REQUIRE(c3_merge(gc, r_linearizations, L_A));
     }
@@ -240,7 +230,7 @@ TEST_CASE("c3 linearization", "[value-utils]")
 {
     GC gc(1024 * 1024);
 
-    auto make = [&gc](const std::string& name, Root<Vector>& r_bases) {
+    auto make = [&gc](const std::string& name, Root<Array>& r_bases) {
         Root<String> r_name(gc, make_string(gc, name));
         OptionalRoot<Vector> r_slots(gc, nullptr);
         return make_type(gc,
@@ -262,52 +252,46 @@ TEST_CASE("c3 linearization", "[value-utils]")
         // >>> class B(D,E): pass
         // >>> class A(B,C): pass
 
-        Root<Vector> bases_O(gc, make_vector(gc, 0));
+        Root<Array> bases_O(gc, make_array(gc, 0));
         Root<Type> O(gc, make("O", bases_O));
-        ValueRoot v_O(gc, O.value());
 
-        Root<Vector> bases_F(gc, make_vector(gc, 1));
-        append(gc, bases_F, v_O);
+        Root<Array> bases_F(gc, make_array(gc, 1));
+        bases_F->components()[0] = O.value();
         Root<Type> F(gc, make("F", bases_F));
-        ValueRoot v_F(gc, F.value());
 
-        Root<Vector> bases_E(gc, make_vector(gc, 1));
-        append(gc, bases_E, v_O);
+        Root<Array> bases_E(gc, make_array(gc, 1));
+        bases_E->components()[0] = O.value();
         Root<Type> E(gc, make("E", bases_E));
-        ValueRoot v_E(gc, E.value());
 
-        Root<Vector> bases_D(gc, make_vector(gc, 1));
-        append(gc, bases_D, v_O);
+        Root<Array> bases_D(gc, make_array(gc, 1));
+        bases_D->components()[0] = O.value();
         Root<Type> D(gc, make("D", bases_D));
-        ValueRoot v_D(gc, D.value());
 
-        Root<Vector> bases_C(gc, make_vector(gc, 2));
-        append(gc, bases_C, v_D);
-        append(gc, bases_C, v_F);
+        Root<Array> bases_C(gc, make_array(gc, 2));
+        bases_C->components()[0] = D.value();
+        bases_C->components()[1] = F.value();
         Root<Type> C(gc, make("C", bases_C));
-        ValueRoot v_C(gc, C.value());
 
-        Root<Vector> bases_B(gc, make_vector(gc, 2));
-        append(gc, bases_B, v_D);
-        append(gc, bases_B, v_E);
+        Root<Array> bases_B(gc, make_array(gc, 2));
+        bases_B->components()[0] = D.value();
+        bases_B->components()[1] = E.value();
         Root<Type> B(gc, make("B", bases_B));
-        ValueRoot v_B(gc, B.value());
 
-        Root<Vector> bases_A(gc, make_vector(gc, 2));
-        append(gc, bases_A, v_B);
-        append(gc, bases_A, v_C);
+        Root<Array> bases_A(gc, make_array(gc, 2));
+        bases_A->components()[0] = B.value();
+        bases_A->components()[1] = C.value();
         Root<Type> A(gc, make("A", bases_A));
 
-        Vector* L_A = A->v_linearization.obj_vector();
+        Array* L_A = A->v_linearization.obj_array();
         {
             REQUIRE(L_A->length == 7);
-            CHECK(L_A->v_array.obj_array()->components()[0] == A.value());
-            CHECK(L_A->v_array.obj_array()->components()[1] == B.value());
-            CHECK(L_A->v_array.obj_array()->components()[2] == C.value());
-            CHECK(L_A->v_array.obj_array()->components()[3] == D.value());
-            CHECK(L_A->v_array.obj_array()->components()[4] == E.value());
-            CHECK(L_A->v_array.obj_array()->components()[5] == F.value());
-            CHECK(L_A->v_array.obj_array()->components()[6] == O.value());
+            CHECK(L_A->components()[0] == A.value());
+            CHECK(L_A->components()[1] == B.value());
+            CHECK(L_A->components()[2] == C.value());
+            CHECK(L_A->components()[3] == D.value());
+            CHECK(L_A->components()[4] == E.value());
+            CHECK(L_A->components()[5] == F.value());
+            CHECK(L_A->components()[6] == O.value());
         }
     }
 
@@ -322,35 +306,30 @@ TEST_CASE("c3 linearization", "[value-utils]")
         // >>> class B(Y,X): pass
         // (Then trying to create `class C(A,B): pass` should fail.)
 
-        Root<Vector> bases_O(gc, make_vector(gc, 0));
+        Root<Array> bases_O(gc, make_array(gc, 0));
         Root<Type> O(gc, make("O", bases_O));
-        ValueRoot v_O(gc, O.value());
 
-        Root<Vector> bases_X(gc, make_vector(gc, 1));
-        append(gc, bases_X, v_O);
+        Root<Array> bases_X(gc, make_array(gc, 1));
+        bases_X->components()[0] = O.value();
         Root<Type> X(gc, make("X", bases_X));
-        ValueRoot v_X(gc, X.value());
 
-        Root<Vector> bases_Y(gc, make_vector(gc, 1));
-        append(gc, bases_Y, v_O);
+        Root<Array> bases_Y(gc, make_array(gc, 1));
+        bases_Y->components()[0] = O.value();
         Root<Type> Y(gc, make("Y", bases_Y));
-        ValueRoot v_Y(gc, Y.value());
 
-        Root<Vector> bases_A(gc, make_vector(gc, 2));
-        append(gc, bases_A, v_X);
-        append(gc, bases_A, v_Y);
+        Root<Array> bases_A(gc, make_array(gc, 2));
+        bases_A->components()[0] = X.value();
+        bases_A->components()[1] = Y.value();
         Root<Type> A(gc, make("A", bases_A));
-        ValueRoot v_A(gc, A.value());
 
-        Root<Vector> bases_B(gc, make_vector(gc, 2));
-        append(gc, bases_B, v_Y);
-        append(gc, bases_B, v_X);
+        Root<Array> bases_B(gc, make_array(gc, 2));
+        bases_B->components()[0] = Y.value();
+        bases_B->components()[1] = X.value();
         Root<Type> B(gc, make("B", bases_B));
-        ValueRoot v_B(gc, B.value());
 
-        Root<Vector> bases_C(gc, make_vector(gc, 2));
-        append(gc, bases_C, v_A);
-        append(gc, bases_C, v_B);
+        Root<Array> bases_C(gc, make_array(gc, 2));
+        bases_C->components()[0] = A.value();
+        bases_C->components()[1] = B.value();
         CHECK_THROWS_MATCHES(make("C", bases_C),
                              std::runtime_error,
                              Message("could not determine linearization of {type}"));

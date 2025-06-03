@@ -162,8 +162,8 @@ namespace Katsu
         return multimethod;
     }
 
-    Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
-                        Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
+    Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
+                        Root<Array>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
                         OptionalRoot<Vector>& r_slots)
     {
         // TODO: check Type components in r_bases
@@ -616,10 +616,10 @@ namespace Katsu
         pprint(objects_seen, value, depth, "", initial_indent);
     }
 
-    bool vector_contains(Vector* vector, Value value)
+    bool array_contains(Array* array, Value value)
     {
-        Value* components = vector->v_array.obj_array()->components();
-        for (uint64_t i = 0; i < vector->length; i++) {
+        Value* components = array->components();
+        for (uint64_t i = 0; i < array->length; i++) {
             if (components[i] == value) {
                 return true;
             }
@@ -627,10 +627,10 @@ namespace Katsu
         return false;
     }
 
-    bool vector_contains_starting_at(Vector* vector, Value value, uint64_t start_index)
+    bool array_contains_starting_at(Array* array, Value value, uint64_t start_index)
     {
-        Value* components = vector->v_array.obj_array()->components();
-        for (uint64_t i = start_index; i < vector->length; i++) {
+        Value* components = array->components();
+        for (uint64_t i = start_index; i < array->length; i++) {
             if (components[i] == value) {
                 return true;
             }
@@ -680,7 +680,7 @@ namespace Katsu
      *     return [type] + base_linearization
      */
 
-    bool c3_merge(GC& gc, Root<Vector>& r_linearizations, Root<Vector>& r_merged)
+    bool c3_merge(GC& gc, Root<Array>& r_linearizations, Root<Vector>& r_merged)
     {
         // Start at the left of each linearization.
         size_t spots[r_linearizations->length];
@@ -696,8 +696,7 @@ namespace Katsu
             bool candidates_remaining = false;
             std::optional<Value> head = std::nullopt;
             for (size_t i = 0; i < r_linearizations->length; i++) {
-                Vector* linearization =
-                    r_linearizations->v_array.obj_array()->components()[i].obj_vector();
+                Array* linearization = r_linearizations->components()[i].obj_array();
                 if (spots[i] == linearization->length) {
                     // Already consumed this full linearization.
                     continue;
@@ -705,13 +704,12 @@ namespace Katsu
                 // There are still candidates to consider.
                 candidates_remaining = true;
 
-                Value candidate = linearization->v_array.obj_array()->components()[spots[i]];
+                Value candidate = linearization->components()[spots[i]];
                 // Check if this candidate is a head.
                 bool is_head = true;
                 for (size_t j = 0; j < r_linearizations->length; j++) {
-                    Vector* other_linearization =
-                        r_linearizations->v_array.obj_array()->components()[j].obj_vector();
-                    if (vector_contains_starting_at(other_linearization, candidate, spots[j] + 1)) {
+                    Array* other_linearization = r_linearizations->components()[j].obj_array();
+                    if (array_contains_starting_at(other_linearization, candidate, spots[j] + 1)) {
                         // Not a head!
                         is_head = false;
                         break;
@@ -736,13 +734,12 @@ namespace Katsu
                 v_head = *r_head;
                 // Ratchet past this head as the candidate in any linearization.
                 for (size_t i = 0; i < r_linearizations->length; i++) {
-                    Vector* linearization =
-                        r_linearizations->v_array.obj_array()->components()[i].obj_vector();
+                    Array* linearization = r_linearizations->components()[i].obj_array();
                     if (spots[i] == linearization->length) {
                         // Already consumed this full linearization.
                         continue;
                     }
-                    Value candidate = linearization->v_array.obj_array()->components()[spots[i]];
+                    Value candidate = linearization->components()[spots[i]];
                     if (candidate == v_head) {
                         spots[i]++;
                     }
@@ -754,13 +751,12 @@ namespace Katsu
         }
     }
 
-    Vector* c3_linearization(GC& gc, Root<Type>& r_type)
+    Array* c3_linearization(GC& gc, Root<Type>& r_type)
     {
-        Vector* bases = r_type->v_bases.obj_vector();
-        Value* bases_components = bases->v_array.obj_array()->components();
+        Array* bases = r_type->v_bases.obj_array();
         for (uint64_t i = 0; i < bases->length; i++) {
-            Type* base = bases_components[i].obj_type();
-            if (vector_contains(base->v_linearization.obj_vector(), r_type.value())) {
+            Type* base = bases->components()[i].obj_type();
+            if (array_contains(base->v_linearization.obj_array(), r_type.value())) {
                 // TODO: let katsu deal with it, and also provide r_type info.
                 throw std::runtime_error("inheritance cycle starting from {type}");
             }
@@ -771,17 +767,15 @@ namespace Katsu
         ValueRoot rv_type(gc, r_type.value());
         append(gc, r_merged, rv_type);
 
-        bases = r_type->v_bases.obj_vector();
-        Root<Vector> r_linearizations(gc, make_vector(gc, /* capacity */ bases->length + 1));
-        Value* linearizations_components = r_linearizations->v_array.obj_array()->components();
-        bases = r_type->v_bases.obj_vector();
-        bases_components = bases->v_array.obj_array()->components();
+        bases = r_type->v_bases.obj_array();
+        Root<Array> r_linearizations(gc, make_array_nofill(gc, bases->length + 1));
+        Value* linearizations = r_linearizations->components();
+        bases = r_type->v_bases.obj_array();
         for (uint64_t i = 0; i < bases->length; i++) {
-            Type* base = bases_components[i].obj_type();
-            linearizations_components[i] = base->v_linearization;
+            Type* base = bases->components()[i].obj_type();
+            linearizations[i] = base->v_linearization;
         }
-        linearizations_components[bases->length] = r_type->v_bases;
-        r_linearizations->length = bases->length + 1;
+        linearizations[bases->length] = r_type->v_bases;
 
         bool merged = c3_merge(gc, r_linearizations, r_merged);
         if (!merged) {
@@ -789,14 +783,14 @@ namespace Katsu
             throw std::runtime_error("could not determine linearization of {type}");
         }
 
-        return *r_merged;
+        return vector_to_array(gc, r_merged);
     }
 
-    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+    Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                     Type::Kind kind, OptionalRoot<Vector>& r_slots)
     {
         // TODO: the r_linearization will just be thrown away later. Ideally don't even allocate it.
-        Root<Vector> r_init_linearization(gc, make_vector(gc, /* capacity */ 0));
+        Root<Array> r_init_linearization(gc, make_array(gc, /* length */ 0));
         Root<Vector> r_subtypes(gc, make_vector(gc, 0));
         Root<Type> r_type(gc,
                           make_type_raw(gc,
@@ -808,15 +802,14 @@ namespace Katsu
                                         kind,
                                         r_slots));
 
-        Vector* linearization = c3_linearization(gc, r_type);
-        r_type->v_linearization = Value::object(linearization);
+        Root<Array> r_linearization(gc, c3_linearization(gc, r_type));
+        r_type->v_linearization = r_linearization.value();
 
-        uint32_t linearization_length = linearization->length;
-        Root<Array> lin_arr(gc, linearization->v_array.obj_array());
+        uint32_t linearization_length = r_linearization->length;
         // Ensure r_type is in the subtypes of each type in the linearization.
         // (Don't add r_type to its own bases, though. It's always the first in the linearization)
         for (uint32_t i = 1; i < linearization_length; i++) {
-            Value v_base = lin_arr->components()[i];
+            Value v_base = r_linearization->components()[i];
             Type* base = v_base.obj_type();
             Root<Vector> r_base_subtypes(gc, base->v_subtypes.obj_vector());
             ValueRoot rv_type(gc, r_type.value());

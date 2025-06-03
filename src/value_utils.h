@@ -48,8 +48,8 @@ namespace Katsu
                                   Root<Vector>& r_attributes);
     // Make a Type with specified fields. This doesn't calculate the linearization or ensure that
     // each supertype has the new type as a subtype.
-    Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
-                        Root<Vector>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
+    Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
+                        Root<Array>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
                         OptionalRoot<Vector>& r_slots);
     // Make a DataclassInstance with specified dataclass, with slots uninitialized.
     DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type);
@@ -84,29 +84,29 @@ namespace Katsu
     // depth.
     void pprint(Value value, bool initial_indent = true, int depth = 0);
 
-    // Check if a vector contains a given value, by value equality (e.g. object identity, not deep
+    // Check if an array contains a given value, by value equality (e.g. object identity, not deep
     // equality of any sort).
-    bool vector_contains(Vector* vector, Value value);
+    bool array_contains(Array* array, Value value);
 
-    // Check if a vector contains a given value, by value equality (e.g. object identity, not deep
+    // Check if an array contains a given value, by value equality (e.g. object identity, not deep
     // equality of any sort), starting at the given start_index. (This start index may be past the
     // end of the vector.)
-    bool vector_contains_starting_at(Vector* vector, Value value, uint64_t start_index);
+    bool array_contains_starting_at(Array* array, Value value, uint64_t start_index);
 
-    // Calculate combined linearization from a vector of linearization vectors, appending to the
+    // Calculate combined linearization from an array of linearization arrays, appending to the
     // provided r_merged vector. Returns true on success, or else false if C3 linearization is not
     // possible (and in this case, the merge result may only be partial; r_merged is not restored to
     // its initial value).
     // Does not modify any of the provided linearizations, or the vector of linearizations.
-    bool c3_merge(GC& gc, Root<Vector>& r_linearizations, Root<Vector>& r_merged);
+    bool c3_merge(GC& gc, Root<Array>& r_linearizations, Root<Vector>& r_merged);
 
     // Calculate the C3 linearization of the type and its bases. The value in
     // r_type->v_linearization is ignored.
     // See https://www.python.org/download/releases/2.3/mro/ for more on C3 linearization.
-    Vector* c3_linearization(GC& gc, Root<Type>& r_type);
+    Array* c3_linearization(GC& gc, Root<Type>& r_type);
 
     // Make a Type with specified fields. This also calculates the type's linearization and ensures
     // that each supertype has the new type as a subtype.
-    Type* make_type(GC& gc, Root<String>& r_name, Root<Vector>& r_bases, bool sealed,
+    Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                     Type::Kind kind, OptionalRoot<Vector>& r_slots);
 };

@@ -690,12 +690,11 @@ namespace Katsu
         };
 
         Value v_name;  // String
-        Value v_bases; // Vector (of Types)
+        Value v_bases; // Array (of Types)
         // Can user-defined types inherit from this?
         bool sealed;
         // C3 linearization.
-        // TODO: switch to linearization array?
-        Value v_linearization; // Vector (of Types)
+        Value v_linearization; // Array (of Types)
         Value v_subtypes;      // Vector (of Types)
         Kind kind;
         // If dataclass type (else null):
