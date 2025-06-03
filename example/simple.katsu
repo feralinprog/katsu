@@ -14,3 +14,10 @@ let: a = (adder: 3)
 pretty-print: a
 pretty-print: (a call: 0) # 3 + 33 + 0 = 36
 pretty-print: (a call: 2) # 36 + 33 + 2 = 71
+
+pretty-print: 5 type
+pretty-print: a type
+a instance?: Fixnum
+a instance?: Closure
+
+print: "this is " ~ "a test"
