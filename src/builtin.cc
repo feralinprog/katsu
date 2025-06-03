@@ -220,6 +220,68 @@ namespace Katsu
                   /* args */ args_tuple->components());
     }
 
+    Value type(VM& vm, Value value)
+    {
+        switch (value.tag()) {
+            case Tag::FIXNUM: return vm.builtin(BuiltinId::_Fixnum);
+            case Tag::FLOAT: return vm.builtin(BuiltinId::_Float);
+            case Tag::BOOL: return vm.builtin(BuiltinId::_Bool);
+            case Tag::_NULL: return vm.builtin(BuiltinId::_Null);
+            case Tag::OBJECT: {
+                Object* obj = value.object();
+                switch (obj->tag()) {
+                    case ObjectTag::REF: return vm.builtin(BuiltinId::_Ref);
+                    case ObjectTag::TUPLE: return vm.builtin(BuiltinId::_Tuple);
+                    case ObjectTag::ARRAY: return vm.builtin(BuiltinId::_Array);
+                    case ObjectTag::VECTOR: return vm.builtin(BuiltinId::_Vector);
+                    case ObjectTag::MODULE: return vm.builtin(BuiltinId::_Module);
+                    case ObjectTag::STRING: return vm.builtin(BuiltinId::_String);
+                    case ObjectTag::CODE: return vm.builtin(BuiltinId::_Code);
+                    case ObjectTag::CLOSURE: return vm.builtin(BuiltinId::_Closure);
+                    case ObjectTag::METHOD: return vm.builtin(BuiltinId::_Method);
+                    case ObjectTag::MULTIMETHOD: return vm.builtin(BuiltinId::_MultiMethod);
+                    case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
+                    case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
+                    default: ASSERT_MSG(false, "forgot an ObjectTag?");
+                }
+            }
+            default: ASSERT_MSG(false, "forgot a Tag?");
+        }
+    }
+
+    Value native__type(VM& vm, int64_t nargs, Value* args)
+    {
+        // value type
+        ASSERT(nargs == 1);
+        return type(vm, args[0]);
+    }
+
+    bool is_subtype(Type* a, Type* b)
+    {
+        ASSERT(a->v_linearization.is_obj_vector());
+        ASSERT(b->v_linearization.is_obj_vector());
+        Vector* lin_a = a->v_linearization.obj_vector();
+        Vector* lin_b = b->v_linearization.obj_vector();
+        // Neat, eh?
+        return lin_a->length >= lin_b->length &&
+               lin_a->v_array.obj_array()->components()[lin_a->length - lin_b->length] ==
+                   lin_b->v_array.obj_array()->components()[0];
+    }
+
+    Value native__subtype_p_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a subtype?: b
+        ASSERT(nargs == 2);
+        return Value::_bool(is_subtype(args[0].obj_type(), args[1].obj_type()));
+    }
+
+    Value native__instance_p_(VM& vm, int64_t nargs, Value* args)
+    {
+        // v instance?: t
+        ASSERT(nargs == 2);
+        return Value::_bool(is_subtype(type(vm, args[0]).obj_type(), args[1].obj_type()));
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Vector> r_bases(gc, make_vector(gc, 0));
@@ -282,7 +344,9 @@ namespace Katsu
         add_intrinsic(vm.gc, r_module, "call", &intrinsic__call);
         add_intrinsic(vm.gc, r_module, "call:", &intrinsic__call_);
         add_intrinsic(vm.gc, r_module, "call*:", &intrinsic__call_star_);
-        // add_native(vm.gc, r_module, "type", &type);
+        add_native(vm.gc, r_module, "type", &native__type);
+        add_native(vm.gc, r_module, "subtype?:", &native__subtype_p_);
+        add_native(vm.gc, r_module, "instance?:", &native__instance_p_);
 
         /*
          * TODO:
@@ -291,8 +355,6 @@ namespace Katsu
          * - method:does:
          * - method:does:::
          * - defer-method: (?)
-         * - type
-         * - is-instance?:
          * - Fixnum? (etc. for other builtin types)
          * - data:has:
          * - data:extends:has:

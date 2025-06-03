@@ -694,6 +694,7 @@ namespace Katsu
         // Can user-defined types inherit from this?
         bool sealed;
         // C3 linearization.
+        // TODO: switch to linearization array?
         Value v_linearization; // Vector (of Types)
         Value v_subtypes;      // Vector (of Types)
         Kind kind;

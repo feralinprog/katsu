@@ -453,4 +453,8 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"("not callable" call*: (10, 20))");
         check(Value::object(make_string(gc, "not callable")));
     }
+
+    // TODO: type
+    // TODO: subtype?:
+    // TODO: instance?:
 }
