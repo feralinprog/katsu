@@ -5,6 +5,7 @@
 #include "vm.h"
 
 #include <algorithm>
+#include <cstring>
 #include <iostream>
 
 namespace Katsu
