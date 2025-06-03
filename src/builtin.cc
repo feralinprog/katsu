@@ -75,14 +75,14 @@ namespace Katsu
         append(gc, r_module, r_name, r_multimethod);
     }
 
-    Value plus_(VM& vm, int64_t nargs, Value* args)
+    Value native__plus_(VM& vm, int64_t nargs, Value* args)
     {
-        // a +: b
+        // a + b
         ASSERT(nargs == 2);
         return Value::fixnum(args[0].fixnum() + args[1].fixnum());
     }
 
-    Value pretty_print_(VM& vm, int64_t nargs, Value* args)
+    Value native__pretty_print_(VM& vm, int64_t nargs, Value* args)
     {
         // _ pretty-print: val
         ASSERT(nargs == 2);
@@ -154,7 +154,7 @@ namespace Katsu
         }
     }
 
-    void then_else_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    void intrinsic__then_else_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // cond then: tbody else: fbody
         ASSERT(nargs == 3);
@@ -162,21 +162,21 @@ namespace Katsu
         call_impl(vm, tail_call, /* v_callable */ body, /* nargs */ 0, /* args */ nullptr);
     }
 
-    void call(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    void intrinsic__call(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // value call
         ASSERT(nargs == 1);
         call_impl(vm, tail_call, /* v_callable */ args[0], /* nargs */ 0, /* args */ nullptr);
     }
 
-    void call_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    void intrinsic__call_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // value call: arg
         ASSERT(nargs == 2);
         call_impl(vm, tail_call, /* v_callable */ args[0], /* nargs */ 1, /* args */ &args[1]);
     }
 
-    void call_star_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    void intrinsic__call_star_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // value call*: args
         ASSERT(nargs == 2);
@@ -250,12 +250,12 @@ namespace Katsu
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
 
-        add_native(vm.gc, r_module, "+:", &plus_);
-        add_native(vm.gc, r_module, "pretty-print:", &pretty_print_);
-        add_intrinsic(vm.gc, r_module, "then:else:", &then_else_);
-        add_intrinsic(vm.gc, r_module, "call", &call);
-        add_intrinsic(vm.gc, r_module, "call:", &call_);
-        add_intrinsic(vm.gc, r_module, "call*:", &call_star_);
+        add_native(vm.gc, r_module, "+:", &native__plus_);
+        add_native(vm.gc, r_module, "pretty-print:", &native__pretty_print_);
+        add_intrinsic(vm.gc, r_module, "then:else:", &intrinsic__then_else_);
+        add_intrinsic(vm.gc, r_module, "call", &intrinsic__call);
+        add_intrinsic(vm.gc, r_module, "call:", &intrinsic__call_);
+        add_intrinsic(vm.gc, r_module, "call*:", &intrinsic__call_star_);
         // add_native(vm.gc, r_module, "type", &type);
 
         /*
