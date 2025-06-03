@@ -30,6 +30,8 @@ namespace Katsu
     Module* make_module(GC& gc, OptionalRoot<Module>& r_base, uint64_t capacity);
     // Make a String with contents copied from a source string.
     String* make_string(GC& gc, const std::string& src);
+    // Make a String of the given length, with contents uninitialized.
+    String* make_string_nofill(GC& gc, uint64_t length);
     // Make a Code with specified fields.
     Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
                     uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,

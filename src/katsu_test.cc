@@ -296,6 +296,12 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     // TODO: other builtin types
 
+    SECTION("string ~:")
+    {
+        input(R"("hello," ~ " " ~ "world!")");
+        check(Value::object(make_string(gc, "hello, world!")));
+    }
+
     SECTION("fixnum +:")
     {
         input("3 + 4");

@@ -86,9 +86,15 @@ namespace Katsu
     String* make_string(GC& gc, const std::string& src)
     {
         size_t length = src.size();
+        String* str = make_string_nofill(gc, length);
+        memcpy(str->contents(), src.c_str(), length);
+        return str;
+    }
+
+    String* make_string_nofill(GC& gc, uint64_t length)
+    {
         String* str = gc.alloc<String>(length);
         str->length = length;
-        memcpy(str->contents(), src.c_str(), length);
         return str;
     }
 

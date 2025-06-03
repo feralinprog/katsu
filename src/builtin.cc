@@ -75,6 +75,20 @@ namespace Katsu
         append(gc, r_module, r_name, r_multimethod);
     }
 
+    Value native__tilde_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a ~ b
+        ASSERT(nargs == 2);
+        Root<String> r_a(vm.gc, args[0].obj_string());
+        Root<String> r_b(vm.gc, args[1].obj_string());
+        uint64_t length_a = r_a->length;
+        uint64_t length_b = r_b->length;
+        String* c = make_string_nofill(vm.gc, length_a + length_b);
+        memcpy(c->contents(), r_a->contents(), length_a);
+        memcpy(c->contents() + length_a, r_b->contents(), length_b);
+        return Value::object(c);
+    }
+
     Value native__plus_(VM& vm, int64_t nargs, Value* args)
     {
         // a + b
@@ -250,6 +264,7 @@ namespace Katsu
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
 
+        add_native(vm.gc, r_module, "~:", &native__tilde_);
         add_native(vm.gc, r_module, "+:", &native__plus_);
         add_native(vm.gc, r_module, "pretty-print:", &native__pretty_print_);
         add_intrinsic(vm.gc, r_module, "then:else:", &intrinsic__then_else_);
