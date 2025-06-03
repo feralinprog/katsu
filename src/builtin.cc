@@ -5,6 +5,7 @@
 #include "vm.h"
 
 #include <algorithm>
+#include <iostream>
 
 namespace Katsu
 {
@@ -94,6 +95,15 @@ namespace Katsu
         // a + b
         ASSERT(nargs == 2);
         return Value::fixnum(args[0].fixnum() + args[1].fixnum());
+    }
+
+    Value native__print_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ print: val
+        ASSERT(nargs == 2);
+        String* s = args[1].obj_string();
+        std::cout.write(reinterpret_cast<char*>(s->contents()), s->length) << "\n";
+        return Value::null();
     }
 
     Value native__pretty_print_(VM& vm, int64_t nargs, Value* args)
@@ -266,6 +276,7 @@ namespace Katsu
 
         add_native(vm.gc, r_module, "~:", &native__tilde_);
         add_native(vm.gc, r_module, "+:", &native__plus_);
+        add_native(vm.gc, r_module, "print:", &native__print_);
         add_native(vm.gc, r_module, "pretty-print:", &native__pretty_print_);
         add_intrinsic(vm.gc, r_module, "then:else:", &intrinsic__then_else_);
         add_intrinsic(vm.gc, r_module, "call", &intrinsic__call);

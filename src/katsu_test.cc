@@ -308,6 +308,14 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::fixnum(7));
     }
 
+    SECTION("print:")
+    {
+        cout_capture capture;
+        input(R"(print: "hello, world")");
+        check(Value::null());
+        CHECK(capture.str() == "hello, world\n");
+    }
+
     SECTION("pretty-print:")
     {
         cout_capture capture;
