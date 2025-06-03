@@ -198,6 +198,7 @@ namespace Katsu
         _Float,
         _Bool,
         _Null,
+        _Ref,
         _Tuple,
         _Array,
         _Vector,

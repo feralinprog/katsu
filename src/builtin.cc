@@ -239,6 +239,7 @@ namespace Katsu
         register_base_type(BuiltinId::_Float, "Float");
         register_base_type(BuiltinId::_Bool, "Bool");
         register_base_type(BuiltinId::_Null, "Null");
+        register_base_type(BuiltinId::_Ref, "Ref");
         register_base_type(BuiltinId::_Tuple, "Tuple");
         register_base_type(BuiltinId::_Array, "Array");
         register_base_type(BuiltinId::_Vector, "Vector");
