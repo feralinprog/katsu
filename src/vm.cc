@@ -69,6 +69,13 @@ namespace Katsu
         }
     }
 
+    void VM::register_builtin(BuiltinId id, Value value)
+    {
+        ASSERT(id >= 0 && id < BuiltinId::NUM_BUILTINS);
+        ASSERT(this->builtin_values[id] == Value::null());
+        this->builtin_values[id] = value;
+    }
+
     Value VM::eval_toplevel(Root<Code>& r_code)
     {
         ASSERT_MSG(!this->current_frame,

@@ -223,11 +223,16 @@ namespace Katsu
 
         void visit_roots(std::function<void(Value*)>& visitor) override;
 
-        GC& gc;
+        inline Value builtin(BuiltinId id)
+        {
+            ASSERT(id >= 0 && id < BuiltinId::NUM_BUILTINS);
+            return this->builtin_values[id];
+        }
 
-        // Builtin values that we need convenient access to (and which are GC'ed).
-        // Indexed by BuiltinId.
-        Value builtin_values[BuiltinId::NUM_BUILTINS];
+        void register_builtin(BuiltinId id, Value value);
+
+        // GC for values tracked by this VM.
+        GC& gc;
 
     private:
         friend class OpenVM;
@@ -257,6 +262,10 @@ namespace Katsu
 
         // null, or points into the call_stack_mem.
         Frame* current_frame;
+
+        // Builtin values that we need convenient access to (and which are GC'ed).
+        // Indexed by BuiltinId.
+        Value builtin_values[BuiltinId::NUM_BUILTINS];
     };
 
     // This should only be used by intrinsic handlers.

@@ -211,8 +211,7 @@ namespace Katsu
     void _register(VM& vm, BuiltinId id, Root<String>& r_name, Root<Module>& r_module,
                    ValueRoot& r_value)
     {
-        ASSERT(vm.builtin_values[id] == Value::null());
-        vm.builtin_values[id] = *r_value;
+        vm.register_builtin(id, *r_value);
         append(vm.gc, r_module, r_name, r_value);
     }
     void _register(VM& vm, BuiltinId id, const std::string& name, Root<Module>& r_module,
