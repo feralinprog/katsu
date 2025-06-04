@@ -444,9 +444,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     SECTION("call*: - arguments not a tuple")
     {
         input(R"(\a b [a + b] call*: { 10; 20; 30 })");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("call*: arguments must be a tuple"));
+        CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
     }
     SECTION("call*: - callable not a closure")
     {

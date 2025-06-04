@@ -25,6 +25,7 @@ namespace Katsu
                 throw std::runtime_error("name exists in module but is not a multimethod!");
             }
             multi = v_existing->obj_multimethod();
+            ASSERT(multi->num_params == num_params);
         } else {
             Root<Vector> r_methods(gc, make_vector(gc, 1));
             Root<Vector> r_attributes(gc, make_vector(gc, 0));
@@ -220,51 +221,11 @@ namespace Katsu
                   /* args */ args_tuple->components());
     }
 
-    Value type(VM& vm, Value value)
-    {
-        switch (value.tag()) {
-            case Tag::FIXNUM: return vm.builtin(BuiltinId::_Fixnum);
-            case Tag::FLOAT: return vm.builtin(BuiltinId::_Float);
-            case Tag::BOOL: return vm.builtin(BuiltinId::_Bool);
-            case Tag::_NULL: return vm.builtin(BuiltinId::_Null);
-            case Tag::OBJECT: {
-                Object* obj = value.object();
-                switch (obj->tag()) {
-                    case ObjectTag::REF: return vm.builtin(BuiltinId::_Ref);
-                    case ObjectTag::TUPLE: return vm.builtin(BuiltinId::_Tuple);
-                    case ObjectTag::ARRAY: return vm.builtin(BuiltinId::_Array);
-                    case ObjectTag::VECTOR: return vm.builtin(BuiltinId::_Vector);
-                    case ObjectTag::MODULE: return vm.builtin(BuiltinId::_Module);
-                    case ObjectTag::STRING: return vm.builtin(BuiltinId::_String);
-                    case ObjectTag::CODE: return vm.builtin(BuiltinId::_Code);
-                    case ObjectTag::CLOSURE: return vm.builtin(BuiltinId::_Closure);
-                    case ObjectTag::METHOD: return vm.builtin(BuiltinId::_Method);
-                    case ObjectTag::MULTIMETHOD: return vm.builtin(BuiltinId::_MultiMethod);
-                    case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
-                    case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
-                    default: ASSERT_MSG(false, "forgot an ObjectTag?");
-                }
-            }
-            default: ASSERT_MSG(false, "forgot a Tag?");
-        }
-    }
-
     Value native__type(VM& vm, int64_t nargs, Value* args)
     {
         // value type
         ASSERT(nargs == 1);
-        return type(vm, args[0]);
-    }
-
-    bool is_subtype(Type* a, Type* b)
-    {
-        ASSERT(a->v_linearization.is_obj_array());
-        ASSERT(b->v_linearization.is_obj_array());
-        Array* lin_a = a->v_linearization.obj_array();
-        Array* lin_b = b->v_linearization.obj_array();
-        // Neat, eh?
-        return lin_a->length >= lin_b->length &&
-               lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
+        return type_of(vm, args[0]);
     }
 
     Value native__subtype_p_(VM& vm, int64_t nargs, Value* args)
@@ -278,7 +239,7 @@ namespace Katsu
     {
         // v instance?: t
         ASSERT(nargs == 2);
-        return Value::_bool(is_subtype(type(vm, args[0]).obj_type(), args[1].obj_type()));
+        return Value::_bool(is_instance(vm, args[0], args[1].obj_type()));
     }
 
     Value make_base_type(GC& gc, Root<String>& r_name)
@@ -335,53 +296,81 @@ namespace Katsu
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
 
-        Root<Array> matchers0(vm.gc, make_array(vm.gc, 0));
-        Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-        Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-        Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "~:", 2, matchers2, &native__tilde_);
+        }
 
-        matchers2->components()[0] = vm.builtin(BuiltinId::_String);
-        matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-        add_native(vm.gc, r_module, "~:", 2, matchers2, &native__tilde_);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "+:", 2, matchers2, &native__plus_);
+        }
 
-        matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-        matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-        add_native(vm.gc, r_module, "+:", 2, matchers2, &native__plus_);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "print:", 2, matchers2, &native__print_);
+        }
 
-        matchers2->components()[0] = Value::null(); // any
-        matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-        add_native(vm.gc, r_module, "print:", 2, matchers2, &native__print_);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_native(vm.gc, r_module, "pretty-print:", 2, matchers2, &native__pretty_print_);
+        }
 
-        matchers2->components()[0] = Value::null(); // any
-        matchers2->components()[1] = Value::null(); // any
-        add_native(vm.gc, r_module, "pretty-print:", 2, matchers2, &native__pretty_print_);
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = Value::null(); // any
+            matchers3->components()[1] = Value::null(); // any
+            matchers3->components()[2] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "then:else:", 3, matchers3, &intrinsic__then_else_);
+        }
 
-        matchers3->components()[0] = Value::null(); // any
-        matchers3->components()[1] = Value::null(); // any
-        matchers3->components()[2] = Value::null(); // any
-        add_intrinsic(vm.gc, r_module, "then:else:", 3, matchers3, &intrinsic__then_else_);
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "call", 1, matchers1, &intrinsic__call);
+        }
 
-        matchers1->components()[0] = Value::null(); // any
-        add_intrinsic(vm.gc, r_module, "call", 1, matchers1, &intrinsic__call);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "call:", 2, matchers2, &intrinsic__call_);
+        }
 
-        matchers2->components()[0] = Value::null(); // any
-        matchers2->components()[1] = Value::null(); // any
-        add_intrinsic(vm.gc, r_module, "call:", 2, matchers2, &intrinsic__call_);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Tuple);
+            add_intrinsic(vm.gc, r_module, "call*:", 2, matchers2, &intrinsic__call_star_);
+        }
 
-        matchers2->components()[0] = Value::null(); // any
-        matchers2->components()[1] = vm.builtin(BuiltinId::_Tuple);
-        add_intrinsic(vm.gc, r_module, "call*:", 2, matchers2, &intrinsic__call_star_);
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = Value::null(); // any
+            add_native(vm.gc, r_module, "type", 1, matchers1, &native__type);
+        }
 
-        matchers2->components()[0] = Value::null(); // any
-        add_native(vm.gc, r_module, "type", 1, matchers1, &native__type);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Type);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
+            add_native(vm.gc, r_module, "subtype?:", 2, matchers2, &native__subtype_p_);
+        }
 
-        matchers2->components()[0] = vm.builtin(BuiltinId::_Type);
-        matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
-        add_native(vm.gc, r_module, "subtype?:", 2, matchers2, &native__subtype_p_);
-
-        matchers2->components()[0] = Value::null(); // any
-        matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
-        add_native(vm.gc, r_module, "instance?:", 2, matchers2, &native__instance_p_);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
+            add_native(vm.gc, r_module, "instance?:", 2, matchers2, &native__instance_p_);
+        }
 
         /*
          * TODO:

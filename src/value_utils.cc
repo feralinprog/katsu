@@ -884,4 +884,49 @@ namespace Katsu
     {
         return end(*r_vector);
     }
+
+    Value type_of(VM& vm, Value value)
+    {
+        switch (value.tag()) {
+            case Tag::FIXNUM: return vm.builtin(BuiltinId::_Fixnum);
+            case Tag::FLOAT: return vm.builtin(BuiltinId::_Float);
+            case Tag::BOOL: return vm.builtin(BuiltinId::_Bool);
+            case Tag::_NULL: return vm.builtin(BuiltinId::_Null);
+            case Tag::OBJECT: {
+                Object* obj = value.object();
+                switch (obj->tag()) {
+                    case ObjectTag::REF: return vm.builtin(BuiltinId::_Ref);
+                    case ObjectTag::TUPLE: return vm.builtin(BuiltinId::_Tuple);
+                    case ObjectTag::ARRAY: return vm.builtin(BuiltinId::_Array);
+                    case ObjectTag::VECTOR: return vm.builtin(BuiltinId::_Vector);
+                    case ObjectTag::MODULE: return vm.builtin(BuiltinId::_Module);
+                    case ObjectTag::STRING: return vm.builtin(BuiltinId::_String);
+                    case ObjectTag::CODE: return vm.builtin(BuiltinId::_Code);
+                    case ObjectTag::CLOSURE: return vm.builtin(BuiltinId::_Closure);
+                    case ObjectTag::METHOD: return vm.builtin(BuiltinId::_Method);
+                    case ObjectTag::MULTIMETHOD: return vm.builtin(BuiltinId::_MultiMethod);
+                    case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
+                    case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
+                    default: ASSERT_MSG(false, "forgot an ObjectTag?");
+                }
+            }
+            default: ASSERT_MSG(false, "forgot a Tag?");
+        }
+    }
+
+    bool is_subtype(Type* a, Type* b)
+    {
+        ASSERT(a->v_linearization.is_obj_array());
+        ASSERT(b->v_linearization.is_obj_array());
+        Array* lin_a = a->v_linearization.obj_array();
+        Array* lin_b = b->v_linearization.obj_array();
+        // Neat, eh?
+        return lin_a->length >= lin_b->length &&
+               lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
+    }
+
+    bool is_instance(VM& vm, Value value, Type* type)
+    {
+        return is_subtype(type_of(vm, value).obj_type(), type);
+    }
 };

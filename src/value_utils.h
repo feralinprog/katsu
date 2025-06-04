@@ -129,4 +129,11 @@ namespace Katsu
     Value* begin(Root<Vector>& r_vector);
     Value* end(Root<Vector>& r_vector);
     // ===========================================================================
+
+    class VM;
+    // Doesn't allocate!
+    Value type_of(VM& vm, Value value);
+    bool is_subtype(Type* a, Type* b);
+    // Doesn't allocate!
+    bool is_instance(VM& vm, Value value, Type* type);
 };
