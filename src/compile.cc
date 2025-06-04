@@ -516,19 +516,22 @@ namespace Katsu
 
         std::vector<std::string> method_name_parts{};
         std::vector<std::string> param_names{};
-        // TODO: param matchers
+        Root<Vector> r_param_matchers(gc, make_vector(gc, 0));
 
-        auto add_param_name_and_matcher = [&param_names](Expr& param_decl,
-                                                         const std::string& error_msg) -> void {
+        auto add_param_name_and_matcher =
+            [&gc, &param_names, &r_param_matchers](Expr& param_decl,
+                                                   const std::string& error_msg) -> void {
             if (NameExpr* d = dynamic_cast<NameExpr*>(&param_decl)) {
                 param_names.push_back(std::get<std::string>(d->name.value));
-                // TODO: add an any-matcher
+                ValueRoot any_matcher(gc, Value::null());
+                append(gc, r_param_matchers, any_matcher);
                 return;
             } else if (ParenExpr* d = dynamic_cast<ParenExpr*>(&param_decl)) {
                 if (NAryMessageExpr* n = dynamic_cast<NAryMessageExpr*>(d->inner.get())) {
                     if (!n->target && n->messages.size() == 1) {
                         param_names.push_back(std::get<std::string>(n->messages[0].value));
                         // TODO: param matcher, from n->args[0]
+                        ASSERT_MSG(false, "type param matchers not implemented");
                         return;
                     }
                 }
@@ -539,7 +542,8 @@ namespace Katsu
         if (NameExpr* d = dynamic_cast<NameExpr*>(decl)) {
             method_name_parts.push_back(std::get<std::string>(d->name.value));
             param_names.push_back("self");
-            // TODO: add an any-matcher
+            ValueRoot any_matcher(gc, Value::null());
+            append(gc, r_param_matchers, any_matcher);
         } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
             std::stringstream ss;
             ss << "When the " << message << "'declaration' argument is a unary message, "
@@ -567,7 +571,8 @@ namespace Katsu
                 add_param_name_and_matcher(**d->target, error_msg);
             } else {
                 param_names.push_back("self");
-                // TODO: add an any-matcher
+                ValueRoot any_matcher(gc, Value::null());
+                append(gc, r_param_matchers, any_matcher);
             }
 
             for (const std::unique_ptr<Expr>& arg : d->args) {
@@ -611,7 +616,11 @@ namespace Katsu
                 // We know we're about to add at least one method!
                 Root<Vector> r_methods(gc, make_vector(gc, 1));
                 Root<Vector> r_attributes(gc, make_vector(gc, 0));
-                multimethod = make_multimethod(gc, r_method_name, r_methods, r_attributes);
+                multimethod = make_multimethod(gc,
+                                               r_method_name,
+                                               param_names.size(),
+                                               r_methods,
+                                               r_attributes);
                 ValueRoot r_multimethod(gc, Value::object(multimethod));
                 append(gc, r_module, r_method_name, r_multimethod);
                 multimethod = r_multimethod->obj_multimethod();
@@ -649,29 +658,24 @@ namespace Katsu
         compile_expr(gc, builder, *body);
 
         // Generate the method.
-        ValueRoot r_param_matchers(gc, Value::null()); // TODO
+        Root<Array> r_param_matchers_arr(gc, vector_to_array(gc, r_param_matchers));
         OptionalRoot<Type> r_return_type(gc, nullptr); // TODO: support return types for methods
         Code* code = builder.finalize(gc);
         OptionalRoot<Code> r_opt_code(gc, std::move(code));
         Root<Vector> r_attributes(gc, make_vector(gc, 0)); // TODO: support attributes for methods
         NativeHandler native_handler = nullptr;            // not a native handler
         IntrinsicHandler intrinsic_handler = nullptr;      // nor an intrinsic handler
-        ValueRoot r_method(gc,
-                           Value::object(make_method(gc,
-                                                     r_param_matchers,
-                                                     r_return_type,
-                                                     r_opt_code,
-                                                     r_attributes,
-                                                     native_handler,
-                                                     intrinsic_handler)));
+        Root<Method> r_method(gc,
+                              make_method(gc,
+                                          r_param_matchers_arr,
+                                          r_return_type,
+                                          r_opt_code,
+                                          r_attributes,
+                                          native_handler,
+                                          intrinsic_handler));
 
-        Root<Vector> r_methods(gc, r_multimethod->v_methods.obj_vector());
-        // TODO: refactor into util function to add to multimethod. Need to do other things like:
-        // * roll up method inlining to multimethod inline-dispatch
-        // * check for duplicate signatures
-        // * sort methods / generate decision tree
-        // * invalidate any methods whose compilation depended on this multimethod not changing
-        append(gc, r_methods, r_method);
+        // TODO: allow user to specify redefinition?
+        add_method(gc, r_multimethod, r_method, /* require_unique */ true);
     }
 
     Code* compile_into_module(GC& gc, Root<Module>& r_module,

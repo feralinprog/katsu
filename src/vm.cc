@@ -366,14 +366,8 @@ namespace Katsu
         return frame;
     }
 
-    void VM::invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args)
+    Method* multimethod_dispatch(MultiMethod* multimethod, Value* args)
     {
-        if (!v_callable.is_obj_multimethod()) {
-            // TODO: make this a katsu runtime error instead
-            throw std::runtime_error("can only invoke a multimethod");
-        }
-        MultiMethod* multimethod = v_callable.obj_multimethod();
-
         // TODO: actually do a proper multimethod dispatch
         Vector* methods = multimethod->v_methods.obj_vector();
         if (methods->length == 0) {
@@ -382,6 +376,19 @@ namespace Katsu
         }
         Value v_method = methods->v_array.obj_array()->components()[0];
         Method* method = v_method.obj_method();
+        return method;
+    }
+
+    void VM::invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args)
+    {
+        if (!v_callable.is_obj_multimethod()) {
+            // TODO: make this a katsu runtime error instead
+            throw std::runtime_error("can only invoke a multimethod");
+        }
+        MultiMethod* multimethod = v_callable.obj_multimethod();
+
+        ASSERT(num_args == multimethod->num_params);
+        Method* method = multimethod_dispatch(multimethod, args);
 
         if (method->v_code.is_null()) {
             // Native or intrinsic handler.
