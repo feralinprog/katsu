@@ -242,6 +242,35 @@ namespace Katsu
         return Value::_bool(is_instance(vm, args[0], args[1].obj_type()));
     }
 
+    Value native__make_method_with_return_type_code_attrs_(VM& vm, int64_t nargs, Value* args)
+    {
+        // param-matchers make-method-with-return-type: type code: code attrs: attrs
+        ASSERT(nargs == 4);
+        Root<Array> r_param_matchers(vm.gc, args[0].obj_array());
+        OptionalRoot<Type> r_return_type(vm.gc,
+                                         args[1].is_obj_type() ? args[1].obj_type() : nullptr);
+        OptionalRoot<Code> r_code(vm.gc, args[2].obj_code());
+        Root<Vector> r_attributes(vm.gc, args[3].obj_vector());
+        return Value::object(make_method(vm.gc,
+                                         r_param_matchers,
+                                         r_return_type,
+                                         r_code,
+                                         r_attributes,
+                                         /* native_handler */ nullptr,
+                                         /* intrinsic_handler */ nullptr));
+    }
+
+    Value native__add_method_to_require_unique_(VM& vm, int64_t nargs, Value* args)
+    {
+        // method add-method-to: multimethod require-unique: unique
+        ASSERT(nargs == 3);
+        Root<Method> r_method(vm.gc, args[0].obj_method());
+        Root<MultiMethod> r_multimethod(vm.gc, args[1].obj_multimethod());
+        bool require_unique = args[2]._bool();
+        add_method(vm.gc, r_multimethod, r_method, require_unique);
+        return Value::null();
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -370,6 +399,33 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
             add_native(vm.gc, r_module, "instance?:", 2, matchers2, &native__instance_p_);
+        }
+
+        {
+            Root<Array> matchers4(vm.gc, make_array(vm.gc, 4));
+            matchers4->components()[0] = vm.builtin(BuiltinId::_Array);
+            matchers4->components()[1] = vm.builtin(BuiltinId::_Type);
+            matchers4->components()[2] = vm.builtin(BuiltinId::_Code);
+            matchers4->components()[3] = vm.builtin(BuiltinId::_Vector);
+            add_native(vm.gc,
+                       r_module,
+                       "make-method-with-return-type:code:attrs:",
+                       4,
+                       matchers4,
+                       &native__make_method_with_return_type_code_attrs_);
+        }
+
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = vm.builtin(BuiltinId::_Method);
+            matchers3->components()[1] = vm.builtin(BuiltinId::_MultiMethod);
+            matchers3->components()[2] = vm.builtin(BuiltinId::_Bool);
+            add_native(vm.gc,
+                       r_module,
+                       "add-method-to:require-unique:",
+                       3,
+                       matchers3,
+                       &native__add_method_to_require_unique_);
         }
 
         /*

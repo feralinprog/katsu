@@ -284,6 +284,22 @@ namespace Katsu
                 shift_arg();
                 break;
             }
+            case OpCode::MAKE_ARRAY: {
+                // arg() is invalidated by any GC access, so acquire num_components ahead of
+                // time.
+                auto num_components = arg().fixnum();
+                // TODO: check >= 0
+                Array* array = make_array_nofill(this->gc, num_components);
+                // TODO: check uint32_t
+                Value* components = this->current_frame->pop_many(num_components);
+                for (int64_t i = 0; i < num_components; i++) {
+                    array->components()[i] = components[i];
+                }
+                this->current_frame->push(Value::object(array));
+                shift_inst();
+                shift_arg();
+                break;
+            }
             case OpCode::MAKE_VECTOR: {
                 // arg() is invalidated by any GC access, so acquire num_components ahead of
                 // time.
@@ -323,6 +339,14 @@ namespace Katsu
                 this->current_frame->push(Value::object(closure));
                 shift_inst();
                 shift_arg();
+                break;
+            }
+            case OpCode::VERIFY_IS_TYPE: {
+                Value value = this->current_frame->peek();
+                if (!value.is_obj_type()) {
+                    throw std::runtime_error("value must be a Type");
+                }
+                shift_inst();
                 break;
             }
             default: {

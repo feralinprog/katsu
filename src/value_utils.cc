@@ -407,7 +407,7 @@ namespace Katsu
         } else if (value.is_float()) {
             std::cout << "float " << value._float() << "\n";
         } else if (value.is_bool()) {
-            std::cout << "bool " << value._bool() << "\n";
+            std::cout << "bool " << (value._bool() ? "true" : "false") << "\n";
         } else if (value.is_null()) {
             std::cout << "null\n";
         } else if (value.is_object()) {
@@ -548,6 +548,11 @@ namespace Katsu
                                       << "\n";
                             break;
                         }
+                        case MAKE_ARRAY: {
+                            std::cout << "make-array #" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
+                            break;
+                        }
                         case MAKE_VECTOR: {
                             std::cout << "make-vector #" << args->components()[arg_spot++].fixnum()
                                       << "\n";
@@ -559,6 +564,10 @@ namespace Katsu
                                    "",
                                    /* initial_indent */ false,
                                    /* extra_depth */ +1);
+                            break;
+                        }
+                        case VERIFY_IS_TYPE: {
+                            std::cout << "verify-is-type\n";
                             break;
                         }
                         default: {
