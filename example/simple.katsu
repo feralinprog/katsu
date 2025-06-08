@@ -71,8 +71,14 @@ method: [(opt: OptionalNone) then: some-body else: none-body] does: [
 ]
 
 (some: 5) then: [pretty-print: it] else: [print: "none"]
-(none) then: [pretty-print: it] else: [print: "none"]
+(null none) then: [pretty-print: it] else: [print: "none"]
+
+method: [signal: thing] does: [
+    pretty-print: thing
+]
 
 method: [(opt: Optional) value!] does: [
     opt then: [it] else: [signal: (NoneValue message: "none has no value")]
 ]
+
+(null none) value!

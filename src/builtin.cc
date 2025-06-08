@@ -645,8 +645,8 @@ namespace Katsu
 
         /*
          * TODO:
-         * - cleanup:
-         * - panic!:
+         * - cleanup: (or maybe this is just delimited continuations...)
+         * - panic!: (or maybe this is just delimited continuations...)
          * - mix-in:to:
          * - >string
          * - at:
@@ -656,6 +656,11 @@ namespace Katsu
          * - length (String / Vector)
          * - anything for FFI!
          * - anything for delimited continuations
+         * 
+         * also:
+         * - tail calls
+         * - source spans in bytecode
+         * - module imports/exports (actually start a standard library)
          *
          * also move / add some things to compile-time builtins:
          * - method:does:
