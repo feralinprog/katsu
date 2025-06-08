@@ -52,6 +52,8 @@ namespace Katsu
      * | MAKE_CLOSURE   |  0xE   | (closure) closure 'template'                         (2) |
      * | MAKE_INSTANCE  |  0xF   | (fixnum) num slots                                       |
      * | VERIFY_IS_TYPE |  0x10  | none                                                     |
+     * | GET_SLOT       |  0x11  | (fixnum) slot index                                      |
+     * | SET_SLOT       |  0x12  | (fixnum) slot index                                      |
      * +----------------+--------+----------------------------------------------------------+
      * Notes:
      * (1) This should probably refer to an actual multimethod object to avoid lookups...
@@ -117,6 +119,8 @@ namespace Katsu
         MAKE_CLOSURE,
         MAKE_INSTANCE,
         VERIFY_IS_TYPE,
+        GET_SLOT,
+        SET_SLOT,
     };
 
     struct Frame

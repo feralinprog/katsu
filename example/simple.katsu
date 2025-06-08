@@ -39,15 +39,19 @@
 # (null) run-test
 
 data: Point has: { x; y }
-# creates type Point, assigns to module at "Point"
-# defines Point x: x y: y
-# defines v Point?
-# defines (v: Point) x
-# defines (v: Point) y
-# defines (v: Point) set-x: x
-# defines (v: Point) set-y: y
 data: Point3D extends: { Point } has: { z }
-# evalutes Point
-# creates type Point3D with base Point, assigns to module at "Point3D"
-# defines Point3D x: x y: y z: z (... how? needs to have evaluated `Point` at time of defining method)
-Point3D x: 1 y: 2 z: 3
+let: p = (Point3D x: 1 y: 2 z: 3)
+p .x
+p .y
+p .z
+(p x: 5; null)
+(p y: 6; null)
+(p z: 7; null)
+p .x
+p .y
+p .z
+
+p Point?
+p Point3D?
+
+(Point x: 1 y: 2) Point3D?

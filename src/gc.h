@@ -169,9 +169,9 @@ namespace Katsu
         {
             this->gc.roots.push_back(&this->root);
             value = Value::null();
-            #if DEBUG_GC_COLLECT_EVERY_ROOT
+#if DEBUG_GC_COLLECT_EVERY_ROOT
             gc.collect();
-            #endif
+#endif
         }
 
         ValueRoot(ValueRoot&) = delete;
@@ -218,9 +218,9 @@ namespace Katsu
             ASSERT_MSG(value, "cannot create Root from nullptr");
             this->gc.roots.push_back(&this->root);
             value = nullptr;
-            #if DEBUG_GC_COLLECT_EVERY_ROOT
+#if DEBUG_GC_COLLECT_EVERY_ROOT
             gc.collect();
-            #endif
+#endif
         }
 
         Root(Root<T>&) = delete;
@@ -270,9 +270,9 @@ namespace Katsu
         {
             this->gc.roots.push_back(&this->root);
             value = nullptr;
-            #if DEBUG_GC_COLLECT_EVERY_ROOT
+#if DEBUG_GC_COLLECT_EVERY_ROOT
             gc.collect();
-            #endif
+#endif
         }
 
         OptionalRoot(OptionalRoot<T>&) = delete;

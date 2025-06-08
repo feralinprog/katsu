@@ -177,7 +177,7 @@ namespace Katsu
 
     Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                         Root<Array>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
-                        OptionalRoot<Array>& r_slots)
+                        OptionalRoot<Array>& r_slots, std::optional<uint32_t> num_total_slots)
     {
         // TODO: check Type components in r_bases
         // Nothing to check for `sealed`.
@@ -187,12 +187,16 @@ namespace Katsu
                    kind == Type::Kind::MIXIN);
         if (kind == Type::Kind::PRIMITIVE) {
             ASSERT_ARG_MSG(!r_slots, "PRIMITIVE type must have no slots");
+            ASSERT_ARG_MSG(!num_total_slots, "PRIMITIVE type must not have num_total_slots");
         }
         if (kind == Type::Kind::DATACLASS) {
             ASSERT_ARG_MSG(r_slots, "DATACLASS type must have a Vector of slots");
+            ASSERT_ARG_MSG(num_total_slots, "DATACLASS type must have num_total_slots");
+            ASSERT_ARG(num_total_slots.value() >= r_slots->length);
         }
         if (kind == Type::Kind::MIXIN) {
             ASSERT_ARG_MSG(!r_slots, "MIXIN type must have no slots");
+            ASSERT_ARG_MSG(!num_total_slots, "MIXIN type must not have num_total_slots");
         }
 
         Type* type = gc.alloc<Type>();
@@ -203,6 +207,7 @@ namespace Katsu
         type->v_subtypes = r_subtypes.value();
         type->kind = kind;
         type->v_slots = r_slots.value();
+        type->num_total_slots = num_total_slots.value_or(0);
         return type;
     }
 
@@ -211,10 +216,7 @@ namespace Katsu
         Type* type = *r_type;
         ASSERT_ARG(type->kind == Type::Kind::DATACLASS);
 
-        // TODO: need to add slots for base dataclasses too. add count to Type definition?
-        ASSERT(false);
-        uint64_t num_slots = type->v_slots.obj_array()->length;
-        DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
+        DataclassInstance* inst = gc.alloc<DataclassInstance>(type->num_total_slots);
         inst->v_type = r_type.value();
         return inst;
     }
@@ -411,7 +413,8 @@ namespace Katsu
         uint64_t num_strings = r_strings->length;
         for (uint64_t i = 0; i < num_strings; i++) {
             Root<String> r_s(gc, std::move(s));
-            Root<String> r_component(gc, r_strings->v_array.obj_array()->components()[i].obj_string());
+            Root<String> r_component(gc,
+                                     r_strings->v_array.obj_array()->components()[i].obj_string());
             Root<String> r_s_component(gc, concat(gc, r_s, r_component));
             s = concat(gc, r_s_component, each_suffix);
         }
@@ -613,12 +616,22 @@ namespace Katsu
                             break;
                         }
                         case MAKE_INSTANCE: {
-                            std::cout << "make-instance #" << args->components()[arg_spot++].fixnum()
-                                      << "\n";
+                            std::cout << "make-instance #"
+                                      << args->components()[arg_spot++].fixnum() << "\n";
                             break;
                         }
                         case VERIFY_IS_TYPE: {
                             std::cout << "verify-is-type\n";
+                            break;
+                        }
+                        case GET_SLOT: {
+                            std::cout << "get-slot $" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
+                            break;
+                        }
+                        case SET_SLOT: {
+                            std::cout << "set-slot $" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
                             break;
                         }
                         default: {
@@ -861,7 +874,8 @@ namespace Katsu
     }
 
     Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
-                    Type::Kind kind, OptionalRoot<Array>& r_slots)
+                    Type::Kind kind, OptionalRoot<Array>& r_slots,
+                    std::optional<uint32_t> num_total_slots)
     {
         // TODO: the r_linearization will just be thrown away later. Ideally don't even allocate it.
         Root<Array> r_init_linearization(gc, make_array(gc, /* length */ 0));
@@ -874,7 +888,8 @@ namespace Katsu
                                         r_init_linearization,
                                         r_subtypes,
                                         kind,
-                                        r_slots));
+                                        r_slots,
+                                        num_total_slots));
 
         Root<Array> r_linearization(gc, c3_linearization(gc, r_type));
         r_type->v_linearization = r_linearization.value();

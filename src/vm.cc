@@ -342,8 +342,7 @@ namespace Katsu
                 break;
             }
             case OpCode::MAKE_INSTANCE: {
-                // arg() is invalidated by any GC access, so acquire num_components ahead of
-                // time.
+                // arg() is invalidated by any GC access, so acquire num_slots ahead of time.
                 auto num_slots = arg().fixnum();
                 // TODO: check >= 0
                 // Peek instead of pop so we keep the values live.
@@ -367,6 +366,27 @@ namespace Katsu
                     throw std::runtime_error("value must be a Type");
                 }
                 shift_inst();
+                break;
+            }
+            case OpCode::GET_SLOT: {
+                // arg() is invalidated by any GC access, so acquire slot_index ahead of time.
+                auto slot_index = arg().fixnum();
+                DataclassInstance* inst = this->current_frame->pop().obj_instance();
+                // TODO: check within bounds
+                this->current_frame->push(inst->slots()[slot_index]);
+                shift_inst();
+                shift_arg();
+                break;
+            }
+            case OpCode::SET_SLOT: {
+                // arg() is invalidated by any GC access, so acquire slot_index ahead of time.
+                auto slot_index = arg().fixnum();
+                Value value = this->current_frame->pop();
+                DataclassInstance* inst = this->current_frame->pop().obj_instance();
+                // TODO: check within bounds
+                inst->slots()[slot_index] = value;
+                shift_inst();
+                shift_arg();
                 break;
             }
             default: {

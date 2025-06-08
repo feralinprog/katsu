@@ -55,15 +55,7 @@ namespace Katsu
             }
             _class = o_type->object<Type*>();
         }
-        Vector* slots;
-        {
-            Object* o_slots = _class->v_slots.value<Object*>();
-            if (o_slots->is_forwarding()) {
-                o_slots = reinterpret_cast<Object*>(o_slots->forwarding());
-            }
-            slots = o_slots->object<Vector*>();
-        }
-        return slots->length;
+        return _class->num_total_slots;
     }
 
     void GC::collect()
