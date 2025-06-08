@@ -50,7 +50,7 @@ namespace Katsu
     // each supertype has the new type as a subtype.
     Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                         Root<Array>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
-                        OptionalRoot<Vector>& r_slots);
+                        OptionalRoot<Array>& r_slots);
     // Make a DataclassInstance with specified dataclass, with slots uninitialized.
     DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type);
 
@@ -79,6 +79,11 @@ namespace Katsu
     // Concate all the given strings (each with a given suffix applied -- commonly ":").
     String* concat_with_suffix(GC& gc, const std::vector<std::string>& parts,
                                const std::string& each_suffix);
+    String* concat(GC& gc, Root<String>& r_a, Root<String>& r_b);
+    String* concat(GC& gc, Root<String>& r_a, const std::string& b);
+    String* concat(GC& gc, const std::string& a, Root<String>& r_b);
+    String* concat_with_suffix(GC& gc, Root<Vector>& r_strings, const std::string& each_suffix);
+    std::string native_str(String* s);
 
     // Pretty-print a value (to stdout), with an optional initial indent and an initial indentation
     // depth.
@@ -108,7 +113,7 @@ namespace Katsu
     // Make a Type with specified fields. This also calculates the type's linearization and ensures
     // that each supertype has the new type as a subtype.
     Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
-                    Type::Kind kind, OptionalRoot<Vector>& r_slots);
+                    Type::Kind kind, OptionalRoot<Array>& r_slots);
 
     // Add a method to a multimethod, failing if require_unique and the method conflicts with a
     // previous definition. If !require_unique, the method overwrites any previous definition.

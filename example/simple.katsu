@@ -1,23 +1,53 @@
-pretty-print: 10 + 20
+# pretty-print: 10 + 20
+# 
+# method: [adder: (n0: Fixnum)] does: [
+#     mut: n = n0
+#     let: delta = n0 + 30
+#     \x [
+#         let: new-n = n + delta + x
+#         n: new-n
+#         n
+#     ]
+# ]
+# 
+# let: a = (adder: 3)
+# pretty-print: a
+# pretty-print: (a call: 0) # 3 + 33 + 0 = 36
+# pretty-print: (a call: 2) # 36 + 33 + 2 = 71
+# 
+# pretty-print: 5 type
+# pretty-print: a type
+# a instance?: Fixnum
+# a instance?: Closure
+# 
+# print: "this is " ~ "a test"
+# 
+# method: [while: (cond: Closure) do: (body: Closure)] does: [
+#     (cond call) then: [
+#         body call
+#         while: cond do: body
+#     ] else: null
+# ]
+# 
+# method: [run-test] does: [
+#     mut: n = 100
+#     while: [n > 0] do: [
+#         pretty-print: n
+#         n: n - 1
+#     ]
+# ]
+# (null) run-test
 
-method: [adder: (n0: Fixnum)] does: [
-    mut: n = n0
-    let: delta = n0 + 30
-    \x [
-        let: new-n = n + delta + x
-        n: new-n
-        n
-    ]
-]
-
-let: a = (adder: 3)
-pretty-print: a
-pretty-print: (a call: 0) # 3 + 33 + 0 = 36
-pretty-print: (a call: 2) # 36 + 33 + 2 = 71
-
-pretty-print: 5 type
-pretty-print: a type
-a instance?: Fixnum
-a instance?: Closure
-
-print: "this is " ~ "a test"
+data: Point has: { x; y }
+# creates type Point, assigns to module at "Point"
+# defines Point x: x y: y
+# defines v Point?
+# defines (v: Point) x
+# defines (v: Point) y
+# defines (v: Point) set-x: x
+# defines (v: Point) set-y: y
+data: Point3D extends: { Point } has: { z }
+# evalutes Point
+# creates type Point3D with base Point, assigns to module at "Point3D"
+# defines Point3D x: x y: y z: z (... how? needs to have evaluated `Point` at time of defining method)
+Point3D x: 1 y: 2 z: 3

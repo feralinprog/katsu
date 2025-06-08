@@ -177,7 +177,7 @@ namespace Katsu
 
     Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                         Root<Array>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
-                        OptionalRoot<Vector>& r_slots)
+                        OptionalRoot<Array>& r_slots)
     {
         // TODO: check Type components in r_bases
         // Nothing to check for `sealed`.
@@ -211,7 +211,9 @@ namespace Katsu
         Type* type = *r_type;
         ASSERT_ARG(type->kind == Type::Kind::DATACLASS);
 
-        uint64_t num_slots = type->v_slots.obj_vector()->length;
+        // TODO: need to add slots for base dataclasses too. add count to Type definition?
+        ASSERT(false);
+        uint64_t num_slots = type->v_slots.obj_array()->length;
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
         inst->v_type = r_type.value();
         return inst;
@@ -376,6 +378,50 @@ namespace Katsu
         }
 
         return cat;
+    }
+
+    String* concat(GC& gc, Root<String>& r_a, Root<String>& r_b)
+    {
+        uint64_t length_a = r_a->length;
+        uint64_t length_b = r_b->length;
+        String* c = make_string_nofill(gc, length_a + length_b);
+        memcpy(c->contents(), r_a->contents(), length_a);
+        memcpy(c->contents() + length_a, r_b->contents(), length_b);
+        return c;
+    }
+
+    String* concat(GC& gc, Root<String>& r_a, const std::string& b)
+    {
+        // TODO: could be more efficient; this copies twice.
+        Root<String> r_b(gc, make_string(gc, b));
+        return concat(gc, r_a, r_b);
+    }
+
+    String* concat(GC& gc, const std::string& a, Root<String>& r_b)
+    {
+        // TODO: could be more efficient; this copies twice.
+        Root<String> r_a(gc, make_string(gc, a));
+        return concat(gc, r_a, r_b);
+    }
+
+    String* concat_with_suffix(GC& gc, Root<Vector>& r_strings, const std::string& each_suffix)
+    {
+        // TODO: linear instead of quadratic time.
+        String* s = make_string(gc, "");
+        uint64_t num_strings = r_strings->length;
+        for (uint64_t i = 0; i < num_strings; i++) {
+            Root<String> r_s(gc, std::move(s));
+            Root<String> r_component(gc, r_strings->v_array.obj_array()->components()[i].obj_string());
+            Root<String> r_s_component(gc, concat(gc, r_s, r_component));
+            s = concat(gc, r_s_component, each_suffix);
+        }
+        return s;
+    }
+
+    std::string native_str(String* s)
+    {
+        // TODO: check against size_t
+        return std::string(reinterpret_cast<char*>(s->contents()), s->length);
     }
 
     void pprint(std::vector<Object*>& objects_seen, Value value, int depth,
@@ -566,6 +612,11 @@ namespace Katsu
                                    /* extra_depth */ +1);
                             break;
                         }
+                        case MAKE_INSTANCE: {
+                            std::cout << "make-instance #" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
+                            break;
+                        }
                         case VERIFY_IS_TYPE: {
                             std::cout << "verify-is-type\n";
                             break;
@@ -618,6 +669,7 @@ namespace Katsu
                 DataclassInstance* o = value.obj_instance();
                 std::cout << "*instance\n";
                 pchild(o->v_type, "v_type = ");
+                // TODO!
                 pnative() << "slots: (TODO)\n";
             } else {
                 std::cout << "object: ??? (object tag = " << static_cast<int>(value.object()->tag())
@@ -809,7 +861,7 @@ namespace Katsu
     }
 
     Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
-                    Type::Kind kind, OptionalRoot<Vector>& r_slots)
+                    Type::Kind kind, OptionalRoot<Array>& r_slots)
     {
         // TODO: the r_linearization will just be thrown away later. Ideally don't even allocate it.
         Root<Array> r_init_linearization(gc, make_array(gc, /* length */ 0));

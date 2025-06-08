@@ -22,6 +22,10 @@
 #ifndef DEBUG_GC_COLLECT_EVERY_ALLOC
 #define DEBUG_GC_COLLECT_EVERY_ALLOC (0)
 #endif
+// TODO: can't keep this around. Adding a root is not an allocating operation!
+#ifndef DEBUG_GC_COLLECT_EVERY_ROOT
+#define DEBUG_GC_COLLECT_EVERY_ROOT (0)
+#endif
 // Have the GC allocate a new semispace to migrate all live objects to, on each collection. Usual
 // behavior is to cycle between two semispaces. This can also help finding bugs where consumers
 // forgot to add a GC root, particularly with ASAN enabled, as any pointers to dead GC objects will
@@ -165,6 +169,9 @@ namespace Katsu
         {
             this->gc.roots.push_back(&this->root);
             value = Value::null();
+            #if DEBUG_GC_COLLECT_EVERY_ROOT
+            gc.collect();
+            #endif
         }
 
         ValueRoot(ValueRoot&) = delete;
@@ -211,6 +218,9 @@ namespace Katsu
             ASSERT_MSG(value, "cannot create Root from nullptr");
             this->gc.roots.push_back(&this->root);
             value = nullptr;
+            #if DEBUG_GC_COLLECT_EVERY_ROOT
+            gc.collect();
+            #endif
         }
 
         Root(Root<T>&) = delete;
@@ -260,6 +270,9 @@ namespace Katsu
         {
             this->gc.roots.push_back(&this->root);
             value = nullptr;
+            #if DEBUG_GC_COLLECT_EVERY_ROOT
+            gc.collect();
+            #endif
         }
 
         OptionalRoot(OptionalRoot<T>&) = delete;

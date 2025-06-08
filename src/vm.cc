@@ -341,6 +341,26 @@ namespace Katsu
                 shift_arg();
                 break;
             }
+            case OpCode::MAKE_INSTANCE: {
+                // arg() is invalidated by any GC access, so acquire num_components ahead of
+                // time.
+                auto num_slots = arg().fixnum();
+                // TODO: check >= 0
+                // Peek instead of pop so we keep the values live.
+                Value* type_and_slots = this->current_frame->peek_many(1 + num_slots);
+                Root<Type> r_type(this->gc, type_and_slots[0].obj_type());
+                DataclassInstance* inst = make_instance_nofill(this->gc, r_type);
+                // Now we can pop, since there's no further allocation.
+                type_and_slots = this->current_frame->pop_many(1 + num_slots);
+                Value* slots = type_and_slots + 1;
+                for (int64_t i = 0; i < num_slots; i++) {
+                    inst->slots()[i] = slots[i];
+                }
+                this->current_frame->push(Value::object(inst));
+                shift_inst();
+                shift_arg();
+                break;
+            }
             case OpCode::VERIFY_IS_TYPE: {
                 Value value = this->current_frame->peek();
                 if (!value.is_obj_type()) {
