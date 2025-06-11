@@ -51,7 +51,6 @@ namespace Katsu
         Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
         while (frame <= this->current_frame) {
             visitor(&frame->v_code);
-            visitor(&frame->v_cleanup);
             visitor(&frame->v_module);
 
             for (uint32_t i = 0; i < frame->num_regs; i++) {
@@ -89,8 +88,6 @@ namespace Katsu
         Frame* frame = this->alloc_frame(code_num_regs,
                                          code_num_data,
                                          r_code.value(),
-                                         /* v_cleanup */ Value::null(),
-                                         /* is_cleanup */ false,
                                          r_code->v_module);
         for (uint32_t i = 0; i < code_num_regs; i++) {
             frame->regs()[i] = Value::null();
@@ -105,8 +102,7 @@ namespace Katsu
             if (reinterpret_cast<uint8_t*>(this->current_frame) == this->call_stack_mem) {
                 // There is only a single frame in the call stack; check if we're done.
                 bool finished_instructions = this->current_frame->inst_spot == frame_insts->length;
-                bool no_cleanup = this->current_frame->v_cleanup.is_null();
-                if (finished_instructions && no_cleanup) {
+                if (finished_instructions) {
                     ASSERT(this->current_frame->data_depth == 1);
                     Value v_return_value = this->current_frame->data()[0];
                     this->current_frame = nullptr;
@@ -131,9 +127,6 @@ namespace Katsu
             std::cout << "num_regs = " << frame->num_regs << "\n";
             std::cout << "num_data = " << frame->num_data << "\n";
             std::cout << "data_depth = " << frame->data_depth << "\n";
-            std::cout << "v_cleanup: ";
-            pprint(frame->v_cleanup, /* initial_indent */ false);
-            std::cout << "is_cleanup = " << frame->is_cleanup << "\n";
             // TODO: show v_module only if folding is possible, otherwise too noisy.
 
             std::cout << "regs:\n";
@@ -169,21 +162,7 @@ namespace Katsu
 
         uint64_t num_insts = frame_insts->length;
         if (this->current_frame->inst_spot == num_insts) {
-            // Make sure all arguments were used.
-            ASSERT(this->current_frame->arg_spot == frame_args->length);
-
-            // Unwind the frame!
-            // TODO: implement unwinding with cleanup
-            ASSERT_MSG(this->current_frame->v_cleanup.is_null() && !this->current_frame->is_cleanup,
-                       "unwinding with cleanup not yet implemented");
-            ASSERT(this->current_frame->caller);
-            ASSERT(this->current_frame->data_depth == 1);
-            Frame* caller = this->current_frame->caller;
-            ASSERT_MSG(caller->data_depth < caller->num_data,
-                       "unwinding would overflow caller's data stack");
-            caller->push(this->current_frame->data()[0]);
-            this->current_frame = caller;
-
+            this->unwind_frame(/* tail_call */ false);
             return;
         }
 
@@ -395,6 +374,31 @@ namespace Katsu
         }
     }
 
+    void VM::unwind_frame(bool tail_call)
+    {
+        Code* frame_code = this->current_frame->v_code.obj_code();
+        Array* frame_insts = frame_code->v_insts.obj_array();
+        Array* frame_args = frame_code->v_args.obj_array();
+        // Make sure all instructions and arguments were used.
+        ASSERT(this->current_frame->inst_spot == frame_insts->length);
+        ASSERT(this->current_frame->arg_spot == frame_args->length);
+
+        // Unwind the frame!
+        ASSERT(this->current_frame->caller);
+        Frame* caller = this->current_frame->caller;
+        if (tail_call) {
+            // Caller must set up a new call frame which will produce another value, and when unwinding from _that_, the return value will go to the `caller`'s data stack.
+            // In this case, the current frame's data depth need not be 1, since the state is that all arguments to the upcoming tail-call should be pushed to the stack,
+            // rather than the result of that call.
+        } else {
+            ASSERT(this->current_frame->data_depth == 1);
+            ASSERT_MSG(caller->data_depth < caller->num_data,
+                        "unwinding would overflow caller's data stack");
+            caller->push(this->current_frame->data()[0]);
+        }
+        this->current_frame = caller;
+    }
+
     Value& VM::module_lookup_or_fail(Value v_module, String* name)
     {
         Value* lookup = module_lookup(v_module.obj_module(), name);
@@ -402,8 +406,7 @@ namespace Katsu
         return *lookup;
     }
 
-    Frame* VM::alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_cleanup,
-                           bool is_cleanup, Value v_module)
+    Frame* VM::alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module)
     {
         Frame* frame = this->current_frame ? this->current_frame->next()
                                            : reinterpret_cast<Frame*>(this->call_stack_mem);
@@ -423,8 +426,6 @@ namespace Katsu
         frame->num_regs = num_regs;
         frame->num_data = num_data;
         frame->data_depth = 0;
-        frame->v_cleanup = Value::null();
-        frame->is_cleanup = false;
         frame->v_module = v_module;
         // regs() / data() is up to caller to initialize as desired.
         return frame;
@@ -587,10 +588,18 @@ namespace Katsu
                            "method must have v_code or a native_handler or intrinsic_handler");
             }
         } else {
-            // TODO: support tail-calls for bytecode
-            ASSERT_MSG(!tail_call, "tail-call not implemented");
             this->current_frame->inst_spot++;
             this->current_frame->arg_spot += 2;
+
+            // In case of tail-call, we need to temporarily store the args as we unwind the current frame and replace it with a new frame.
+            Value args_copy[num_args];
+            if (tail_call) {
+                for (uint32_t i = 0; i < num_args; i++) {
+                    args_copy[i] = args[i];
+                }
+                this->unwind_frame(/* tail_call */ true);
+                args = args_copy;
+            }
 
             // Bytecode body.
             Code* code = method->v_code.obj_code();
@@ -600,8 +609,6 @@ namespace Katsu
             Frame* frame = this->alloc_frame(code->num_regs,
                                              code->num_data,
                                              method->v_code,
-                                             /* v_cleanup */ Value::null(),
-                                             /* is_cleanup */ false,
                                              code->v_module);
             for (uint32_t i = 0; i < num_args; i++) {
                 frame->regs()[i] = args[i];

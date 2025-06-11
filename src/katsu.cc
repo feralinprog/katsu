@@ -146,10 +146,10 @@ namespace Katsu
         Lexer lexer(source);
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
-        // 100 MiB GC-managed memory.
-        GC gc(100 * 1024 * 1024);
-        // 5 MiB call stack size.
-        VM vm(gc, 5 * 1024 * 1024);
+        // 10 MiB GC-managed memory.
+        GC gc(10 * 1024 * 1024);
+        // 100 KiB call stack size.
+        VM vm(gc, 100 * 1024);
         OptionalRoot<Module> r_module_base(gc, nullptr);
         Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
 

@@ -62,6 +62,7 @@ namespace Katsu
     {
         uint8_t* to = this->mem_opp;
 
+        std::cout << "GC: collecting...\n";
 #if DEBUG_GC_LOG
         std::cout << "GC: collecting...\n";
         std::cout << "GC: from=" << reinterpret_cast<void*>(this->mem) << "\n";
@@ -334,9 +335,9 @@ namespace Katsu
 #endif
         this->spot = queue - this->mem;
 #if DEBUG_GC_LOG
+#endif
         std::cout << "GC: finished collection - mem " << reinterpret_cast<void*>(this->mem)
                   << ", usage " << this->spot << "(0x" << std::hex << this->spot << std::dec
                   << ")\n";
-#endif
     }
 };

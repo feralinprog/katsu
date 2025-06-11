@@ -41,8 +41,8 @@
 #define DEBUG_GC_VERIFY_ROOT_ORDERING (1)
 #endif
 
-#if DEBUG_GC_LOG
 #include <iostream>
+#if DEBUG_GC_LOG
 #endif
 #if DEBUG_GC_FILL
 #include <cstring>
