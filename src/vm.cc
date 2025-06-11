@@ -85,10 +85,8 @@ namespace Katsu
         uint32_t code_num_regs = r_code->num_regs;
         uint32_t code_num_data = r_code->num_data;
 
-        Frame* frame = this->alloc_frame(code_num_regs,
-                                         code_num_data,
-                                         r_code.value(),
-                                         r_code->v_module);
+        Frame* frame =
+            this->alloc_frame(code_num_regs, code_num_data, r_code.value(), r_code->v_module);
         for (uint32_t i = 0; i < code_num_regs; i++) {
             frame->regs()[i] = Value::null();
         }
@@ -387,13 +385,15 @@ namespace Katsu
         ASSERT(this->current_frame->caller);
         Frame* caller = this->current_frame->caller;
         if (tail_call) {
-            // Caller must set up a new call frame which will produce another value, and when unwinding from _that_, the return value will go to the `caller`'s data stack.
-            // In this case, the current frame's data depth need not be 1, since the state is that all arguments to the upcoming tail-call should be pushed to the stack,
-            // rather than the result of that call.
+            // Caller must set up a new call frame which will produce another value, and when
+            // unwinding from _that_, the return value will go to the `caller`'s data stack. In this
+            // case, the current frame's data depth need not be 1, since the state is that all
+            // arguments to the upcoming tail-call should be pushed to the stack, rather than the
+            // result of that call.
         } else {
             ASSERT(this->current_frame->data_depth == 1);
             ASSERT_MSG(caller->data_depth < caller->num_data,
-                        "unwinding would overflow caller's data stack");
+                       "unwinding would overflow caller's data stack");
             caller->push(this->current_frame->data()[0]);
         }
         this->current_frame = caller;
@@ -591,7 +591,8 @@ namespace Katsu
             this->current_frame->inst_spot++;
             this->current_frame->arg_spot += 2;
 
-            // In case of tail-call, we need to temporarily store the args as we unwind the current frame and replace it with a new frame.
+            // In case of tail-call, we need to temporarily store the args as we unwind the current
+            // frame and replace it with a new frame.
             Value args_copy[num_args];
             if (tail_call) {
                 for (uint32_t i = 0; i < num_args; i++) {
@@ -606,10 +607,8 @@ namespace Katsu
             ASSERT_MSG(code->v_upreg_map.is_null(), "method's v_code's v_upreg_map should be null");
             ASSERT(num_args == code->num_params);
 
-            Frame* frame = this->alloc_frame(code->num_regs,
-                                             code->num_data,
-                                             method->v_code,
-                                             code->v_module);
+            Frame* frame =
+                this->alloc_frame(code->num_regs, code->num_data, method->v_code, code->v_module);
             for (uint32_t i = 0; i < num_args; i++) {
                 frame->regs()[i] = args[i];
             }

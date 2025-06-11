@@ -312,11 +312,11 @@ namespace Katsu
         inline Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code,
                                   Value v_module)
         {
-            return this->vm
-                .alloc_frame(num_regs, num_data, v_code, v_module);
+            return this->vm.alloc_frame(num_regs, num_data, v_code, v_module);
         }
 
-        inline void unwind_frame(bool tail_call) {
+        inline void unwind_frame(bool tail_call)
+        {
             this->vm.unwind_frame(tail_call);
         }
 

@@ -225,7 +225,8 @@ namespace Katsu
 
     void call_impl(OpenVM& vm, bool tail_call, Value v_callable, int64_t nargs, Value* args)
     {
-        // In case of tail-call, we need to temporarily store the args as we unwind the current frame and replace it with a new frame.
+        // In case of tail-call, we need to temporarily store the args as we unwind the current
+        // frame and replace it with a new frame.
         Value args_copy[nargs];
         if (tail_call) {
             Frame* frame = vm.frame();
@@ -253,10 +254,8 @@ namespace Katsu
                 throw std::runtime_error("called a closure with wrong number of arguments");
             }
 
-            Frame* next = vm.alloc_frame(code->num_regs,
-                                         code->num_data,
-                                         Value::object(code),
-                                         code->v_module);
+            Frame* next =
+                vm.alloc_frame(code->num_regs, code->num_data, Value::object(code), code->v_module);
 
             // In the closure's frame:
             // - local 0...n are the call arguments (which may just be <null>, in the special case
@@ -670,7 +669,7 @@ namespace Katsu
          * - length (String / Vector)
          * - anything for FFI!
          * - anything for delimited continuations
-         * 
+         *
          * also:
          * - tail calls
          * - source spans in bytecode
