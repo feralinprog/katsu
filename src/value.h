@@ -630,14 +630,13 @@ namespace Katsu
     typedef Value (*NativeHandler)(VM& vm, int64_t nargs, Value* args);
     // Pointer to a function which takes a VM and all its runtime state and is allowed to
     // arbitrarily modify that state, for instance by adding or removing call frames. The handler
-    // must also update the top-of-call-stack instruction and argument position(s) as necessary so
-    // that the positions indicate the next instruction to execute. The input values are already
-    // popped from the top call-frame's data stack, so copy them before calling into any VM
-    // functionality. Furthermore, add them as GC roots before using any GC functionality (which may
-    // induce a collection). If the handler raises an exception, it must ensure that the VM is left
-    // in a state where pushing one more value to the data stack allows that value to be treated as
-    // the result of the handler invocation. (For instance, not modifying the data stack at all
-    // meets this criterion.)
+    // must also update the top-of-call-stack instruction position as necessary so that the position
+    // indicates the next instruction to execute. The input values are already popped from the top
+    // call-frame's data stack, so copy them before calling into any VM functionality. Furthermore,
+    // add them as GC roots before using any GC functionality (which may induce a collection). If
+    // the handler raises an exception, it must ensure that the VM is left in a state where pushing
+    // one more value to the data stack allows that value to be treated as the result of the handler
+    // invocation. (For instance, not modifying the data stack at all meets this criterion.)
     class OpenVM;
     typedef void (*IntrinsicHandler)(OpenVM& vm, bool tail_call, int64_t nargs, Value* args);
 

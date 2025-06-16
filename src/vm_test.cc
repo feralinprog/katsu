@@ -27,7 +27,7 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     OptionalRoot<Array> r_upreg_map(gc, nullptr);
 
     Array* insts = make_array_nofill(gc, /* length */ 1);
-    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
+    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE | (0 << 8));
     Root<Array> r_insts(gc, std::move(insts));
 
     Array* args = make_array(gc, /* length */ 1);
@@ -111,9 +111,9 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     OptionalRoot<Array> r_upreg_map(gc, nullptr);
 
     Array* insts = make_array(gc, /* length */ 3);
-    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE);
-    insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE);
-    insts->components()[2] = Value::fixnum(OpCode::INVOKE);
+    insts->components()[0] = Value::fixnum(OpCode::LOAD_VALUE | (0 << 8));
+    insts->components()[1] = Value::fixnum(OpCode::LOAD_VALUE | (1 << 8));
+    insts->components()[2] = Value::fixnum(OpCode::INVOKE | (2 << 8));
     Root<Array> r_insts(gc, std::move(insts));
 
     Array* args = make_array(gc, /* length */ 4);

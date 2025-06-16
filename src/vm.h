@@ -120,9 +120,8 @@ namespace Katsu
 
         Value v_code; // Code
 
-        // Current index in the code's insts / args arrays.
+        // Current index in the code's insts array.
         uint32_t inst_spot;
-        uint32_t arg_spot;
 
         // Number of `regs()`.
         uint64_t num_regs;

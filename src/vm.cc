@@ -127,7 +127,6 @@ namespace Katsu
             std::cout << "v_code: ";
             pprint(frame->v_code, /* initial_indent */ false);
             std::cout << "inst_spot = " << frame->inst_spot << "\n";
-            std::cout << "arg_spot = " << frame->arg_spot << "\n";
             std::cout << "num_regs = " << frame->num_regs << "\n";
             std::cout << "num_data = " << frame->num_data << "\n";
             std::cout << "data_depth = " << frame->data_depth << "\n";
@@ -158,20 +157,8 @@ namespace Katsu
         Array* frame_insts = frame_code->v_insts.obj_array();
         Array* frame_args = frame_code->v_args.obj_array();
 
-        auto arg = [this, frame_args](int offset = 0) -> Value {
-            ASSERT(this->current_frame->arg_spot + offset >= 0 &&
-                   this->current_frame->arg_spot + offset < frame_args->length);
-            return frame_args->components()[this->current_frame->arg_spot + offset];
-        };
-
-        auto shift_inst = [this]() -> void { this->current_frame->inst_spot++; };
-        auto shift_arg = [this](int count = 1) -> void { this->current_frame->arg_spot += count; };
-
         uint64_t num_insts = frame_insts->length;
         if (this->current_frame->inst_spot == num_insts) {
-            // Make sure all arguments were used.
-            ASSERT(this->current_frame->arg_spot == frame_args->length);
-
             // Unwind the frame!
             // TODO: implement unwinding with cleanup
             ASSERT_MSG(this->current_frame->v_cleanup.is_null() && !this->current_frame->is_cleanup,
@@ -192,37 +179,42 @@ namespace Katsu
         }
 
         int64_t inst = frame_insts->components()[this->current_frame->inst_spot].fixnum();
-        switch (inst) {
+        ASSERT(0 <= inst && inst < UINT32_MAX);
+        OpCode op = static_cast<OpCode>((uint32_t)inst & 0xFF);
+        uint32_t arg_spot = (uint32_t)inst >> 8;
+
+        auto shift_inst = [this]() -> void { this->current_frame->inst_spot++; };
+        auto arg = [frame_args, arg_spot](int offset = 0) -> Value {
+            ASSERT(arg_spot + offset >= 0 && arg_spot + offset < frame_args->length);
+            return frame_args->components()[arg_spot + offset];
+        };
+
+        switch (op) {
             case OpCode::LOAD_REG: {
                 this->current_frame->push(this->current_frame->regs()[arg().fixnum()]);
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::STORE_REG: {
                 this->current_frame->regs()[arg().fixnum()] = this->current_frame->pop();
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::LOAD_REF: {
                 this->current_frame->push(
                     this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref);
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::STORE_REF: {
                 this->current_frame->regs()[arg().fixnum()].obj_ref()->v_ref =
                     this->current_frame->pop();
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::LOAD_VALUE: {
                 this->current_frame->push(arg());
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::INIT_REF: {
@@ -231,14 +223,12 @@ namespace Katsu
                 ValueRoot r_ref(this->gc, this->current_frame->pop());
                 this->current_frame->regs()[local_index] = Value::object(make_ref(this->gc, r_ref));
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::LOAD_MODULE: {
                 this->current_frame->push(
                     module_lookup_or_fail(this->current_frame->v_module, arg().obj_string()));
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::STORE_MODULE: {
@@ -246,7 +236,6 @@ namespace Katsu
                     module_lookup_or_fail(this->current_frame->v_module, arg().obj_string());
                 slot = this->current_frame->pop();
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::INVOKE:
@@ -281,7 +270,6 @@ namespace Katsu
                 }
                 this->current_frame->push(Value::object(tuple));
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::MAKE_VECTOR: {
@@ -298,7 +286,6 @@ namespace Katsu
                 Vector* vec = make_vector(this->gc, /* length */ num_components, array);
                 this->current_frame->push(Value::object(vec));
                 shift_inst();
-                shift_arg();
                 break;
             }
             case OpCode::MAKE_CLOSURE: {
@@ -322,7 +309,6 @@ namespace Katsu
 
                 this->current_frame->push(Value::object(closure));
                 shift_inst();
-                shift_arg();
                 break;
             }
             default: {
@@ -355,7 +341,6 @@ namespace Katsu
         frame->caller = this->current_frame;
         frame->v_code = v_code;
         frame->inst_spot = 0;
-        frame->arg_spot = 0;
         frame->num_regs = num_regs;
         frame->num_data = num_data;
         frame->data_depth = 0;
@@ -390,11 +375,10 @@ namespace Katsu
                 // since native handler shouldn't add to the Katsu call stack themselves; as soon as
                 // the handler returns the Katsu call frame should be complete as well.
                 this->current_frame->inst_spot++;
-                this->current_frame->arg_spot += 2;
                 Value v_result = method->native_handler(*this, num_args, args);
                 this->current_frame->push(v_result);
             } else if (method->intrinsic_handler) {
-                // Handler takes care of updating inst_spot / arg_spot.
+                // Handler takes care of updating inst_spot.
                 OpenVM open(*this);
                 method->intrinsic_handler(open, tail_call, num_args, args);
             } else {
@@ -405,7 +389,6 @@ namespace Katsu
             // TODO: support tail-calls for bytecode
             ASSERT_MSG(!tail_call, "tail-call not implemented");
             this->current_frame->inst_spot++;
-            this->current_frame->arg_spot += 2;
 
             // Bytecode body.
             Code* code = method->v_code.obj_code();

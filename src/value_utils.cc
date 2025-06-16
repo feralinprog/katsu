@@ -459,13 +459,14 @@ namespace Katsu
                 // Special pretty-printing for code: decode the instructions and arguments!
                 // TODO: better error handling in case of any nonexpected values.
                 pnative() << "bytecode:\n";
-                uint32_t arg_spot = 0;
                 Array* args = o->v_args.obj_array();
                 for (uint32_t inst_spot = 0; inst_spot < o->v_insts.obj_array()->length;
                      inst_spot++) {
                     pnative() << "[" << inst_spot << "]: ";
                     int64_t inst = o->v_insts.obj_array()->components()[inst_spot].fixnum();
-                    switch (inst) {
+                    OpCode op = static_cast<OpCode>((uint32_t)inst & 0xFF);
+                    uint32_t arg_spot = (uint32_t)inst >> 8;
+                    switch (op) {
                         case LOAD_REG: {
                             std::cout << "load_reg @" << args->components()[arg_spot++].fixnum()
                                       << "\n";
@@ -517,7 +518,7 @@ namespace Katsu
                         }
                         case INVOKE:
                         case INVOKE_TAIL: {
-                            std::cout << "invoke" << (inst == INVOKE ? "" : "-tail") << " #"
+                            std::cout << "invoke" << (op == INVOKE ? "" : "-tail") << " #"
                                       << args->components()[arg_spot + 1].fixnum() << " ";
                             pchild(args->components()[arg_spot],
                                    "",

@@ -60,8 +60,13 @@ namespace Katsu
 
         void emit_op(GC& gc, OpCode op, int64_t stack_height_delta)
         {
+            // Instruction encoding:
+            // <3 bytes arg-offset> <1 byte opcode>
+            ASSERT((op & ~0xFF) == 0);
+            ASSERT((this->r_args->length & ~0xFFFFFF) == 0);
+            uint32_t inst = (this->r_args->length << 8) | op;
             this->bump_stack(stack_height_delta);
-            ValueRoot r_op(gc, Value::fixnum(op));
+            ValueRoot r_op(gc, Value::fixnum(inst));
             append(gc, this->r_insts, r_op);
         }
 

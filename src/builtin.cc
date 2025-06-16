@@ -168,13 +168,11 @@ namespace Katsu
             }
 
             frame->inst_spot++;
-            frame->arg_spot += 2;
             vm.set_frame(next);
         } else {
             // Just push the callable; it returns itself.
             // TODO: what if multimethod or method? should actually be callable
             frame->inst_spot++;
-            frame->arg_spot += 2;
             frame->data()[frame->data_depth++] = v_callable;
         }
     }
