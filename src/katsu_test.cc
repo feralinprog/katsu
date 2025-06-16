@@ -458,3 +458,85 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     // TODO: subtype?:
     // TODO: instance?:
 }
+
+namespace Katsu
+{
+    Value execute_source(const SourceFile source, GC& gc);
+};
+
+
+TEST_CASE("integration - whole file", "[katsu]")
+{
+    // 100 KiB GC-managed memory.
+    GC gc(100 * 1024);
+
+    SourceFile source;
+
+    auto input = [&source](const std::string& source_str) {
+        source = SourceFile{
+            .path = std::make_shared<std::string>("fake.path"),
+            .source = std::make_shared<std::string>(source_str),
+        };
+    };
+
+    auto run = [&source, &gc]() { return execute_source(source, gc); };
+
+    // Structural check (based on prettyprinting).
+    auto check = [&run](Value expected) {
+        // Don't need to set up a root -- just prettyprint before calling run().
+        std::stringstream ss_expected;
+        ss_expected << expected;
+        std::stringstream ss_actual;
+        ss_actual << run();
+        CHECK(ss_actual.str() == ss_expected.str());
+    };
+
+    // // Check pprint directly against an expected string. Kind of hacky, but useful if it's
+    // annoying
+    // // to create an actual expected Value.
+    // auto check_pprint = [&run](const std::string& expected) {
+    //     std::stringstream ss_actual;
+    //     ss_actual << run();
+    //     CHECK(ss_actual.str() == expected);
+    // };
+
+    // auto check_that = [&run](Catch::Matchers::MatcherBase<Value>&& matcher) {
+    //     CHECK_THAT(run(), matcher);
+    // };
+
+    // ========================================================================
+
+    SECTION("newlines")
+    {
+        input(R"(
+
+let: a = 3
+
+let: b = 5
+
+a + b
+
+            )");
+        check(Value::fixnum(8));
+    }
+
+    SECTION("basic method, closure, mutable bindings")
+    {
+        input(R"(
+method: [adder: n0] does: [
+    mut: n = n0
+    let: delta = n0 + 30
+    \x [
+        let: new-n = n + delta + x
+        n: new-n
+        n
+    ]
+]
+
+let: a = (adder: 3)
+(a call: 0) # 3 + 33 + 0 = 36
+(a call: 2) # 36 + 33 + 2 = 71
+        )");
+        check(Value::fixnum(71));
+    }
+}

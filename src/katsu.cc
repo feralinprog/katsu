@@ -141,13 +141,11 @@ namespace Katsu
         }
     };
 
-    void execute_source(const SourceFile source)
+    Value execute_source(const SourceFile source, GC& gc)
     {
         Lexer lexer(source);
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
-        // 100 MiB GC-managed memory.
-        GC gc(100 * 1024 * 1024);
         // 5 MiB call stack size.
         VM vm(gc, 5 * 1024 * 1024);
         OptionalRoot<Module> r_module_base(gc, nullptr);
@@ -164,6 +162,7 @@ namespace Katsu
             stream.consume();
         }
 
+        Value result = Value::null();
         while (!stream.current_has_type(TokenType::END)) {
             std::unique_ptr<Expr> top_level_expr =
                 parser->parse(stream, 0 /* precedence */, true /* is_toplevel */);
@@ -181,7 +180,7 @@ namespace Katsu
             std::cout << "=== GENERATED CODE ===\n";
             pprint(code.value());
             std::cout << "=== EVALUATING ===\n";
-            Value result = vm.eval_toplevel(code);
+            result = vm.eval_toplevel(code);
             std::cout << "=== EVALUATION RESULT ===\n";
             pprint(result);
 
@@ -194,6 +193,7 @@ namespace Katsu
                 stream.consume();
             }
         }
+        return result;
     }
 
     void execute_file(const std::string& filepath)
@@ -210,6 +210,8 @@ namespace Katsu
         SourceFile source{.path = std::make_shared<std::string>(filepath),
                           .source = std::make_shared<std::string>(std::move(file_contents))};
 
-        execute_source(source);
+        // 100 MiB GC-managed memory.
+        GC gc(100 * 1024 * 1024);
+        execute_source(source, gc);
     }
 };
