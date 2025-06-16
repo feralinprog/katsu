@@ -1,6 +1,7 @@
 #include "builtin.h"
 
 #include "assert.h"
+#include "parser.h"
 #include "value_utils.h"
 #include "vm.h"
 
@@ -436,6 +437,32 @@ namespace Katsu
         return Value::null();
     }
 
+    void execute_file_in_module(const std::string& filepath, std::unique_ptr<PrattParser>& parser,
+                                GC& gc, Root<Module>& r_module, VM& vm);
+    void intrinsic__USE_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ USE: module-name
+        ASSERT(nargs == 2);
+        ASSERT(args[1].is_obj_string());
+        String* s = args[1].obj_string();
+        std::string filepath(reinterpret_cast<char*>(s->contents()), s->length);
+        std::unique_ptr<PrattParser> parser = make_default_parser();
+
+        ASSERT(vm.frame() == vm.bottom_frame());
+        vm.frame()->inst_spot++;
+        vm.frame()->push(Value::null());
+        Root<Module> r_module(vm.gc, vm.frame()->v_module.obj_module());
+        execute_file_in_module(filepath, parser, vm.gc, r_module, vm.vm);
+    }
+
+    void intrinsic__current_module_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // current-module
+        ASSERT(nargs == 1);
+        vm.frame()->inst_spot++;
+        vm.frame()->push(vm.frame()->v_module);
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -754,6 +781,24 @@ namespace Katsu
                        3,
                        matchers3,
                        &native__unsafe_write_value_at_offset_value_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // 'any' matcher
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_intrinsic(vm.gc, r_module, "USE:", 2, matchers2, &intrinsic__USE_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = Value::null(); // 'any' matcher
+            add_intrinsic(vm.gc,
+                          r_module,
+                          "current-module",
+                          1,
+                          matchers1,
+                          &intrinsic__current_module_);
         }
 
         /*

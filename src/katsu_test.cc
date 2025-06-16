@@ -1021,3 +1021,18 @@ TEST-ASSERT: (thing .slot-c = 30)
     // - dataclass extending from dataclass base and another type (mixin)
     // - dataclass needing to share an existing multimethod (with conflict)
 }
+
+#include <gmp.h>
+
+TEST_CASE("blah", "[blah]")
+{
+    mpz_t i;
+    mpz_init(i);
+    mpz_set_str(i,
+                "123457192348571893745612385671384623876872345642873548133564823175684732523",
+                10);
+    char result[200];
+    gmp_sprintf(result, "%Zd\n", i);
+    std::cout << result;
+    mpz_clear(i);
+}
