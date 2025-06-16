@@ -1,3 +1,5 @@
+USE: "example/core.katsu"
+
 pretty-print: 10 + 20
 
 let: (adder: (n0: Fixnum)) do: [
@@ -22,6 +24,7 @@ a instance?: Closure
 
 print: "this is " ~ "a test"
 
+<<<<<<< HEAD
 let: (if: (cond: Bool) then: tbody else: fbody) do: [
     # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
     TAIL-CALL: (cond then: tbody else: fbody)
@@ -41,6 +44,9 @@ let: (while: (cond: Closure) do: (body: Closure)) do: [
 ]
 
 let: run-test do: [
+=======
+method: [run-test] does: [
+>>>>>>> 4ec86f1 (going off the deep end)
     mut: n = 10000
     while: [n > 0] do: [
         if: (n / 10000) * 10000 = n then: [
@@ -69,20 +75,6 @@ p Point3D?
 
 (Point x: 1 y: 2) Point3D?
 
-data: Optional has: {}
-data: OptionalSome extends: { Optional } has: { value }
-data: OptionalNone extends: { Optional } has: {}
-
-let: (some: value) do: [ OptionalSome value: value ]
-let: none          do: [ OptionalNone new ]
-
-let: ((opt: OptionalSome) then: some-body else: none-body) do: [
-    some-body call: opt .value
-]
-let: ((opt: OptionalNone) then: some-body else: none-body) do: [
-    none-body call
-]
-
 (some: 5) then: [pretty-print: it] else: [print: "none"]
 none then: [pretty-print: it] else: [print: "none"]
 
@@ -98,25 +90,7 @@ none then: [pretty-print: it] else: [print: "none"]
 
 pretty-print: {1; 2; 3}
 
-let: ((n: Fixnum) times: body) do: [
-    mut: i = 0
-    while: [i < n] do: [
-        body call: i
-        i: i + 1
-    ]
-]
-
 5 times: [pretty-print: it]
-
-let: (v: Vector) length do: [
-    v unsafe-read-u64-at-offset: 1
-]
-let: (v: Vector) backing-array do: [
-    v unsafe-read-value-at-offset: 2
-]
-let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
-    v backing-array unsafe-at: i
-]
 
 let: v = {1;2;3;4}
 v length

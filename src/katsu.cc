@@ -141,17 +141,9 @@ namespace Katsu
         }
     };
 
-    Value execute_source(const SourceFile source, GC& gc, uint64_t call_stack_size)
+    Value execute_source_in_module(TokenStream& stream, std::unique_ptr<PrattParser>& parser,
+                                   GC& gc, Root<Module>& r_module, VM& vm)
     {
-        Lexer lexer(source);
-        TokenStream stream(lexer);
-        std::unique_ptr<PrattParser> parser = make_default_parser();
-        VM vm(gc, call_stack_size);
-        OptionalRoot<Module> r_module_base(gc, nullptr);
-        Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
-
-        register_builtins(vm, r_module);
-
         // std::cout << "=== INITIAL MODULE STATE ===\n";
         // pprint(r_module.value());
 
@@ -196,6 +188,41 @@ namespace Katsu
             }
         }
         return result;
+    }
+
+    Value execute_source(const SourceFile source, GC& gc, uint64_t call_stack_size)
+    {
+        Lexer lexer(source);
+        TokenStream stream(lexer);
+        std::unique_ptr<PrattParser> parser = make_default_parser();
+        VM vm(gc, call_stack_size);
+        OptionalRoot<Module> r_module_base(gc, nullptr);
+        Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
+
+        register_builtins(vm, r_module);
+
+        return execute_source_in_module(stream, parser, gc, r_module, vm);
+    }
+
+    void execute_file_in_module(const std::string& filepath, std::unique_ptr<PrattParser>& parser,
+                                GC& gc, Root<Module>& r_module, VM& vm)
+    {
+        std::ifstream file_stream;
+        // Raise exceptions on logical error or read/write error.
+        file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        file_stream.open(filepath.c_str());
+
+        std::stringstream str_stream;
+        str_stream << file_stream.rdbuf();
+        std::string file_contents = str_stream.str();
+
+        SourceFile source{.path = std::make_shared<std::string>(filepath),
+                          .source = std::make_shared<std::string>(std::move(file_contents))};
+
+        Lexer lexer(source);
+        TokenStream stream(lexer);
+
+        execute_source_in_module(stream, parser, gc, r_module, vm);
     }
 
     void execute_file(const std::string& filepath)
