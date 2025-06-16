@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.15...4.0)
 
+Include(FetchContent)
+
 add_compile_options(-fsanitize=address -Wall -Wno-unused-function -Werror)
 add_link_options(-fsanitize=address)
 
@@ -8,6 +10,13 @@ project(Katsu
   DESCRIPTION "Katsu Language"
   LANGUAGES CXX
 )
+
+#FetchContent_Declare(
+#  GMP
+#  URL https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+#)
+#
+#FetchContent_MakeAvailable(GMP)
 
 # Single library (libkatsudon.a) available for static linking
 # for both a main executable and tests.
@@ -34,13 +43,13 @@ target_compile_options(katsudon PUBLIC
   -DDEBUG_GC_NEW_SEMISPACE
   # -DDEBUG_GC_VERIFY_ROOT_ORDERING=0
 )
+target_link_libraries(katsudon PUBLIC gmp)
 
 # Main katsu executable.
 add_executable(katsu src/main.cc)
 target_link_libraries(katsu PUBLIC katsudon)
 
 # Unit tests, using the Catch2 framework.
-Include(FetchContent)
 
 FetchContent_Declare(
   Catch2
