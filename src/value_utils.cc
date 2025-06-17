@@ -407,7 +407,7 @@ namespace Katsu
         } else if (value.is_float()) {
             std::cout << "float " << value._float() << "\n";
         } else if (value.is_bool()) {
-            std::cout << "bool " << value._bool() << "\n";
+            std::cout << "bool " << (value._bool() ? "true" : "false") << "\n";
         } else if (value.is_null()) {
             std::cout << "null\n";
         } else if (value.is_object()) {
