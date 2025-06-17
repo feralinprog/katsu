@@ -308,6 +308,36 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::fixnum(7));
     }
 
+    SECTION("fixnum -:")
+    {
+        input("7 - 4");
+        check(Value::fixnum(3));
+    }
+
+    SECTION("fixnum =: positive case")
+    {
+        input("1 = 1");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum =: negative case")
+    {
+        input("1 = 2");
+        check(Value::_bool(false));
+    }
+
+    SECTION("object =: positive case")
+    {
+        input("Fixnum = Fixnum");
+        check(Value::_bool(true));
+    }
+
+    SECTION("object =: negative case")
+    {
+        input(R"("abc" = "abc")");
+        check(Value::_bool(false));
+    }
+
     SECTION("print:")
     {
         cout_capture capture;
@@ -538,5 +568,21 @@ let: a = (adder: 3)
 (a call: 2) # 36 + 33 + 2 = 71
         )");
         check(Value::fixnum(71));
+    }
+
+    SECTION("recursion")
+    {
+        input(R"(
+method: [n triangular-num: result] does: [
+    (n = 0) then: result else: [
+        (n - 1) triangular-num: (n + result)
+    ]
+]
+
+method: [n triangular-num] does: [n triangular-num: 0]
+
+100 triangular-num
+        )");
+        check(Value::fixnum(100 * (100 + 1) / 2));
     }
 }

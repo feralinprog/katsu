@@ -541,11 +541,15 @@ namespace Katsu
             throw compile_error(error_msg, param_decl.span);
         };
 
+        bool unary;
+
         if (NameExpr* d = dynamic_cast<NameExpr*>(decl)) {
+            unary = true;
             method_name_parts.push_back(std::get<std::string>(d->name.value));
             param_names.push_back("self");
             // TODO: add an any-matcher
         } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
+            unary = true;
             std::stringstream ss;
             ss << "When the " << message << "'declaration' argument is a unary message, "
                << "it must be a simple unary message of the form [target-name message-name] "
@@ -554,6 +558,7 @@ namespace Katsu
             method_name_parts.push_back(std::get<std::string>(d->message.value));
             add_param_name_and_matcher(*d->target, error_msg);
         } else if (NAryMessageExpr* d = dynamic_cast<NAryMessageExpr*>(decl)) {
+            unary = false;
             std::stringstream ss;
             ss << "When the " << message
                << "'declaration' argument is an n-ary message, it must be a simple n-ary message "
@@ -585,7 +590,9 @@ namespace Katsu
             throw compile_error(ss.str(), decl->span);
         }
 
-        Root<String> r_method_name(gc, concat_with_suffix(gc, method_name_parts, ":"));
+        Root<String> r_method_name(gc,
+                                   unary ? make_string(gc, method_name_parts[0])
+                                         : concat_with_suffix(gc, method_name_parts, ":"));
 
         Expr* body;
         if (BlockExpr* b = dynamic_cast<BlockExpr*>(&_body)) {

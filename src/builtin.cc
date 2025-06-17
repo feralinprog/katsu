@@ -98,6 +98,20 @@ namespace Katsu
         return Value::fixnum(args[0].fixnum() + args[1].fixnum());
     }
 
+    Value native__minus_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a - b
+        ASSERT(nargs == 2);
+        return Value::fixnum(args[0].fixnum() - args[1].fixnum());
+    }
+
+    Value native__eq_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a = b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0] == args[1]);
+    }
+
     Value native__print_(VM& vm, int64_t nargs, Value* args)
     {
         // _ print: val
@@ -336,6 +350,8 @@ namespace Katsu
 
         add_native(vm.gc, r_module, "~:", &native__tilde_);
         add_native(vm.gc, r_module, "+:", &native__plus_);
+        add_native(vm.gc, r_module, "-:", &native__minus_);
+        add_native(vm.gc, r_module, "=:", &native__eq_);
         add_native(vm.gc, r_module, "print:", &native__print_);
         add_native(vm.gc, r_module, "pretty-print:", &native__pretty_print_);
         add_intrinsic(vm.gc, r_module, "then:else:", &intrinsic__then_else_);
