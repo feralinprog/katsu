@@ -644,8 +644,11 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::METHOD;
 
-        Value v_param_matchers; // TODO how to represent this?? vector of any (Null) / type (Type) /
-                                // value (... Ref!)
+        // This is a bit hacky. Each entry of the param matchers should be:
+        // - null -> an any matcher
+        // - a type -> a type matcher
+        // - a ref -> a value matcher
+        Value v_param_matchers; // Array
         Value v_return_type;    // Type or Null
         Value v_code;           // Code, or Null if referring to a native method
         // Arbitrary extra values attached by user.
@@ -665,7 +668,9 @@ namespace Katsu
         static const ObjectTag CLASS_TAG = ObjectTag::MULTIMETHOD;
 
         // Just for debugging / logging.
-        Value v_name;    // String
+        Value v_name; // String
+        // Mostly for sanity checking.
+        uint32_t num_params;
         Value v_methods; // Vector of Methods
         // Arbitrary extra values attached by user.
         Value v_attributes; // Vector

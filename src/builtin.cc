@@ -10,71 +10,71 @@
 
 namespace Katsu
 {
-    // TODO: param matchers / return type
-    void add_native(GC& gc, Root<Module>& r_module, const std::string& name,
-                    NativeHandler native_handler)
+    // TODO: return type
+    void _add_handler(GC& gc, Root<Module>& r_module, const std::string& name, uint32_t num_params,
+                      Root<Array>& r_param_matchers, NativeHandler native_handler,
+                      IntrinsicHandler intrinsic_handler)
     {
         // TODO: check if name exists already in module!
-
         Root<String> r_name(gc, make_string(gc, name));
 
-        Root<Vector> r_methods(gc, make_vector(gc, 1));
-        {
-            ValueRoot r_param_matchers(gc, Value::null()); // TODO
-            OptionalRoot<Type> r_return_type(gc, nullptr); // TODO
-            OptionalRoot<Code> r_code(gc, nullptr);        // native!
+        Value* v_existing = module_lookup(*r_module, *r_name);
+        MultiMethod* multi;
+        if (v_existing) {
+            if (!v_existing->is_obj_multimethod()) {
+                throw std::runtime_error("name exists in module but is not a multimethod!");
+            }
+            multi = v_existing->obj_multimethod();
+            ASSERT(multi->num_params == num_params);
+        } else {
+            Root<Vector> r_methods(gc, make_vector(gc, 1));
             Root<Vector> r_attributes(gc, make_vector(gc, 0));
-
-            ValueRoot r_method(gc,
-                               Value::object(make_method(gc,
-                                                         r_param_matchers,
-                                                         r_return_type,
-                                                         r_code,
-                                                         r_attributes,
-                                                         native_handler,
-                                                         /* intrinsic_handler */ nullptr)));
-            append(gc, r_methods, r_method);
+            multi = make_multimethod(gc, r_name, num_params, r_methods, r_attributes);
+            ValueRoot r_multimethod(gc, Value::object(multi));
+            append(gc, r_module, r_name, r_multimethod);
+            multi = r_multimethod->obj_multimethod();
         }
+
+        Root<MultiMethod> r_multi(gc, std::move(multi));
+
+        OptionalRoot<Type> r_return_type(gc, nullptr); // TODO
+        OptionalRoot<Code> r_code(gc, nullptr);        // native / intrinsic!
         Root<Vector> r_attributes(gc, make_vector(gc, 0));
 
-        ValueRoot r_multimethod(
-            gc,
-            Value::object(make_multimethod(gc, r_name, r_methods, r_attributes)));
-        append(gc, r_module, r_name, r_multimethod);
-    }
-
-    // TODO: param matchers / return type
-    void add_intrinsic(GC& gc, Root<Module>& r_module, const std::string& name,
-                       IntrinsicHandler intrinsic_handler)
-    {
-        // TODO: check if name exists already in module!
-
-        Root<String> r_name(gc, make_string(gc, name));
-
-        Root<Vector> r_methods(gc, make_vector(gc, 1));
-        {
-            ValueRoot r_param_matchers(gc, Value::null()); // TODO
-            OptionalRoot<Type> r_return_type(gc, nullptr); // TODO
-            OptionalRoot<Code> r_code(gc, nullptr);        // native!
-            Root<Vector> r_attributes(gc, make_vector(gc, 0));
-
-            ValueRoot r_method(
-                gc,
-                Value::object(make_method(gc,
+        Root<Method> r_method(gc,
+                              make_method(gc,
                                           r_param_matchers,
                                           r_return_type,
                                           r_code,
                                           r_attributes,
-                                          /* native_handler */ nullptr,
-                                          /* intrinsic_handler */ intrinsic_handler)));
-            append(gc, r_methods, r_method);
-        }
-        Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                                          native_handler,
+                                          intrinsic_handler));
 
-        ValueRoot r_multimethod(
-            gc,
-            Value::object(make_multimethod(gc, r_name, r_methods, r_attributes)));
-        append(gc, r_module, r_name, r_multimethod);
+        add_method(gc, r_multi, r_method, /* require_unique */ true);
+    }
+
+    void add_native(GC& gc, Root<Module>& r_module, const std::string& name, uint32_t num_params,
+                    Root<Array>& r_param_matchers, NativeHandler native_handler)
+    {
+        _add_handler(gc,
+                     r_module,
+                     name,
+                     num_params,
+                     r_param_matchers,
+                     native_handler,
+                     /* intrinsic_handler */ nullptr);
+    }
+
+    void add_intrinsic(GC& gc, Root<Module>& r_module, const std::string& name, uint32_t num_params,
+                       Root<Array>& r_param_matchers, IntrinsicHandler intrinsic_handler)
+    {
+        _add_handler(gc,
+                     r_module,
+                     name,
+                     num_params,
+                     r_param_matchers,
+                     /* native_handler */ nullptr,
+                     intrinsic_handler);
     }
 
     Value native__tilde_(VM& vm, int64_t nargs, Value* args)
@@ -233,51 +233,11 @@ namespace Katsu
                   /* args */ args_tuple->components());
     }
 
-    Value type(VM& vm, Value value)
-    {
-        switch (value.tag()) {
-            case Tag::FIXNUM: return vm.builtin(BuiltinId::_Fixnum);
-            case Tag::FLOAT: return vm.builtin(BuiltinId::_Float);
-            case Tag::BOOL: return vm.builtin(BuiltinId::_Bool);
-            case Tag::_NULL: return vm.builtin(BuiltinId::_Null);
-            case Tag::OBJECT: {
-                Object* obj = value.object();
-                switch (obj->tag()) {
-                    case ObjectTag::REF: return vm.builtin(BuiltinId::_Ref);
-                    case ObjectTag::TUPLE: return vm.builtin(BuiltinId::_Tuple);
-                    case ObjectTag::ARRAY: return vm.builtin(BuiltinId::_Array);
-                    case ObjectTag::VECTOR: return vm.builtin(BuiltinId::_Vector);
-                    case ObjectTag::MODULE: return vm.builtin(BuiltinId::_Module);
-                    case ObjectTag::STRING: return vm.builtin(BuiltinId::_String);
-                    case ObjectTag::CODE: return vm.builtin(BuiltinId::_Code);
-                    case ObjectTag::CLOSURE: return vm.builtin(BuiltinId::_Closure);
-                    case ObjectTag::METHOD: return vm.builtin(BuiltinId::_Method);
-                    case ObjectTag::MULTIMETHOD: return vm.builtin(BuiltinId::_MultiMethod);
-                    case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
-                    case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
-                    default: ASSERT_MSG(false, "forgot an ObjectTag?");
-                }
-            }
-            default: ASSERT_MSG(false, "forgot a Tag?");
-        }
-    }
-
     Value native__type(VM& vm, int64_t nargs, Value* args)
     {
         // value type
         ASSERT(nargs == 1);
-        return type(vm, args[0]);
-    }
-
-    bool is_subtype(Type* a, Type* b)
-    {
-        ASSERT(a->v_linearization.is_obj_array());
-        ASSERT(b->v_linearization.is_obj_array());
-        Array* lin_a = a->v_linearization.obj_array();
-        Array* lin_b = b->v_linearization.obj_array();
-        // Neat, eh?
-        return lin_a->length >= lin_b->length &&
-               lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
+        return type_of(vm, args[0]);
     }
 
     Value native__subtype_p_(VM& vm, int64_t nargs, Value* args)
@@ -291,7 +251,36 @@ namespace Katsu
     {
         // v instance?: t
         ASSERT(nargs == 2);
-        return Value::_bool(is_subtype(type(vm, args[0]).obj_type(), args[1].obj_type()));
+        return Value::_bool(is_instance(vm, args[0], args[1].obj_type()));
+    }
+
+    Value native__make_method_with_return_type_code_attrs_(VM& vm, int64_t nargs, Value* args)
+    {
+        // param-matchers make-method-with-return-type: type code: code attrs: attrs
+        ASSERT(nargs == 4);
+        Root<Array> r_param_matchers(vm.gc, args[0].obj_array());
+        OptionalRoot<Type> r_return_type(vm.gc,
+                                         args[1].is_obj_type() ? args[1].obj_type() : nullptr);
+        OptionalRoot<Code> r_code(vm.gc, args[2].obj_code());
+        Root<Vector> r_attributes(vm.gc, args[3].obj_vector());
+        return Value::object(make_method(vm.gc,
+                                         r_param_matchers,
+                                         r_return_type,
+                                         r_code,
+                                         r_attributes,
+                                         /* native_handler */ nullptr,
+                                         /* intrinsic_handler */ nullptr));
+    }
+
+    Value native__add_method_to_require_unique_(VM& vm, int64_t nargs, Value* args)
+    {
+        // method add-method-to: multimethod require-unique: unique
+        ASSERT(nargs == 3);
+        Root<Method> r_method(vm.gc, args[0].obj_method());
+        Root<MultiMethod> r_multimethod(vm.gc, args[1].obj_multimethod());
+        bool require_unique = args[2]._bool();
+        add_method(vm.gc, r_multimethod, r_method, require_unique);
+        return Value::null();
     }
 
     Value make_base_type(GC& gc, Root<String>& r_name)
@@ -348,19 +337,122 @@ namespace Katsu
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
 
-        add_native(vm.gc, r_module, "~:", &native__tilde_);
-        add_native(vm.gc, r_module, "+:", &native__plus_);
-        add_native(vm.gc, r_module, "-:", &native__minus_);
-        add_native(vm.gc, r_module, "=:", &native__eq_);
-        add_native(vm.gc, r_module, "print:", &native__print_);
-        add_native(vm.gc, r_module, "pretty-print:", &native__pretty_print_);
-        add_intrinsic(vm.gc, r_module, "then:else:", &intrinsic__then_else_);
-        add_intrinsic(vm.gc, r_module, "call", &intrinsic__call);
-        add_intrinsic(vm.gc, r_module, "call:", &intrinsic__call_);
-        add_intrinsic(vm.gc, r_module, "call*:", &intrinsic__call_star_);
-        add_native(vm.gc, r_module, "type", &native__type);
-        add_native(vm.gc, r_module, "subtype?:", &native__subtype_p_);
-        add_native(vm.gc, r_module, "instance?:", &native__instance_p_);
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "~:", 2, matchers2, &native__tilde_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "+:", 2, matchers2, &native__plus_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "-:", 2, matchers2, &native__minus_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_native(vm.gc, r_module, "=:", 2, matchers2, &native__eq_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "print:", 2, matchers2, &native__print_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_native(vm.gc, r_module, "pretty-print:", 2, matchers2, &native__pretty_print_);
+        }
+
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = Value::null(); // any
+            matchers3->components()[1] = Value::null(); // any
+            matchers3->components()[2] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "then:else:", 3, matchers3, &intrinsic__then_else_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "call", 1, matchers1, &intrinsic__call);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "call:", 2, matchers2, &intrinsic__call_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Tuple);
+            add_intrinsic(vm.gc, r_module, "call*:", 2, matchers2, &intrinsic__call_star_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = Value::null(); // any
+            add_native(vm.gc, r_module, "type", 1, matchers1, &native__type);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Type);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
+            add_native(vm.gc, r_module, "subtype?:", 2, matchers2, &native__subtype_p_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
+            add_native(vm.gc, r_module, "instance?:", 2, matchers2, &native__instance_p_);
+        }
+
+        {
+            Root<Array> matchers4(vm.gc, make_array(vm.gc, 4));
+            matchers4->components()[0] = vm.builtin(BuiltinId::_Array);
+            matchers4->components()[1] = vm.builtin(BuiltinId::_Type);
+            matchers4->components()[2] = vm.builtin(BuiltinId::_Code);
+            matchers4->components()[3] = vm.builtin(BuiltinId::_Vector);
+            add_native(vm.gc,
+                       r_module,
+                       "make-method-with-return-type:code:attrs:",
+                       4,
+                       matchers4,
+                       &native__make_method_with_return_type_code_attrs_);
+        }
+
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = vm.builtin(BuiltinId::_Method);
+            matchers3->components()[1] = vm.builtin(BuiltinId::_MultiMethod);
+            matchers3->components()[2] = vm.builtin(BuiltinId::_Bool);
+            add_native(vm.gc,
+                       r_module,
+                       "add-method-to:require-unique:",
+                       3,
+                       matchers3,
+                       &native__add_method_to_require_unique_);
+        }
 
         /*
          * TODO:

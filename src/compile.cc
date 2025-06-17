@@ -492,7 +492,7 @@ namespace Katsu
     }
 
     // receiver, attrs are optional
-    void compile_method(GC& gc, Root<Module>& r_module, const std::string& message,
+    void compile_method(GC& gc, CodeBuilder& module_builder, const std::string& message,
                         SourceSpan& span, Expr* receiver, Expr& _decl, Expr& _body, Expr* attrs)
     {
         if (receiver) {
@@ -521,19 +521,29 @@ namespace Katsu
 
         std::vector<std::string> method_name_parts{};
         std::vector<std::string> param_names{};
-        // TODO: param matchers
+        // Parameter matchers are evaluated at runtime later; this generates code to evaluate them.
 
-        auto add_param_name_and_matcher = [&param_names](Expr& param_decl,
-                                                         const std::string& error_msg) -> void {
+        auto add_param_name_and_matcher =
+            [&gc, &module_builder, &param_names](Expr& param_decl,
+                                                 const std::string& error_msg) -> void {
             if (NameExpr* d = dynamic_cast<NameExpr*>(&param_decl)) {
                 param_names.push_back(std::get<std::string>(d->name.value));
-                // TODO: add an any-matcher
+                // Add an any-matcher by loading null.
+                // LOAD_VALUE: <value>
+                module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                module_builder.emit_arg(gc, Value::null());
                 return;
             } else if (ParenExpr* d = dynamic_cast<ParenExpr*>(&param_decl)) {
                 if (NAryMessageExpr* n = dynamic_cast<NAryMessageExpr*>(d->inner.get())) {
                     if (!n->target && n->messages.size() == 1) {
                         param_names.push_back(std::get<std::string>(n->messages[0].value));
-                        // TODO: param matcher, from n->args[0]
+
+                        // Add a type-matcher evaluated from n->args[0];
+                        compile_expr(gc, module_builder, *n->args[0]);
+                        // We must ensure it's a Type at runtime.
+                        module_builder.emit_op(gc,
+                                               OpCode::VERIFY_IS_TYPE,
+                                               /* stack_height_delta */ 0);
                         return;
                     }
                 }
@@ -547,7 +557,10 @@ namespace Katsu
             unary = true;
             method_name_parts.push_back(std::get<std::string>(d->name.value));
             param_names.push_back("self");
-            // TODO: add an any-matcher
+            // Add an any-matcher by loading null.
+            // LOAD_VALUE: <value>
+            module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+            module_builder.emit_arg(gc, Value::null());
         } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
             unary = true;
             std::stringstream ss;
@@ -577,7 +590,10 @@ namespace Katsu
                 add_param_name_and_matcher(**d->target, error_msg);
             } else {
                 param_names.push_back("self");
-                // TODO: add an any-matcher
+                // Add an any-matcher by loading null.
+                // LOAD_VALUE: <value>
+                module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                module_builder.emit_arg(gc, Value::null());
             }
 
             for (const std::unique_ptr<Expr>& arg : d->args) {
@@ -610,7 +626,7 @@ namespace Katsu
 
         MultiMethod* multimethod;
         {
-            Value* existing = module_lookup(*r_module, *r_method_name);
+            Value* existing = module_lookup(*module_builder.r_module, *r_method_name);
             if (existing) {
                 if (existing->is_obj_multimethod()) {
                     multimethod = existing->obj_multimethod();
@@ -623,9 +639,13 @@ namespace Katsu
                 // We know we're about to add at least one method!
                 Root<Vector> r_methods(gc, make_vector(gc, 1));
                 Root<Vector> r_attributes(gc, make_vector(gc, 0));
-                multimethod = make_multimethod(gc, r_method_name, r_methods, r_attributes);
+                multimethod = make_multimethod(gc,
+                                               r_method_name,
+                                               param_names.size(),
+                                               r_methods,
+                                               r_attributes);
                 ValueRoot r_multimethod(gc, Value::object(multimethod));
-                append(gc, r_module, r_method_name, r_multimethod);
+                append(gc, module_builder.r_module, r_method_name, r_multimethod);
                 multimethod = r_multimethod->obj_multimethod();
             }
         }
@@ -637,7 +657,7 @@ namespace Katsu
         Root<Vector> r_args(gc, make_vector(gc, 0));
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
-            .r_module = r_module,
+            .r_module = module_builder.r_module,
             .num_params = (uint32_t)param_names.size(), // TODO: check size_t?
             .num_regs = (uint32_t)param_names.size(),   // TODO: check size_t?
             .num_data = 0,
@@ -660,30 +680,74 @@ namespace Katsu
         }
         compile_expr(gc, builder, *body);
 
-        // Generate the method.
-        ValueRoot r_param_matchers(gc, Value::null()); // TODO
-        OptionalRoot<Type> r_return_type(gc, nullptr); // TODO: support return types for methods
-        Code* code = builder.finalize(gc);
-        OptionalRoot<Code> r_opt_code(gc, std::move(code));
-        Root<Vector> r_attributes(gc, make_vector(gc, 0)); // TODO: support attributes for methods
-        NativeHandler native_handler = nullptr;            // not a native handler
-        IntrinsicHandler intrinsic_handler = nullptr;      // nor an intrinsic handler
-        ValueRoot r_method(gc,
-                           Value::object(make_method(gc,
-                                                     r_param_matchers,
-                                                     r_return_type,
-                                                     r_opt_code,
-                                                     r_attributes,
-                                                     native_handler,
-                                                     intrinsic_handler)));
+        // Generate the method. This has to be at runtime, since parameter matchers are evaluated at
+        // runtime. At this point, the matchers have been calculated and are at the top of the data
+        // stack. The make-method invocation takes method fields in this order:
+        // - (default receiver, ignored)
+        // - param matchers array
+        // - return type
+        // - code
+        // - attributes
+        // (It does not take a native or intrinsic handler.)
+        // We are effectively compiling:
+        //     (
+        //         <matchers> make-method-with-return-type: null code: <code> attrs: <attrs>
+        //     ) add-method-to: <multimethod> require-unique: true
+        // Where the <attrs> default to {} if not provided.
 
-        Root<Vector> r_methods(gc, r_multimethod->v_methods.obj_vector());
-        // TODO: refactor into util function to add to multimethod. Need to do other things like:
-        // * roll up method inlining to multimethod inline-dispatch
-        // * check for duplicate signatures
-        // * sort methods / generate decision tree
-        // * invalidate any methods whose compilation depended on this multimethod not changing
-        append(gc, r_methods, r_method);
+        // Parameter matchers:
+        // MAKE_ARRAY: <length>
+        module_builder.emit_op(gc,
+                               OpCode::MAKE_ARRAY,
+                               /* stack_height_delta */ -(int64_t)param_names.size() + 1);
+        module_builder.emit_arg(gc, Value::fixnum(param_names.size()));
+
+        // Return type: (TODO: support return types for methods)
+        // LOAD_VALUE: <value>
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_arg(gc, Value::null());
+
+        // Code:
+        // LOAD_VALUE: <value>
+        Root<Code> r_code(gc, builder.finalize(gc));
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_arg(gc, r_code.value());
+
+        // Attributes:
+        if (attrs) {
+            compile_expr(gc, module_builder, *attrs);
+        } else {
+            // Generate a 0-length vector.
+            // MAKE_VECTOR: <length>
+            module_builder.emit_op(gc, OpCode::MAKE_VECTOR, /* stack_height_delta */ +1);
+            module_builder.emit_arg(gc, Value::fixnum(0));
+        }
+
+        // Create the method.
+        // INVOKE: <name>, <num args>
+        module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -4 + 1);
+        module_builder.emit_arg(
+            gc,
+            Value::object(make_string(gc, "make-method-with-return-type:code:attrs:")));
+        module_builder.emit_arg(gc, Value::fixnum(4));
+
+        // Multimethod:
+        // LOAD_VALUE: <value>
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_arg(gc, r_multimethod.value());
+
+        // Require unique = true
+        // TODO: allow user to specify redefinition?
+        // LOAD_VALUE: <value>
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_arg(gc, Value::_bool(true));
+
+        // Add the method.
+        // INVOKE: <name>, <num args>
+        module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -3 + 1);
+        module_builder.emit_arg(gc,
+                                Value::object(make_string(gc, "add-method-to:require-unique:")));
+        module_builder.emit_arg(gc, Value::fixnum(3));
     }
 
     Code* compile_into_module(GC& gc, Root<Module>& r_module,
@@ -721,7 +785,7 @@ namespace Katsu
                     std::get<std::string>(expr->messages[0].value) == "method" &&
                     std::get<std::string>(expr->messages[1].value) == "does") {
                     compile_method(gc,
-                                   r_module,
+                                   builder,
                                    "method:does:",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
@@ -736,8 +800,8 @@ namespace Katsu
 
                 ) {
                     compile_method(gc,
-                                   r_module,
-                                   "method:does:",
+                                   builder,
+                                   "method:does:::",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
                                    *expr->args[0],

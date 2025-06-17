@@ -123,7 +123,7 @@ namespace Katsu
         return closure;
     }
 
-    Method* make_method(GC& gc, ValueRoot& r_param_matchers, OptionalRoot<Type>& r_return_type,
+    Method* make_method(GC& gc, Root<Array>& r_param_matchers, OptionalRoot<Type>& r_return_type,
                         OptionalRoot<Code>& r_code, Root<Vector>& r_attributes,
                         NativeHandler native_handler, IntrinsicHandler intrinsic_handler)
     {
@@ -140,9 +140,17 @@ namespace Katsu
                            "instantiated");
         }
 #endif
+        if (r_code) {
+            ASSERT_ARG(r_param_matchers->length == r_code->num_params);
+        }
+
+        for (uint64_t i = 0; i < r_param_matchers->length; i++) {
+            Value matcher = r_param_matchers->components()[i];
+            ASSERT_ARG(matcher.is_null() || matcher.is_obj_type() || matcher.is_obj_ref());
+        }
 
         Method* method = gc.alloc<Method>();
-        method->v_param_matchers = *r_param_matchers;
+        method->v_param_matchers = r_param_matchers.value();
         method->v_return_type = r_return_type.value();
         method->v_code = r_code.value();
         method->v_attributes = r_attributes.value();
@@ -151,12 +159,17 @@ namespace Katsu
         return method;
     }
 
-    MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, Root<Vector>& r_methods,
-                                  Root<Vector>& r_attributes)
+    MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, uint32_t num_params,
+                                  Root<Vector>& r_methods, Root<Vector>& r_attributes)
     {
-        // TODO: check for Method components in r_methods?
+        for (Value v_method : r_methods) {
+            ASSERT_ARG(v_method.is_obj_method());
+            Method* method = v_method.obj_method();
+            ASSERT_ARG(method->v_param_matchers.obj_array()->length == num_params);
+        }
         MultiMethod* multimethod = gc.alloc<MultiMethod>();
         multimethod->v_name = r_name.value();
+        multimethod->num_params = num_params;
         multimethod->v_methods = r_methods.value();
         multimethod->v_attributes = r_attributes.value();
         return multimethod;
@@ -536,6 +549,11 @@ namespace Katsu
                                       << "\n";
                             break;
                         }
+                        case MAKE_ARRAY: {
+                            std::cout << "make-array #" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
+                            break;
+                        }
                         case MAKE_VECTOR: {
                             std::cout << "make-vector #" << args->components()[arg_spot++].fixnum()
                                       << "\n";
@@ -547,6 +565,10 @@ namespace Katsu
                                    "",
                                    /* initial_indent */ false,
                                    /* extra_depth */ +1);
+                            break;
+                        }
+                        case VERIFY_IS_TYPE: {
+                            std::cout << "verify-is-type\n";
                             break;
                         }
                         default: {
@@ -822,4 +844,99 @@ namespace Katsu
 
     // NOTE: when porting over try_set_bases(), make sure to also update supertypes' subtype
     // vectors...
+
+    void add_method(GC& gc, Root<MultiMethod>& r_multimethod, Root<Method>& r_method,
+                    bool require_unique)
+    {
+        ASSERT_ARG(r_method->v_param_matchers.obj_array()->length == r_multimethod->num_params);
+        // TODO:
+        // * roll up method inlining to multimethod inline-dispatch
+        // * check for duplicate signatures
+        // * sort methods / generate decision tree
+        // * invalidate any methods whose compilation depended on this multimethod not changing
+        Root<Vector> r_methods(gc, r_multimethod->v_methods.obj_vector());
+        ValueRoot rv_method(gc, r_method.value());
+        append(gc, r_methods, rv_method);
+    }
+
+    Value* begin(Array* array)
+    {
+        return &array->components()[0];
+    }
+    Value* end(Array* array)
+    {
+        return &array->components()[array->length];
+    }
+
+    Value* begin(Root<Array>& r_array)
+    {
+        return begin(*r_array);
+    }
+    Value* end(Root<Array>& r_array)
+    {
+        return end(*r_array);
+    }
+
+    Value* begin(Vector* vector)
+    {
+        return &vector->v_array.obj_array()->components()[0];
+    }
+    Value* end(Vector* vector)
+    {
+        return &vector->v_array.obj_array()->components()[vector->length];
+    }
+
+    Value* begin(Root<Vector>& r_vector)
+    {
+        return begin(*r_vector);
+    }
+    Value* end(Root<Vector>& r_vector)
+    {
+        return end(*r_vector);
+    }
+
+    Value type_of(VM& vm, Value value)
+    {
+        switch (value.tag()) {
+            case Tag::FIXNUM: return vm.builtin(BuiltinId::_Fixnum);
+            case Tag::FLOAT: return vm.builtin(BuiltinId::_Float);
+            case Tag::BOOL: return vm.builtin(BuiltinId::_Bool);
+            case Tag::_NULL: return vm.builtin(BuiltinId::_Null);
+            case Tag::OBJECT: {
+                Object* obj = value.object();
+                switch (obj->tag()) {
+                    case ObjectTag::REF: return vm.builtin(BuiltinId::_Ref);
+                    case ObjectTag::TUPLE: return vm.builtin(BuiltinId::_Tuple);
+                    case ObjectTag::ARRAY: return vm.builtin(BuiltinId::_Array);
+                    case ObjectTag::VECTOR: return vm.builtin(BuiltinId::_Vector);
+                    case ObjectTag::MODULE: return vm.builtin(BuiltinId::_Module);
+                    case ObjectTag::STRING: return vm.builtin(BuiltinId::_String);
+                    case ObjectTag::CODE: return vm.builtin(BuiltinId::_Code);
+                    case ObjectTag::CLOSURE: return vm.builtin(BuiltinId::_Closure);
+                    case ObjectTag::METHOD: return vm.builtin(BuiltinId::_Method);
+                    case ObjectTag::MULTIMETHOD: return vm.builtin(BuiltinId::_MultiMethod);
+                    case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
+                    case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
+                    default: ASSERT_MSG(false, "forgot an ObjectTag?");
+                }
+            }
+            default: ASSERT_MSG(false, "forgot a Tag?");
+        }
+    }
+
+    bool is_subtype(Type* a, Type* b)
+    {
+        ASSERT(a->v_linearization.is_obj_array());
+        ASSERT(b->v_linearization.is_obj_array());
+        Array* lin_a = a->v_linearization.obj_array();
+        Array* lin_b = b->v_linearization.obj_array();
+        // Neat, eh?
+        return lin_a->length >= lin_b->length &&
+               lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
+    }
+
+    bool is_instance(VM& vm, Value value, Type* type)
+    {
+        return is_subtype(type_of(vm, value).obj_type(), type);
+    }
 };

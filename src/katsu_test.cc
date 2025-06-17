@@ -474,9 +474,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     SECTION("call*: - arguments not a tuple")
     {
         input(R"(\a b [a + b] call*: { 10; 20; 30 })");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("call*: arguments must be a tuple"));
+        CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
     }
     SECTION("call*: - callable not a closure")
     {
@@ -584,5 +582,86 @@ method: [n triangular-num] does: [n triangular-num: 0]
 100 triangular-num
         )");
         check(Value::fixnum(100 * (100 + 1) / 2));
+    }
+
+    SECTION("multimethod smoketest")
+    {
+        SECTION("multimethod accepts stated argument types")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
+
+5 mm-test: 10
+            )");
+            check(Value::object(make_string(gc, "Fixnum - Fixnum")));
+        }
+
+        SECTION("multimethod rejects undeclared argument types - case 1")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
+
+"abc" mm-test: 10
+            )");
+            CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
+        }
+
+        SECTION("multimethod rejects undeclared argument types - case 2")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
+
+5 mm-test: "def"
+            )");
+            CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
+        }
+
+        SECTION("multimethod downselection - case 1")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
+method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
+method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+
+5 mm-test: "def"
+            )");
+            check(Value::object(make_string(gc, "Fixnum - any")));
+        }
+
+        SECTION("multimethod downselection - case 2")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
+method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
+method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+
+"abc" mm-test: 10
+            )");
+            check(Value::object(make_string(gc, "any - Fixnum")));
+        }
+
+        SECTION("multimethod downselection - case 3")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
+method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
+method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+
+"abc" mm-test: "def"
+            )");
+            check(Value::object(make_string(gc, "any - any")));
+        }
+
+        SECTION("multimethod downselection - case 3 (ambiguous)")
+        {
+            input(R"(
+method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
+method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
+method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+
+5 mm-test: 10
+            )");
+            CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("ambiguous method resolution"));
+        }
     }
 }

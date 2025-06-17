@@ -69,7 +69,8 @@ TEST_CASE("VM executes a native invocation", "[vm]")
 
     Root<String> r_method_name(gc, make_string(gc, "+:"));
 
-    ValueRoot r_param_matchers(gc, Value::null()); // TODO: not null
+    // Leave as null ('any' matchers).
+    Root<Array> r_param_matchers(gc, make_array(gc, 2));
 
     OptionalRoot<Type> r_return_type(gc, nullptr);
 
@@ -99,6 +100,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     Root<MultiMethod> r_multimethod(gc,
                                     make_multimethod(gc,
                                                      /* r_name */ r_method_name,
+                                                     /* num_params */ 2,
                                                      /* r_methods */ r_methods,
                                                      /* r_attributes */ r_multimethod_attributes));
 

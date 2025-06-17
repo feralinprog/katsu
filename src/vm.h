@@ -47,8 +47,10 @@ namespace Katsu
      * | INVOKE_TAIL  |  0x9   | (string) name; (fixnum) num args                     (1) |
      * | DROP         |  0xA   | none                                                     |
      * | MAKE_TUPLE   |  0xB   | (fixnum) num components                                  |
-     * | MAKE_VECTOR  |  0xC   | (fixnum) num components                                  |
-     * | MAKE_CLOSURE |  0xD   | (closure) closure 'template'                         (2) |
+     * | MAKE_ARRAY   |  0xC   | (fixnum) num components                                  |
+     * | MAKE_VECTOR  |  0xD   | (fixnum) num components                                  |
+     * | MAKE_CLOSURE |  0xE   | (closure) closure 'template'                         (2) |
+     * | VERIFY_IS_TYPE | 0xF  | none                                                     |
      * +--------------+--------+----------------------------------------------------------+
      * Notes:
      * (1) This should probably refer to an actual multimethod object to avoid lookups...
@@ -109,8 +111,10 @@ namespace Katsu
         INVOKE_TAIL,
         DROP,
         MAKE_TUPLE,
+        MAKE_ARRAY,
         MAKE_VECTOR,
         MAKE_CLOSURE,
+        VERIFY_IS_TYPE,
     };
 
     struct Frame
@@ -172,6 +176,11 @@ namespace Katsu
         {
             ASSERT_MSG(this->data_depth < this->num_data, "data stack overflow in frame");
             this->data()[this->data_depth++] = value;
+        }
+        inline Value peek()
+        {
+            ASSERT_MSG(this->data_depth > 0, "data stack underflow in frame");
+            return this->data()[this->data_depth - 1];
         }
         inline Value pop()
         {

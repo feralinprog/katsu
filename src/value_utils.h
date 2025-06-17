@@ -40,12 +40,12 @@ namespace Katsu
     Closure* make_closure(GC& gc, Root<Code>& r_code, Root<Array>& r_upregs);
     // Make a Method with specified fields.
     // `native_handler` and `intrinsic_handler` are optional.
-    Method* make_method(GC& gc, ValueRoot& r_param_matchers, OptionalRoot<Type>& r_return_type,
+    Method* make_method(GC& gc, Root<Array>& r_param_matchers, OptionalRoot<Type>& r_return_type,
                         OptionalRoot<Code>& r_code, Root<Vector>& r_attributes,
                         NativeHandler native_handler, IntrinsicHandler intrinsic_handler);
     // Make a MultiMethod with specified fields.
-    MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, Root<Vector>& r_methods,
-                                  Root<Vector>& r_attributes);
+    MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, uint32_t num_params,
+                                  Root<Vector>& r_methods, Root<Vector>& r_attributes);
     // Make a Type with specified fields. This doesn't calculate the linearization or ensure that
     // each supertype has the new type as a subtype.
     Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
@@ -109,4 +109,31 @@ namespace Katsu
     // that each supertype has the new type as a subtype.
     Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                     Type::Kind kind, OptionalRoot<Vector>& r_slots);
+
+    // Add a method to a multimethod, failing if require_unique and the method conflicts with a
+    // previous definition. If !require_unique, the method overwrites any previous definition.
+    void add_method(GC& gc, Root<MultiMethod>& r_multimethod, Root<Method>& r_method,
+                    bool require_unique);
+
+    // Iterators for arrays / vectors. These are invalidated by any GC collection!
+    // ===========================================================================
+    Value* begin(Array* array);
+    Value* end(Array* array);
+
+    Value* begin(Root<Array>& r_array);
+    Value* end(Root<Array>& r_array);
+
+    Value* begin(Vector* vector);
+    Value* end(Vector* vector);
+
+    Value* begin(Root<Vector>& r_vector);
+    Value* end(Root<Vector>& r_vector);
+    // ===========================================================================
+
+    class VM;
+    // Doesn't allocate!
+    Value type_of(VM& vm, Value value);
+    bool is_subtype(Type* a, Type* b);
+    // Doesn't allocate!
+    bool is_instance(VM& vm, Value value, Type* type);
 };

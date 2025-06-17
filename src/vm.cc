@@ -272,6 +272,21 @@ namespace Katsu
                 shift_inst();
                 break;
             }
+            case OpCode::MAKE_ARRAY: {
+                // arg() is invalidated by any GC access, so acquire num_components ahead of
+                // time.
+                auto num_components = arg().fixnum();
+                // TODO: check >= 0
+                Array* array = make_array_nofill(this->gc, num_components);
+                // TODO: check uint32_t
+                Value* components = this->current_frame->pop_many(num_components);
+                for (int64_t i = 0; i < num_components; i++) {
+                    array->components()[i] = components[i];
+                }
+                this->current_frame->push(Value::object(array));
+                shift_inst();
+                break;
+            }
             case OpCode::MAKE_VECTOR: {
                 // arg() is invalidated by any GC access, so acquire num_components ahead of
                 // time.
@@ -308,6 +323,14 @@ namespace Katsu
                 }
 
                 this->current_frame->push(Value::object(closure));
+                shift_inst();
+                break;
+            }
+            case OpCode::VERIFY_IS_TYPE: {
+                Value value = this->current_frame->peek();
+                if (!value.is_obj_type()) {
+                    throw std::runtime_error("value must be a Type");
+                }
                 shift_inst();
                 break;
             }
@@ -351,6 +374,133 @@ namespace Katsu
         return frame;
     }
 
+    // Doesn't allocate.
+    bool params_match(VM& vm, Array* param_matchers, Value* args)
+    {
+        uint32_t i = 0;
+        for (Value matcher : param_matchers) {
+            Value arg = args[i++];
+
+            if (matcher.is_null()) {
+                continue;
+            } else if (matcher.is_obj_type()) {
+                Type* t = matcher.obj_type();
+                if (!is_instance(vm, arg, t)) {
+                    return false;
+                }
+            } else if (matcher.is_obj_ref()) {
+                Ref* r = matcher.obj_ref();
+                // TODO: identity? or more general equality?
+                if (arg != r->v_ref) {
+                    return false;
+                }
+            } else {
+                ASSERT_MSG(false, "missed a param matcher type");
+            }
+        }
+        return true;
+    }
+
+    bool operator<=(Value param_matcher_a, Value param_matcher_b)
+    {
+        // Ordering: value matchers < type matchers < any matchers.
+        // Within type matchers, matcher A <= matcher B if the type for A is a subtype of the type
+        // for B.
+        if (param_matcher_b.is_null()) {
+            return true;
+        } else if (param_matcher_b.is_obj_type()) {
+            if (param_matcher_a.is_null()) {
+                return false;
+            } else if (param_matcher_a.is_obj_type()) {
+                return is_subtype(param_matcher_a.obj_type(), param_matcher_b.obj_type());
+            } else {
+                ASSERT_MSG(param_matcher_a.is_obj_ref(), "missed a param matcher type");
+                // param_matcher_a is a value matcher
+                return true;
+            }
+        } else {
+            ASSERT_MSG(param_matcher_b.is_obj_ref(), "missed a param matcher type");
+            // param_matcher_b is a value matcher
+            if (param_matcher_a.is_obj_ref()) {
+                // TODO: identity? or more general equality?
+                return param_matcher_a.obj_ref()->v_ref == param_matcher_b.obj_ref()->v_ref;
+            } else {
+                return false;
+            }
+        }
+    }
+
+    bool operator<=(Array& param_matchers_a, Array& param_matchers_b)
+    {
+        ASSERT(param_matchers_a.length == param_matchers_b.length);
+        for (uint64_t i = 0; i < param_matchers_a.length; i++) {
+            if (!(param_matchers_a.components()[i] <= param_matchers_b.components()[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool operator<=(Method& method_a, Method& method_b)
+    {
+        Array* matchers_a = method_a.v_param_matchers.obj_array();
+        Array* matchers_b = method_b.v_param_matchers.obj_array();
+        return *matchers_a <= *matchers_b;
+    }
+
+    // Doesn't allocate!
+    Method* multimethod_dispatch(VM& vm, MultiMethod* multimethod, Value* args)
+    {
+        Vector* methods = multimethod->v_methods.obj_vector();
+        for (Value v_method : methods) {
+            ASSERT(v_method.is_obj_method());
+            ASSERT(v_method.obj_method()->v_param_matchers.obj_array()->length ==
+                   multimethod->num_params);
+        }
+
+        // TODO: optimize this (by a lot!).
+        // Perform two passes:
+        // 1) Find any minimum among methods matching the arguments -- assuming one even exists!
+        //    (Otherwise, error: no matching method.)
+        // 2) Ensure it is a global minimum among methods matching the arguments.
+        //    (Otherwise, error: ambiguous method resolution.)
+        // The ordering among methods is the product partial ordering induced by parameter matcher
+        // ordering, with value matchers < type matchers < any matchers, and within type matchers,
+        // naturally a matcher for type A is less than a matcher for type B if and only if A is a
+        // strict subtype of B.
+
+        // Pass 1:
+        Method* min = nullptr;
+        for (Value v_method : methods) {
+            Method* method = v_method.obj_method();
+            Array* matchers = method->v_param_matchers.obj_array();
+            if (!params_match(vm, matchers, args)) {
+                continue;
+            }
+            if (!min || *method <= *min) {
+                min = method;
+            }
+        }
+        if (!min) {
+            // TODO: raise to katsu
+            throw std::runtime_error("no matching methods");
+        }
+
+        // Pass 2:
+        for (Value v_method : methods) {
+            Method* method = v_method.obj_method();
+            Array* matchers = method->v_param_matchers.obj_array();
+            if (!params_match(vm, matchers, args)) {
+                continue;
+            }
+            if (!(*min <= *method)) {
+                throw std::runtime_error("ambiguous method resolution");
+            }
+        }
+
+        return min;
+    }
+
     void VM::invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args)
     {
         if (!v_callable.is_obj_multimethod()) {
@@ -359,14 +509,8 @@ namespace Katsu
         }
         MultiMethod* multimethod = v_callable.obj_multimethod();
 
-        // TODO: actually do a proper multimethod dispatch
-        Vector* methods = multimethod->v_methods.obj_vector();
-        if (methods->length == 0) {
-            // TODO: make this a katsu runtime error instead
-            throw std::runtime_error("need a method in multimethod");
-        }
-        Value v_method = methods->v_array.obj_array()->components()[0];
-        Method* method = v_method.obj_method();
+        ASSERT(num_args == multimethod->num_params);
+        Method* method = multimethod_dispatch(*this, multimethod, args);
 
         if (method->v_code.is_null()) {
             // Native or intrinsic handler.
