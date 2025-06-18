@@ -65,6 +65,75 @@ TEST_CASE("module append", "[value-utils]")
     CHECK(*lookup == *r_value);
 }
 
+TEST_CASE("native_str", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    CHECK(native_str(make_string(gc, "test string")) == "test string");
+}
+
+TEST_CASE("concat(String, String)", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    Root<String> r_a(gc, make_string(gc, "left "));
+    Root<String> r_b(gc, make_string(gc, "right"));
+    CHECK(native_str(concat(gc, r_a, r_b)) == "left right");
+}
+
+TEST_CASE("concat(String, string)", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    Root<String> r_a(gc, make_string(gc, "left "));
+    CHECK(native_str(concat(gc, r_a, "right")) == "left right");
+}
+
+TEST_CASE("concat(string, String)", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    Root<String> r_b(gc, make_string(gc, "right"));
+    CHECK(native_str(concat(gc, "left ", r_b)) == "left right");
+}
+
+TEST_CASE("concat native strings", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    std::vector<std::string> parts = {"abc", "def", "ghi"};
+    CHECK(native_str(concat(gc, parts)) == "abcdefghi");
+}
+
+TEST_CASE("concat_with_suffix - native string", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    std::vector<std::string> parts = {"abc", "def", "ghi"};
+    CHECK(native_str(concat_with_suffix(gc, parts, ":")) == "abc:def:ghi:");
+}
+
+TEST_CASE("concat_with_suffix - String", "[value-utils]")
+{
+    GC gc(1024 * 1024);
+
+    Root<Vector> r_strings(gc, make_vector(gc, 3));
+    {
+        ValueRoot r_v(gc, Value::object(make_string(gc, "abc")));
+        append(gc, r_strings, r_v);
+    }
+    {
+        ValueRoot r_v(gc, Value::object(make_string(gc, "def")));
+        append(gc, r_strings, r_v);
+    }
+    {
+        ValueRoot r_v(gc, Value::object(make_string(gc, "ghi")));
+        append(gc, r_strings, r_v);
+    }
+
+    CHECK(native_str(concat_with_suffix(gc, r_strings, ":")) == "abc:def:ghi:");
+}
+
 TEST_CASE("c3 merge", "[value-utils]")
 {
     GC gc(1024 * 1024);

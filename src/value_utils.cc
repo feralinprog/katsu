@@ -333,6 +333,36 @@ namespace Katsu
         return memcmp(a->contents(), b.c_str(), b_length) == 0;
     }
 
+    std::string native_str(String* s)
+    {
+        // TODO: check against size_t
+        return std::string(reinterpret_cast<char*>(s->contents()), s->length);
+    }
+
+    String* concat(GC& gc, Root<String>& r_a, Root<String>& r_b)
+    {
+        uint64_t length_a = r_a->length;
+        uint64_t length_b = r_b->length;
+        String* c = make_string_nofill(gc, length_a + length_b);
+        memcpy(c->contents(), r_a->contents(), length_a);
+        memcpy(c->contents() + length_a, r_b->contents(), length_b);
+        return c;
+    }
+
+    String* concat(GC& gc, Root<String>& r_a, const std::string& b)
+    {
+        // TODO: could be more efficient; this copies twice.
+        Root<String> r_b(gc, make_string(gc, b));
+        return concat(gc, r_a, r_b);
+    }
+
+    String* concat(GC& gc, const std::string& a, Root<String>& r_b)
+    {
+        // TODO: could be more efficient; this copies twice.
+        Root<String> r_a(gc, make_string(gc, a));
+        return concat(gc, r_a, r_b);
+    }
+
     String* concat(GC& gc, const std::vector<std::string>& parts)
     {
         size_t total_len = 0;
@@ -376,6 +406,21 @@ namespace Katsu
         }
 
         return cat;
+    }
+
+    String* concat_with_suffix(GC& gc, Root<Vector>& r_strings, const std::string& each_suffix)
+    {
+        // TODO: linear instead of quadratic time.
+        String* s = make_string(gc, "");
+        uint64_t num_strings = r_strings->length;
+        for (uint64_t i = 0; i < num_strings; i++) {
+            Root<String> r_s(gc, std::move(s));
+            Root<String> r_component(gc,
+                                     r_strings->v_array.obj_array()->components()[i].obj_string());
+            Root<String> r_s_component(gc, concat(gc, r_s, r_component));
+            s = concat(gc, r_s_component, each_suffix);
+        }
+        return s;
     }
 
     void pprint(std::vector<Object*>& objects_seen, Value value, int depth,

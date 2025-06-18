@@ -83,12 +83,7 @@ namespace Katsu
         ASSERT(nargs == 2);
         Root<String> r_a(vm.gc, args[0].obj_string());
         Root<String> r_b(vm.gc, args[1].obj_string());
-        uint64_t length_a = r_a->length;
-        uint64_t length_b = r_b->length;
-        String* c = make_string_nofill(vm.gc, length_a + length_b);
-        memcpy(c->contents(), r_a->contents(), length_a);
-        memcpy(c->contents() + length_a, r_b->contents(), length_b);
-        return Value::object(c);
+        return Value::object(concat(vm.gc, r_a, r_b));
     }
 
     Value native__plus_(VM& vm, int64_t nargs, Value* args)

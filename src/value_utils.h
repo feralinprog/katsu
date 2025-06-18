@@ -74,11 +74,21 @@ namespace Katsu
     // Determine if a String and string are equal, i.e. have the same contents.
     bool string_eq(String* a, const std::string& b);
 
+    // Copy a String into a newly allocated native string.
+    std::string native_str(String* s);
+    // Concatenate two Strings.
+    String* concat(GC& gc, Root<String>& r_a, Root<String>& r_b);
+    // Concatenate a String and native string.
+    String* concat(GC& gc, Root<String>& r_a, const std::string& b);
+    // Concatenate a native string and String.
+    String* concat(GC& gc, const std::string& a, Root<String>& r_b);
     // Concatenate all the given strings.
     String* concat(GC& gc, const std::vector<std::string>& parts);
-    // Concate all the given strings (each with a given suffix applied -- commonly ":").
+    // Concatenate all the given strings (each with a given suffix applied -- commonly ":").
     String* concat_with_suffix(GC& gc, const std::vector<std::string>& parts,
                                const std::string& each_suffix);
+    // Concatenate all the given strings (each with a given suffix applied -- commonly ":");
+    String* concat_with_suffix(GC& gc, Root<Vector>& r_strings, const std::string& each_suffix);
 
     // Pretty-print a value (to stdout), with an optional initial indent and an initial indentation
     // depth.
