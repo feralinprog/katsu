@@ -225,9 +225,19 @@ namespace Katsu
 
     void call_impl(OpenVM& vm, bool tail_call, Value v_callable, int64_t nargs, Value* args)
     {
-        // TODO: tail-calls
-        ASSERT_MSG(!tail_call, "tail calls not implemented");
-        Frame* frame = vm.frame();
+        // In case of tail-call, we need to temporarily store the args as we unwind the current
+        // frame and replace it with a new frame.
+        Value args_copy[nargs];
+        if (tail_call) {
+            Frame* frame = vm.frame();
+            frame->inst_spot++;
+            for (uint32_t i = 0; i < nargs; i++) {
+                args_copy[i] = args[i];
+            }
+            vm.unwind_frame(/* tail_call */ true);
+            args = args_copy;
+        }
+
         if (v_callable.is_obj_closure()) {
             Closure* closure = v_callable.obj_closure();
             ASSERT(closure->v_code.is_obj_code());
@@ -243,12 +253,8 @@ namespace Katsu
                 throw std::runtime_error("called a closure with wrong number of arguments");
             }
 
-            Frame* next = vm.alloc_frame(code->num_regs,
-                                         code->num_data,
-                                         Value::object(code),
-                                         /* v_cleanup */ Value::null(),
-                                         /* is_cleanup */ false,
-                                         code->v_module);
+            Frame* next =
+                vm.alloc_frame(code->num_regs, code->num_data, Value::object(code), code->v_module);
 
             // In the closure's frame:
             // - local 0...n are the call arguments (which may just be <null>, in the special case
@@ -275,12 +281,18 @@ namespace Katsu
                 next->regs()[dst] = upreg;
             }
 
-            frame->inst_spot++;
+            if (!tail_call) {
+                Frame* frame = vm.frame();
+                frame->inst_spot++;
+            }
             vm.set_frame(next);
         } else {
             // Just push the callable; it returns itself.
             // TODO: what if multimethod or method? should actually be callable
-            frame->inst_spot++;
+            Frame* frame = vm.frame();
+            if (!tail_call) {
+                frame->inst_spot++;
+            }
             frame->data()[frame->data_depth++] = v_callable;
         }
     }

@@ -22,17 +22,30 @@ a instance?: Closure
 
 print: "this is " ~ "a test"
 
+method: [if: (cond: Bool) then: tbody else: fbody] does: [
+    # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
+    TAIL-CALL: (cond then: tbody else: fbody)
+]
+
+method: [if: (cond: Bool) then: tbody] does: [
+    # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
+    TAIL-CALL: (cond then: tbody else: null)
+]
+
 method: [while: (cond: Closure) do: (body: Closure)] does: [
-    (cond call) then: [
+    # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
+    TAIL-CALL: ((cond call) then: [
         body call
-        while: cond do: body
-    ] else: null
+        TAIL-CALL: (while: cond do: body)
+    ] else: null)
 ]
 
 method: [run-test] does: [
-    mut: n = 100
+    mut: n = 1000000
     while: [n > 0] do: [
-        pretty-print: n
+        if: (n / 10000) * 10000 = n then: [
+            pretty-print: n
+        ]
         n: n - 1
     ]
 ]

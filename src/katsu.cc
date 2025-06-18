@@ -212,7 +212,7 @@ namespace Katsu
 
         // 100 MiB GC-managed memory.
         GC gc(100 * 1024 * 1024);
-        // 5 MiB call stack size.
-        execute_source(source, gc, 5 * 1024 * 1024);
+        // 100 KiB call stack size.
+        execute_source(source, gc, 100 * 1024);
     }
 };

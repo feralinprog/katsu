@@ -140,13 +140,6 @@ namespace Katsu
         // Current size of the data stack (up to `num_data`).
         uint64_t data_depth;
 
-        // A callable to invoke while unwinding this frame, or null to indicate no cleanup action.
-        Value v_cleanup;
-
-        // Whether this frame is itself the first frame from invoking another frame's cleanup
-        // action.
-        bool is_cleanup;
-
         Value v_module; // Module
 
         // Variable-length array of length `num_regs`.
@@ -261,14 +254,15 @@ namespace Katsu
 
         void single_step();
 
+        void unwind_frame(bool tail_call);
+
         // Look up the method_name in the module, following v_base until null.
         static Value& module_lookup_or_fail(Value v_module, String* name);
 
         // Allocates a call frame. The caller must initialize the new frame's regs() and
         // data(), in particular before any GC operations. Returns the new frame, which the caller
         // must set as the current_frame if desired. Raises runtime_error on stack overflow.
-        Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_cleanup,
-                           bool is_cleanup, Value v_module);
+        Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module);
 
         // Invoke a value (which could be a closure or multimethod) with some arguments. The
         // arguments may be just past the end of the current frame's data stack. This also takes
@@ -315,10 +309,14 @@ namespace Katsu
 
         // See VM::alloc_frame().
         inline Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code,
-                                  Value v_cleanup, bool is_cleanup, Value v_module)
+                                  Value v_module)
         {
-            return this->vm
-                .alloc_frame(num_regs, num_data, v_code, v_cleanup, is_cleanup, v_module);
+            return this->vm.alloc_frame(num_regs, num_data, v_code, v_module);
+        }
+
+        inline void unwind_frame(bool tail_call)
+        {
+            this->vm.unwind_frame(tail_call);
         }
 
         VM& vm;

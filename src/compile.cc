@@ -145,17 +145,18 @@ namespace Katsu
     };
 
     // TODO: track tail-position and emit INVOKE_TAIL when requested
-    void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr)
+    void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr, bool tail_position, bool tail_call)
     {
+        OpCode invoke_op = tail_call ? OpCode::INVOKE_TAIL : OpCode::INVOKE;
         if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
             if (!module_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("name is not defined in module", expr->op.span);
             }
-            compile_expr(gc, builder, *expr->arg);
+            compile_expr(gc, builder, *expr->arg, /* tail_position */ false, /* tail_call */ false);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -1 + 1);
+            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
@@ -164,10 +165,18 @@ namespace Katsu
             if (!module_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("name is not defined in module", expr->op.span);
             }
-            compile_expr(gc, builder, *expr->left);
-            compile_expr(gc, builder, *expr->right);
+            compile_expr(gc,
+                         builder,
+                         *expr->left,
+                         /* tail_position */ false,
+                         /* tail_call */ false);
+            compile_expr(gc,
+                         builder,
+                         *expr->right,
+                         /* tail_position */ false,
+                         /* tail_call */ false);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1);
+            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -2 + 1);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(2));
         } else if (NameExpr* expr = dynamic_cast<NameExpr*>(&_expr)) {
@@ -259,9 +268,13 @@ namespace Katsu
             if (!module_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("name is not defined in module", expr->message.span);
             }
-            compile_expr(gc, builder, *expr->target);
+            compile_expr(gc,
+                         builder,
+                         *expr->target,
+                         /* tail_position */ false,
+                         /* tail_call */ false);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -1 + 1);
+            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(&_expr)) {
@@ -307,7 +320,11 @@ namespace Katsu
                             throw compile_error("setting mutable variable requires no target",
                                                 expr->span);
                         }
-                        compile_expr(gc, builder, *expr->args[0]);
+                        compile_expr(gc,
+                                     builder,
+                                     *expr->args[0],
+                                     /* tail_position */ false,
+                                     /* tail_call */ false);
                         // STORE_REF: <local index>
                         builder.emit_op(gc, OpCode::STORE_REF, /* stack_height_delta */ -1);
                         builder.emit_arg(gc, Value::fixnum(local.local_index));
@@ -341,7 +358,11 @@ namespace Katsu
                                     expr->span);
                             }
                             // Compile initial value _without_ the new binding established.
-                            compile_expr(gc, builder, *b->right);
+                            compile_expr(gc,
+                                         builder,
+                                         *b->right,
+                                         /* tail_position */ false,
+                                         /* tail_call */ false);
                             // Then add the binding.
                             uint32_t local_index = builder.num_regs++;
                             builder.bindings.emplace(name,
@@ -373,6 +394,21 @@ namespace Katsu
                     }
                 }
             }
+            if (expr->messages.size() == 1 &&
+                std::get<std::string>(expr->messages[0].value) == "TAIL-CALL") {
+                if (expr->target) {
+                    throw compile_error("TAIL-CALL: requires no target", expr->span);
+                }
+                if (!tail_position) {
+                    throw compile_error("TAIL-CALL: invoked not in tail position", expr->span);
+                }
+                compile_expr(gc,
+                             builder,
+                             *expr->args[0],
+                             /* tail_position */ tail_position,
+                             /* tail_call */ true);
+                return;
+            }
             if (!module_lookup(*builder.r_module, *r_name)) {
                 throw compile_error(
                     "name is not defined in module (and is also not <a mutable local>:)",
@@ -380,7 +416,11 @@ namespace Katsu
             }
 
             if (expr->target) {
-                compile_expr(gc, builder, *expr->target.value());
+                compile_expr(gc,
+                             builder,
+                             *expr->target.value(),
+                             /* tail_position */ false,
+                             /* tail_call */ false);
             } else {
                 // Load the default receiver, which is always register 0.
                 // LOAD_REG: <local index>
@@ -388,16 +428,16 @@ namespace Katsu
                 builder.emit_arg(gc, Value::fixnum(0));
             }
             for (const std::unique_ptr<Expr>& arg : expr->args) {
-                compile_expr(gc, builder, *arg);
+                compile_expr(gc, builder, *arg, /* tail_position */ false, /* tail_call */ false);
             }
             // INVOKE: <name>, <num args>
             builder.emit_op(gc,
-                            OpCode::INVOKE,
+                            invoke_op,
                             /* stack_height_delta */ -(int64_t)expr->args.size());
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1 + expr->args.size()));
         } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
-            compile_expr(gc, builder, *expr->inner);
+            compile_expr(gc, builder, *expr->inner, tail_position, tail_call);
         } else if (BlockExpr* expr = dynamic_cast<BlockExpr*>(&_expr)) {
             // Block with no parameters still has one implicit parameter: `it`.
 
@@ -435,7 +475,11 @@ namespace Katsu
                                                              .local_index = local_index++});
                 }
             }
-            compile_expr(gc, closure_builder, *expr->body);
+            compile_expr(gc,
+                         closure_builder,
+                         *expr->body,
+                         /* tail_position */ true,
+                         /* tail_call */ false);
             ValueRoot r_closure_code(gc, Value::object(closure_builder.finalize(gc)));
             uint64_t num_upreg_loads = closure_builder.r_upreg_loading->length;
             ASSERT(num_upreg_loads == closure_builder.r_upreg_map->length);
@@ -453,7 +497,11 @@ namespace Katsu
             builder.emit_arg(gc, *r_closure_code);
         } else if (DataExpr* expr = dynamic_cast<DataExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
-                compile_expr(gc, builder, *component);
+                compile_expr(gc,
+                             builder,
+                             *component,
+                             /* tail_position */ false,
+                             /* tail_call */ false);
             }
             // MAKE_VECTOR: <num components>
             builder.emit_op(gc,
@@ -472,14 +520,22 @@ namespace Katsu
             // Drop all but the last component's result.
             for (size_t i = 0; i < expr->components.size(); i++) {
                 bool last = i == expr->components.size() - 1;
-                compile_expr(gc, builder, *expr->components[i]);
+                compile_expr(gc,
+                             builder,
+                             *expr->components[i],
+                             /* tail_position */ tail_position && last,
+                             /* tail_call */ false);
                 if (!last) {
                     builder.emit_op(gc, OpCode::DROP, /* stack_height_delta */ -1);
                 }
             }
         } else if (TupleExpr* expr = dynamic_cast<TupleExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
-                compile_expr(gc, builder, *component);
+                compile_expr(gc,
+                             builder,
+                             *component,
+                             /* tail_position */ false,
+                             /* tail_call */ false);
             }
             // MAKE_TUPLE: <num components>
             builder.emit_op(gc,
@@ -539,7 +595,11 @@ namespace Katsu
                         param_names.push_back(std::get<std::string>(n->messages[0].value));
 
                         // Add a type-matcher evaluated from n->args[0];
-                        compile_expr(gc, module_builder, *n->args[0]);
+                        compile_expr(gc,
+                                     module_builder,
+                                     *n->args[0],
+                                     /* tail_position */ false,
+                                     /* tail_call */ false);
                         // We must ensure it's a Type at runtime.
                         module_builder.emit_op(gc,
                                                OpCode::VERIFY_IS_TYPE,
@@ -678,7 +738,7 @@ namespace Katsu
                                          .local_index = local_index++,
                                      });
         }
-        compile_expr(gc, builder, *body);
+        compile_expr(gc, builder, *body, /* tail_position */ true, /* tail_call */ false);
 
         // Generate the method. This has to be at runtime, since parameter matchers are evaluated at
         // runtime. At this point, the matchers have been calculated and are at the top of the data
@@ -715,7 +775,11 @@ namespace Katsu
 
         // Attributes:
         if (attrs) {
-            compile_expr(gc, module_builder, *attrs);
+            compile_expr(gc,
+                         module_builder,
+                         *attrs,
+                         /* tail_position */ false,
+                         /* tail_call */ false);
         } else {
             // Generate a 0-length vector.
             // MAKE_VECTOR: <length>
@@ -1230,7 +1294,11 @@ namespace Katsu
                                 const std::string& name = std::get<std::string>(n->name.value);
                                 Root<String> r_name(gc, make_string(gc, name));
                                 // Compile initial value _without_ the new binding established.
-                                compile_expr(gc, builder, *b->right);
+                                compile_expr(gc,
+                                             builder,
+                                             *b->right,
+                                             /* tail_position */ false,
+                                             /* tail_call */ false);
                                 // Then add the (module) binding.
                                 // TODO: this is weird. what value do we put in the module initially
                                 // (during compile time)?
@@ -1277,7 +1345,11 @@ namespace Katsu
                     continue;
                 }
             }
-            compile_expr(gc, builder, *top_level_expr);
+            compile_expr(gc,
+                         builder,
+                         *top_level_expr,
+                         /* tail_position */ false,
+                         /* tail_call */ false);
         }
 
         // If the top level expressions were all definitions, there may be no code to execute (and

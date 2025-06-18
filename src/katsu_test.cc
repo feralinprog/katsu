@@ -828,6 +828,47 @@ method: [n triangular-num] does: [n triangular-num: 0]
         check(Value::fixnum(100 * (100 + 1) / 2));
     }
 
+    SECTION("tail recursion")
+    {
+        input(R"(
+method: [n triangular-num: result] does: [
+    # TODO: then:else: should probably assume tail-call if in tail position, even if not requested
+    TAIL-CALL: ((n = 0) then: result else: [
+        TAIL-CALL: ((n - 1) triangular-num: (n + result))
+    ])
+]
+
+method: [n triangular-num] does: [n triangular-num: 0]
+
+2000 triangular-num
+        )");
+        // No need to bump stack limit!
+        check(Value::fixnum(2000 * (2000 + 1) / 2));
+    }
+
+    SECTION("nontail position - cannot tail call")
+    {
+        input(R"(
+method: [testing] does: [
+    TAIL-CALL: testing
+    "but does something afterwards"
+]
+        )");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("TAIL-CALL: invoked not in tail position"));
+    }
+
+    SECTION("TAIL-CALL: at top level")
+    {
+        input(R"(
+TAIL-CALL: (1 + 2)
+        )");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("TAIL-CALL: invoked not in tail position"));
+    }
+
     SECTION("multimethod smoketest")
     {
         SECTION("multimethod accepts stated argument types")
