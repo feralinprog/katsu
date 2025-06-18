@@ -177,7 +177,7 @@ namespace Katsu
 
     Type* make_type_raw(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
                         Root<Array>& r_linearization, Root<Vector>& r_subtypes, Type::Kind kind,
-                        OptionalRoot<Vector>& r_slots)
+                        OptionalRoot<Array>& r_slots)
     {
         // TODO: check Type components in r_bases
         // Nothing to check for `sealed`.
@@ -211,7 +211,7 @@ namespace Katsu
         Type* type = *r_type;
         ASSERT_ARG(type->kind == Type::Kind::DATACLASS);
 
-        uint64_t num_slots = type->v_slots.obj_vector()->length;
+        uint64_t num_slots = type->v_slots.obj_array()->length;
         DataclassInstance* inst = gc.alloc<DataclassInstance>(num_slots);
         inst->v_type = r_type.value();
         return inst;
@@ -855,7 +855,7 @@ namespace Katsu
     }
 
     Type* make_type(GC& gc, Root<String>& r_name, Root<Array>& r_bases, bool sealed,
-                    Type::Kind kind, OptionalRoot<Vector>& r_slots)
+                    Type::Kind kind, OptionalRoot<Array>& r_slots)
     {
         // TODO: the r_linearization will just be thrown away later. Ideally don't even allocate it.
         Root<Array> r_init_linearization(gc, make_array(gc, /* length */ 0));

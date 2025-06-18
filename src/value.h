@@ -702,7 +702,7 @@ namespace Katsu
         Value v_subtypes;      // Vector (of Types)
         Kind kind;
         // If dataclass type (else null):
-        Value v_slots; // Vector (of Strings)
+        Value v_slots; // Array (of Strings)
 
         // Size in bytes.
         static inline uint64_t size()

@@ -301,7 +301,7 @@ TEST_CASE("c3 linearization", "[value-utils]")
 
     auto make = [&gc](const std::string& name, Root<Array>& r_bases) {
         Root<String> r_name(gc, make_string(gc, name));
-        OptionalRoot<Vector> r_slots(gc, nullptr);
+        OptionalRoot<Array> r_slots(gc, nullptr);
         return make_type(gc,
                          r_name,
                          r_bases,
