@@ -86,25 +86,115 @@ namespace Katsu
         return Value::object(concat(vm.gc, r_a, r_b));
     }
 
-    Value native__plus_(VM& vm, int64_t nargs, Value* args)
+    Value native__add_(VM& vm, int64_t nargs, Value* args)
     {
         // a + b
         ASSERT(nargs == 2);
         return Value::fixnum(args[0].fixnum() + args[1].fixnum());
     }
 
-    Value native__minus_(VM& vm, int64_t nargs, Value* args)
+    Value native__sub_(VM& vm, int64_t nargs, Value* args)
     {
         // a - b
         ASSERT(nargs == 2);
         return Value::fixnum(args[0].fixnum() - args[1].fixnum());
     }
 
-    Value native__eq_(VM& vm, int64_t nargs, Value* args)
+    Value native__plus(VM& vm, int64_t nargs, Value* args)
     {
+        // + b
+        ASSERT(nargs == 1);
+        return args[0];
+    }
+
+    Value native__minus(VM& vm, int64_t nargs, Value* args)
+    {
+        // - b
+        ASSERT(nargs == 1);
+        return Value::fixnum(-args[0].fixnum());
+    }
+
+    Value native__mult_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a * b
+        ASSERT(nargs == 2);
+        return Value::fixnum(args[0].fixnum() * args[1].fixnum());
+    }
+
+    Value native__div_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a / b
+        ASSERT(nargs == 2);
+        return Value::fixnum(args[0].fixnum() / args[1].fixnum());
+    }
+
+    Value native__id_eq_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a id= b
         // a = b
         ASSERT(nargs == 2);
         return Value::_bool(args[0] == args[1]);
+    }
+
+    Value native__id_ne_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a id!= b
+        // a != b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0] != args[1]);
+    }
+
+    Value native__gt_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a > b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0].fixnum() > args[1].fixnum());
+    }
+
+    Value native__gte_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a >= b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0].fixnum() >= args[1].fixnum());
+    }
+
+    Value native__lt_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a < b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0].fixnum() < args[1].fixnum());
+    }
+
+    Value native__lte_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a <= b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0].fixnum() <= args[1].fixnum());
+    }
+
+    Value native__and_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a and b
+        ASSERT(nargs == 2);
+        bool a = args[0]._bool();
+        bool b = args[1]._bool();
+        return Value::_bool(a && b);
+    }
+
+    Value native__or_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a or b
+        ASSERT(nargs == 2);
+        bool a = args[0]._bool();
+        bool b = args[1]._bool();
+        return Value::_bool(a || b);
+    }
+
+    Value native__not(VM& vm, int64_t nargs, Value* args)
+    {
+        // not a
+        ASSERT(nargs == 1);
+        return Value::_bool(!args[0]._bool());
     }
 
     Value native__print_(VM& vm, int64_t nargs, Value* args)
@@ -114,6 +204,15 @@ namespace Katsu
         String* s = args[1].obj_string();
         std::cout.write(reinterpret_cast<char*>(s->contents()), s->length) << "\n";
         return Value::null();
+    }
+
+    Value native__pr(VM& vm, int64_t nargs, Value* args)
+    {
+        // val pr
+        ASSERT(nargs == 1);
+        String* s = args[0].obj_string();
+        std::cout.write(reinterpret_cast<char*>(s->contents()), s->length) << "\n";
+        return args[0];
     }
 
     Value native__pretty_print_(VM& vm, int64_t nargs, Value* args)
@@ -343,21 +442,105 @@ namespace Katsu
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "+:", 2, matchers2, &native__plus_);
+            add_native(vm.gc, r_module, "+:", 2, matchers2, &native__add_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "-:", 2, matchers2, &native__minus_);
+            add_native(vm.gc, r_module, "-:", 2, matchers2, &native__sub_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "+", 1, matchers1, &native__plus);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "-", 1, matchers1, &native__minus);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "*:", 2, matchers2, &native__mult_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "/:", 2, matchers2, &native__div_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
-            add_native(vm.gc, r_module, "=:", 2, matchers2, &native__eq_);
+            // By default, = and id= are the same.
+            add_native(vm.gc, r_module, "id=:", 2, matchers2, &native__id_eq_);
+            add_native(vm.gc, r_module, "=:", 2, matchers2, &native__id_eq_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_native(vm.gc, r_module, "id!=:", 2, matchers2, &native__id_ne_);
+            add_native(vm.gc, r_module, "!=:", 2, matchers2, &native__id_ne_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, ">:", 2, matchers2, &native__gt_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, ">=:", 2, matchers2, &native__gte_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "<:", 2, matchers2, &native__lt_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc, r_module, "<=:", 2, matchers2, &native__lte_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Bool);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
+            add_native(vm.gc, r_module, "and:", 2, matchers2, &native__and_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_Bool);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
+            add_native(vm.gc, r_module, "or:", 2, matchers2, &native__or_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = vm.builtin(BuiltinId::_Bool);
+            add_native(vm.gc, r_module, "not", 1, matchers1, &native__not);
         }
 
         {
@@ -365,6 +548,12 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_String);
             add_native(vm.gc, r_module, "print:", 2, matchers2, &native__print_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "pr", 1, matchers1, &native__pr);
         }
 
         {

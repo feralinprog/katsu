@@ -314,6 +314,62 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::fixnum(3));
     }
 
+    SECTION("fixnum +")
+    {
+        input("+ 4");
+        check(Value::fixnum(4));
+    }
+
+    SECTION("fixnum -")
+    {
+        input("- 4");
+        check(Value::fixnum(-4));
+    }
+
+    SECTION("fixnum *:")
+    {
+        input("3 * 4");
+        check(Value::fixnum(12));
+    }
+
+    SECTION("fixnum /:")
+    {
+        input("12 / 4");
+        check(Value::fixnum(3));
+    }
+
+    // TODO: handle divide by zero
+    // SECTION("fixnum /: - divide by zero")
+    // {
+    //     input("1 / 0");
+    //     check(Value::fixnum(0));
+    // }
+
+    // TODO: add id!= as an operator
+    SECTION("fixnum id=: positive case")
+    {
+        input("1 id=: 1");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum id=: negative case")
+    {
+        input("1 id=: 2");
+        check(Value::_bool(false));
+    }
+
+    SECTION("object id=: positive case")
+    {
+        input("Fixnum id=: Fixnum");
+        check(Value::_bool(true));
+    }
+
+    SECTION("object id=: negative case")
+    {
+        input(R"("abc" id=: "abc")");
+        check(Value::_bool(false));
+    }
+
     SECTION("fixnum =: positive case")
     {
         input("1 = 1");
@@ -334,7 +390,166 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("object =: negative case")
     {
+        // TODO: this should be a positive case in the future!
         input(R"("abc" = "abc")");
+        check(Value::_bool(false));
+    }
+
+    // TODO: add id!= as an operator
+    SECTION("fixnum id!=: negative case")
+    {
+        input("1 id!=: 1");
+        check(Value::_bool(false));
+    }
+
+    SECTION("fixnum id!=: positive case")
+    {
+        input("1 id!=: 2");
+        check(Value::_bool(true));
+    }
+
+    SECTION("object id!=: negative case")
+    {
+        input("Fixnum id!=: Fixnum");
+        check(Value::_bool(false));
+    }
+
+    SECTION("object id!=: positive case")
+    {
+        input(R"("abc" id!=: "abc")");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum !=: negative case")
+    {
+        input("1 != 1");
+        check(Value::_bool(false));
+    }
+
+    SECTION("fixnum !=: positive case")
+    {
+        input("1 != 2");
+        check(Value::_bool(true));
+    }
+
+    SECTION("object !=: negative case")
+    {
+        input("Fixnum != Fixnum");
+        check(Value::_bool(false));
+    }
+
+    SECTION("object !=: positive case")
+    {
+        // TODO: this should be a negative case in the future!
+        input(R"("abc" != "abc")");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum >: positive case")
+    {
+        input("2 > 1");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum >: negative case")
+    {
+        input("1 > 1");
+        check(Value::_bool(false));
+    }
+
+    SECTION("fixnum >=: positive case")
+    {
+        input("1 >= 1");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum >=: negative case")
+    {
+        input("1 >= 2");
+        check(Value::_bool(false));
+    }
+
+    SECTION("fixnum <: positive case")
+    {
+        input("1 < 2");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum <: negative case")
+    {
+        input("1 < 1");
+        check(Value::_bool(false));
+    }
+
+    SECTION("fixnum <=: positive case")
+    {
+        input("1 <= 1");
+        check(Value::_bool(true));
+    }
+
+    SECTION("fixnum <=: negative case")
+    {
+        input("2 <= 1");
+        check(Value::_bool(false));
+    }
+
+    SECTION("bool and: false/false case")
+    {
+        input("f and f");
+        check(Value::_bool(false));
+    }
+
+    SECTION("bool and: false/true case")
+    {
+        input("f and t");
+        check(Value::_bool(false));
+    }
+
+    SECTION("bool and: true/false case")
+    {
+        input("t and f");
+        check(Value::_bool(false));
+    }
+
+    SECTION("bool and: true/true case")
+    {
+        input("t and t");
+        check(Value::_bool(true));
+    }
+
+    SECTION("bool or: false/false case")
+    {
+        input("f or f");
+        check(Value::_bool(false));
+    }
+
+    SECTION("bool or: false/true case")
+    {
+        input("f or t");
+        check(Value::_bool(true));
+    }
+
+    SECTION("bool or: true/false case")
+    {
+        input("t or f");
+        check(Value::_bool(true));
+    }
+
+    SECTION("bool or: true/true case")
+    {
+        input("t or t");
+        check(Value::_bool(true));
+    }
+
+    SECTION("bool not - false case")
+    {
+        input("not f");
+        check(Value::_bool(true));
+    }
+
+    SECTION("bool not - true case")
+    {
+        input("not t");
         check(Value::_bool(false));
     }
 
@@ -343,6 +558,14 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         cout_capture capture;
         input(R"(print: "hello, world")");
         check(Value::null());
+        CHECK(capture.str() == "hello, world\n");
+    }
+
+    SECTION("pr")
+    {
+        cout_capture capture;
+        input(R"("hello, world" pr)");
+        check(Value::object(make_string(gc, "hello, world")));
         CHECK(capture.str() == "hello, world\n");
     }
 
