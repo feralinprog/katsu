@@ -386,7 +386,8 @@ namespace Katsu
                                        r_bases,
                                        /* sealed */ true,
                                        Type::Kind::PRIMITIVE,
-                                       r_slots));
+                                       r_slots,
+                                       /* num_total_slots */ std::nullopt));
     }
 
     void _register(VM& vm, BuiltinId id, Root<String>& r_name, Root<Module>& r_module,

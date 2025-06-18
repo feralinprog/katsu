@@ -308,6 +308,7 @@ TEST_CASE("GC follows internal references", "[gc]")
         obj->v_subtypes = v_pointees[3];
         obj->kind = Type::Kind::DATACLASS; // not used by GC
         obj->v_slots = v_pointees[4];
+        obj->num_total_slots = 0x12345678;
 
         Value v_obj = Value::object(obj);
         single_root_collect(&v_obj);
@@ -321,6 +322,7 @@ TEST_CASE("GC follows internal references", "[gc]")
         CHECK_POINTEE(3, obj->v_subtypes);
         CHECK(obj->kind == Type::Kind::DATACLASS);
         CHECK_POINTEE(4, obj->v_slots);
+        CHECK(obj->num_total_slots == 0x12345678);
     }
 
     SECTION("DataclassInstance")
@@ -344,6 +346,7 @@ TEST_CASE("GC follows internal references", "[gc]")
         type->v_subtypes = v_pointees[4];
         type->kind = Type::Kind::DATACLASS; // not used by GC
         type->v_slots = v_slots;
+        type->num_total_slots = 2;
         Value v_type = Value::object(type);
         gc.roots.push_back(&v_type);
 

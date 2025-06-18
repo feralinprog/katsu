@@ -703,6 +703,9 @@ namespace Katsu
         Kind kind;
         // If dataclass type (else null):
         Value v_slots; // Array (of Strings)
+        // If dataclass type, number of slots of this dataclass along with any recursive base
+        // dataclasses. Otherwise unused.
+        uint32_t num_total_slots;
 
         // Size in bytes.
         static inline uint64_t size()

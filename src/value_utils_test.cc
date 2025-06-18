@@ -307,7 +307,8 @@ TEST_CASE("c3 linearization", "[value-utils]")
                          r_bases,
                          /* sealed */ false,
                          /* kind */ Type::Kind::PRIMITIVE,
-                         r_slots);
+                         r_slots,
+                         /* num_total_slots */ std::nullopt);
     };
 
     SECTION("successful linearization")
