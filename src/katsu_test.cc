@@ -664,4 +664,34 @@ method: [ a          mm-test:  b         ] does: [ "any - any"    ]
             CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("ambiguous method resolution"));
         }
     }
+
+    SECTION("multimethod parameter matchers evaluated at runtime")
+    {
+        input(R"(
+# TODO: allow mut:s at module level, so we don't need this workaround
+method: [init hacky-make-mut] does: [
+    mut: boxed = init
+    \new-value [
+        boxed # TODO: delete this required workaround
+        new-value = null then: [
+            boxed
+        ] else: [
+            boxed # TODO: delete this required workaround
+            boxed: new-value
+        ]
+    ]
+]
+
+let: verify-matcher = ("matcher not evaluated" hacky-make-mut)
+method: [give-me-Fixnum] does: [ verify-matcher call: "matcher evaluated"; Fixnum ]
+
+let: verify-multimethod = ("multimethod not evaluated" hacky-make-mut)
+method: [(a: (null give-me-Fixnum)) mm-test] does: [ verify-multimethod call: "multimethod evaluated" ]
+
+5 mm-test
+
+(verify-matcher call: null) ~ ", " ~ (verify-multimethod call: null)
+        )");
+        check(Value::object(make_string(gc, "matcher evaluated, multimethod evaluated")));
+    }
 }
