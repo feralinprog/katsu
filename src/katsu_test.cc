@@ -726,7 +726,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
 namespace Katsu
 {
-    Value execute_source(const SourceFile source, GC& gc);
+    Value execute_source(const SourceFile source, GC& gc, uint64_t call_stack_size);
 };
 
 
@@ -744,7 +744,12 @@ TEST_CASE("integration - whole file", "[katsu]")
         };
     };
 
-    auto run = [&source, &gc]() { return execute_source(source, gc); };
+    // Default to a reasonably sized 10 KiB stack.
+    uint64_t call_stack_size = 10 * 1024;
+
+    auto run = [&source, &gc, &call_stack_size]() {
+        return execute_source(source, gc, call_stack_size);
+    };
 
     // Structural check (based on prettyprinting).
     auto check = [&run](Value expected) {
@@ -818,6 +823,8 @@ method: [n triangular-num] does: [n triangular-num: 0]
 
 100 triangular-num
         )");
+        // Bump up stack limit for this.
+        call_stack_size = 100 * 1024;
         check(Value::fixnum(100 * (100 + 1) / 2));
     }
 

@@ -141,13 +141,12 @@ namespace Katsu
         }
     };
 
-    Value execute_source(const SourceFile source, GC& gc)
+    Value execute_source(const SourceFile source, GC& gc, uint64_t call_stack_size)
     {
         Lexer lexer(source);
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
-        // 5 MiB call stack size.
-        VM vm(gc, 5 * 1024 * 1024);
+        VM vm(gc, call_stack_size);
         OptionalRoot<Module> r_module_base(gc, nullptr);
         Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
 
@@ -213,6 +212,7 @@ namespace Katsu
 
         // 100 MiB GC-managed memory.
         GC gc(100 * 1024 * 1024);
-        execute_source(source, gc);
+        // 5 MiB call stack size.
+        execute_source(source, gc, 5 * 1024 * 1024);
     }
 };
