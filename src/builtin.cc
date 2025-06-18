@@ -398,6 +398,44 @@ namespace Katsu
         return Value::null();
     }
 
+    Value native__unsafe_read_u64_at_offset_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj read-u64-at-offset: offset
+        ASSERT(nargs == 2);
+        ASSERT(args[0].is_object());
+        uint64_t read = *((uint64_t*)args[0].object() + args[1].fixnum());
+        ASSERT(read <= INT64_MAX);
+        return Value::fixnum((int64_t)read);
+    }
+
+    Value native__unsafe_write_u64_at_offset_value_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj write-u64-at-offset: offset value: u64
+        ASSERT(nargs == 3);
+        ASSERT(args[0].is_object());
+        ASSERT(args[2].fixnum() >= 0);
+        uint64_t write = (uint64_t)args[2].fixnum();
+        *((uint64_t*)args[0].object() + args[1].fixnum()) = write;
+        return Value::null();
+    }
+
+    Value native__unsafe_read_value_at_offset_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj read-value-at-offset: offset
+        ASSERT(nargs == 2);
+        ASSERT(args[0].is_object());
+        return *((Value*)args[0].object() + args[1].fixnum());
+    }
+
+    Value native__unsafe_write_value_at_offset_value_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj write-value-at-offset: offset value: value
+        ASSERT(nargs == 3);
+        ASSERT(args[0].is_object());
+        *((Value*)args[0].object() + args[1].fixnum()) = args[2];
+        return Value::null();
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -666,6 +704,56 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
             add_native(vm.gc, r_module, "TEST-ASSERT:", 2, matchers2, &native__TEST_ASSERT_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // 'any' matcher
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc,
+                       r_module,
+                       "unsafe-read-u64-at-offset:",
+                       2,
+                       matchers2,
+                       &native__unsafe_read_u64_at_offset_);
+        }
+
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = Value::null(); // 'any' matcher
+            matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            matchers3->components()[2] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc,
+                       r_module,
+                       "unsafe-write-u64-at-offset:value:",
+                       3,
+                       matchers3,
+                       &native__unsafe_write_u64_at_offset_value_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // 'any' matcher
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc,
+                       r_module,
+                       "unsafe-read-value-at-offset:",
+                       2,
+                       matchers2,
+                       &native__unsafe_read_value_at_offset_);
+        }
+
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = Value::null(); // 'any' matcher
+            matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            matchers3->components()[2] = Value::null(); // 'any' matcher
+            add_native(vm.gc,
+                       r_module,
+                       "unsafe-write-value-at-offset:value:",
+                       3,
+                       matchers3,
+                       &native__unsafe_write_value_at_offset_value_);
         }
 
         /*
