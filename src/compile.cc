@@ -762,6 +762,7 @@ namespace Katsu
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = r_module,
+            .num_params = 0,
             .num_regs = 0,
             .num_data = 0,
             .r_upreg_map = r_upreg_map,
