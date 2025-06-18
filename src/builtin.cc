@@ -658,37 +658,9 @@ namespace Katsu
 
         /*
          * TODO:
-         * - cleanup:
-         * - panic!:
-         * - method:does:
-         * - method:does:::
-         * - defer-method: (?)
-         * - Fixnum? (etc. for other builtin types)
-         * - data:has:
-         * - data:extends:has:
-         * - mixin:
+         * - cleanup: (or maybe this is just delimited continuations...)
+         * - panic!: (or maybe this is just delimited continuations...)
          * - mix-in:to:
-         * - let:
-         * - mut:
-         * - ~:
-         * - and:
-         * - or:
-         * - ==:
-         * - !=:
-         * - <:
-         * - <=:
-         * - >:
-         * - >=:
-         * - +:
-         * - -:
-         * - *:
-         * - /:
-         * - not
-         * - +
-         * - -
-         * - print
-         * - pr
-         * - print:
          * - >string
          * - at:
          * - at:=:
@@ -697,6 +669,27 @@ namespace Katsu
          * - length (String / Vector)
          * - anything for FFI!
          * - anything for delimited continuations
+         *
+         * also:
+         * - tail calls
+         * - source spans in bytecode
+         * - module imports/exports (actually start a standard library)
+         *
+         * also move / add some things to compile-time builtins:
+         * - method:does:
+         * - method:does:::
+         * - let:
+         * - mut:
+         * - data:has:
+         * - data:extends:has:
+         * - mixin:
+         *
+         * also move / add some things to katsu instead:
+         * - Fixnum? (etc. for other builtin types)
+         *   (v Fixnum? === v instance-of?: Fixnum)
+         * - print:
+         * - pr
+         * - pretty-print:
          */
     }
 };
