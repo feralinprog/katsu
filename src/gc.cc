@@ -188,9 +188,15 @@ namespace Katsu
             }
         };
 
+#if DEBUG_GC_LOG
+        uint32_t num_roots = 0;
+        const auto add_root = [&num_roots, &move_obj](Value* root) {
+#else
         const auto add_root = [&move_obj](Value* root) {
+#endif
 #if DEBUG_GC_LOG
             std::cout << "GC: adding root @" << root << "\n";
+            num_roots++;
 #endif
             if (!root->is_inline()) {
                 move_obj(root);
@@ -201,6 +207,9 @@ namespace Katsu
         for (RootProvider* provider : this->root_providers) {
             provider->visit_roots(add_root_fn);
         }
+#if DEBUG_GC_LOG
+        std::cout << "GC: total root(s): " << num_roots << "\n";
+#endif
 
         for (Value* root : this->roots) {
             // There shouldn't be any inline roots, but we don't really guard against it.
