@@ -32,26 +32,29 @@ namespace Katsu
      * - value array: aligned 8-byte Values (could be inline or reference), which should be
      *   considered roots for the GC
      *
-     * +--------------+--------+----------------------------------------------------------+
-     * | Name         | Opcode | Arguments ...                                            |
-     * +--------------+--------+----------------------------------------------------------+
-     * | LOAD_REG     |  0x0   | (fixnum) local index                                     |
-     * | STORE_REG    |  0x1   | (fixnum) local index                                     |
-     * | LOAD_REF     |  0x2   | (fixnum) local index                                     |
-     * | STORE_REF    |  0x3   | (fixnum) local index                                     |
-     * | LOAD_VALUE   |  0x4   | value to load                                            |
-     * | INIT_REF     |  0x5   | (fixnum) local index                                     |
-     * | LOAD_MODULE  |  0x6   | (string) name                                            |
-     * | STORE_MODULE |  0x7   | (string) name                                            |
-     * | INVOKE       |  0x8   | (string) name; (fixnum) num args                     (1) |
-     * | INVOKE_TAIL  |  0x9   | (string) name; (fixnum) num args                     (1) |
-     * | DROP         |  0xA   | none                                                     |
-     * | MAKE_TUPLE   |  0xB   | (fixnum) num components                                  |
-     * | MAKE_ARRAY   |  0xC   | (fixnum) num components                                  |
-     * | MAKE_VECTOR  |  0xD   | (fixnum) num components                                  |
-     * | MAKE_CLOSURE |  0xE   | (closure) closure 'template'                         (2) |
-     * | VERIFY_IS_TYPE | 0xF  | none                                                     |
-     * +--------------+--------+----------------------------------------------------------+
+     * +----------------+--------+----------------------------------------------------------+
+     * | Name           | Opcode | Arguments ...                                            |
+     * +----------------+--------+----------------------------------------------------------+
+     * | LOAD_REG       |  0x0   | (fixnum) local index                                     |
+     * | STORE_REG      |  0x1   | (fixnum) local index                                     |
+     * | LOAD_REF       |  0x2   | (fixnum) local index                                     |
+     * | STORE_REF      |  0x3   | (fixnum) local index                                     |
+     * | LOAD_VALUE     |  0x4   | value to load                                            |
+     * | INIT_REF       |  0x5   | (fixnum) local index                                     |
+     * | LOAD_MODULE    |  0x6   | (string) name                                            |
+     * | STORE_MODULE   |  0x7   | (string) name                                            |
+     * | INVOKE         |  0x8   | (string) name; (fixnum) num args                     (1) |
+     * | INVOKE_TAIL    |  0x9   | (string) name; (fixnum) num args                     (1) |
+     * | DROP           |  0xA   | none                                                     |
+     * | MAKE_TUPLE     |  0xB   | (fixnum) num components                                  |
+     * | MAKE_ARRAY     |  0xC   | (fixnum) num components                                  |
+     * | MAKE_VECTOR    |  0xD   | (fixnum) num components                                  |
+     * | MAKE_CLOSURE   |  0xE   | (closure) closure 'template'                         (2) |
+     * | MAKE_INSTANCE  |  0xF   | (fixnum) num slots                                       |
+     * | VERIFY_IS_TYPE |  0x10  | none                                                     |
+     * | GET_SLOT       |  0x11  | (fixnum) slot index                                      |
+     * | SET_SLOT       |  0x12  | (fixnum) slot index                                      |
+     * +----------------+--------+----------------------------------------------------------+
      * Notes:
      * (1) This should probably refer to an actual multimethod object to avoid lookups...
      *     similarly load/store with module fields should be precomputed somehow.
@@ -114,7 +117,10 @@ namespace Katsu
         MAKE_ARRAY,
         MAKE_VECTOR,
         MAKE_CLOSURE,
+        MAKE_INSTANCE,
         VERIFY_IS_TYPE,
+        GET_SLOT,
+        SET_SLOT,
     };
 
     struct Frame
@@ -186,6 +192,11 @@ namespace Katsu
         {
             ASSERT_MSG(this->data_depth > 0, "data stack underflow in frame");
             return this->data()[--this->data_depth];
+        }
+        inline Value* peek_many(uint32_t num_values)
+        {
+            ASSERT_MSG(this->data_depth >= num_values, "data stack underflow in frame");
+            return this->data() + this->data_depth - num_values;
         }
         inline Value* pop_many(uint32_t num_values)
         {

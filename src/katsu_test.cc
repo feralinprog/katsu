@@ -931,4 +931,45 @@ method: [(a: (null give-me-Fixnum)) mm-test] does: [ verify-multimethod call: "m
         )");
         check(Value::object(make_string(gc, "matcher evaluated, multimethod evaluated")));
     }
+
+    SECTION("dataclass smoketest")
+    {
+        input(R"(
+data: Thing has: { slot-a; slot-b; slot-c }
+
+TEST-ASSERT: not ("abc" Thing?)
+
+let: thing = (Thing slot-a: t slot-b: 5 slot-c: "c")
+TEST-ASSERT: thing Thing?
+TEST-ASSERT: (thing .slot-a = t)
+TEST-ASSERT: (thing .slot-b = 5)
+# TODO: add string deep equality so this can be a real check...
+# TEST-ASSERT: (thing .slot-c = "c")
+
+thing slot-a: 10
+TEST-ASSERT: (thing .slot-a = 10)
+TEST-ASSERT: (thing .slot-b = 5)
+# TEST-ASSERT: (thing .slot-c = "c")
+
+thing slot-b: 20
+TEST-ASSERT: (thing .slot-a = 10)
+TEST-ASSERT: (thing .slot-b = 20)
+# TEST-ASSERT: (thing .slot-c = "c")
+
+thing slot-c: 30
+TEST-ASSERT: (thing .slot-a = 10)
+TEST-ASSERT: (thing .slot-b = 20)
+TEST-ASSERT: (thing .slot-c = 30)
+        )");
+        check(Value::null());
+    }
+
+    // TODO: test
+    // - dataclass with no fields
+    // - dataclass extending from dataclass base
+    // - dataclass with field matching some base
+    // - dataclass extending from sealed base
+    // - dataclass extending from multiple dataclass bases
+    // - dataclass extending from dataclass base and another type (mixin)
+    // - dataclass needing to share an existing multimethod (with conflict)
 }

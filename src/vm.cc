@@ -326,11 +326,48 @@ namespace Katsu
                 shift_inst();
                 break;
             }
+            case OpCode::MAKE_INSTANCE: {
+                // arg() is invalidated by any GC access, so acquire num_slots ahead of time.
+                auto num_slots = arg().fixnum();
+                // TODO: check >= 0
+                // Peek instead of pop so we keep the values live.
+                Value* type_and_slots = this->current_frame->peek_many(1 + num_slots);
+                Root<Type> r_type(this->gc, type_and_slots[0].obj_type());
+                DataclassInstance* inst = make_instance_nofill(this->gc, r_type);
+                // Now we can pop, since there's no further allocation.
+                type_and_slots = this->current_frame->pop_many(1 + num_slots);
+                Value* slots = type_and_slots + 1;
+                for (int64_t i = 0; i < num_slots; i++) {
+                    inst->slots()[i] = slots[i];
+                }
+                this->current_frame->push(Value::object(inst));
+                shift_inst();
+                break;
+            }
             case OpCode::VERIFY_IS_TYPE: {
                 Value value = this->current_frame->peek();
                 if (!value.is_obj_type()) {
                     throw std::runtime_error("value must be a Type");
                 }
+                shift_inst();
+                break;
+            }
+            case OpCode::GET_SLOT: {
+                // arg() is invalidated by any GC access, so acquire slot_index ahead of time.
+                auto slot_index = arg().fixnum();
+                DataclassInstance* inst = this->current_frame->pop().obj_instance();
+                // TODO: check within bounds
+                this->current_frame->push(inst->slots()[slot_index]);
+                shift_inst();
+                break;
+            }
+            case OpCode::SET_SLOT: {
+                // arg() is invalidated by any GC access, so acquire slot_index ahead of time.
+                auto slot_index = arg().fixnum();
+                Value value = this->current_frame->pop();
+                DataclassInstance* inst = this->current_frame->pop().obj_instance();
+                // TODO: check within bounds
+                inst->slots()[slot_index] = value;
                 shift_inst();
                 break;
             }

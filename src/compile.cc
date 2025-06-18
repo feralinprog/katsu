@@ -750,6 +750,416 @@ namespace Katsu
         module_builder.emit_arg(gc, Value::fixnum(3));
     }
 
+    void aggregate_slots(GC& gc, Root<Vector>& r_slots, Type* type)
+    {
+        Root<Type> r_type(gc, std::move(type));
+
+        Root<Array> r_bases(gc, r_type->v_bases.obj_array());
+        uint64_t num_bases = r_bases->length;
+        for (uint64_t i = 0; i < num_bases; i++) {
+            Value v_base = r_bases->components()[i];
+            ASSERT(v_base.is_obj_type());
+            Type* base = v_base.obj_type();
+            if (base->kind == Type::Kind::DATACLASS) {
+                aggregate_slots(gc, r_slots, base);
+                // `[v_]base` must be assumed invalidated.
+            }
+        }
+
+        ASSERT(r_type->v_slots.is_obj_array());
+        Root<Array> r_type_slots(gc, r_type->v_slots.obj_array());
+        uint64_t num_slots = r_type_slots->length;
+        for (uint64_t i = 0; i < num_slots; i++) {
+            Value slot = r_type_slots->components()[i];
+            ValueRoot r_slot(gc, std::move(slot));
+            append(gc, r_slots, r_slot);
+        }
+    }
+
+    // receiver, extends are optional
+    void compile_dataclass(GC& gc, Root<Module>& r_module, const std::string& message,
+                           SourceSpan& span, Expr* receiver, Expr& name, Expr* extends, Expr& has)
+    {
+        if (receiver) {
+            std::stringstream ss;
+            ss << message << " takes no receiver";
+            throw compile_error(ss.str(), span);
+        }
+
+        NameExpr* name_expr = dynamic_cast<NameExpr*>(&name);
+        if (!name_expr) {
+            std::stringstream ss;
+            ss << message << " 'name' argument must be a name";
+            throw compile_error(ss.str(), name.span);
+        }
+        const std::string& class_name = std::get<std::string>(name_expr->name.value);
+        Root<String> r_class_name(gc, make_string(gc, class_name));
+        if (module_lookup(*r_module, *r_class_name)) {
+            std::stringstream ss;
+            ss << message << " class name '" << class_name << "' already exists in module scope";
+            throw compile_error(ss.str(), name.span);
+        }
+
+        Root<Vector> r_extends(gc, make_vector(gc, 0));
+        if (extends) {
+            bool saw_dataclass = false;
+            DataExpr* data_expr = dynamic_cast<DataExpr*>(extends);
+            if (!data_expr) {
+                std::stringstream ss;
+                ss << message << " 'extends' argument must be a vector of names";
+                throw compile_error(ss.str(), extends->span);
+            }
+            for (std::unique_ptr<Expr>& base_expr : data_expr->components) {
+                NameExpr* base_name_expr = dynamic_cast<NameExpr*>(base_expr.get());
+                if (!base_name_expr) {
+                    std::stringstream ss;
+                    ss << message << " 'extends' argument must be a sequence of names";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+                const std::string& base_name = std::get<std::string>(base_name_expr->name.value);
+                Root<String> r_base_name(gc, make_string(gc, base_name));
+                Value* lookup = module_lookup(*r_module, *r_base_name);
+                if (!lookup) {
+                    std::stringstream ss;
+                    ss << "Name '" << base_name << "' is not in module scope";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+                if (!lookup->is_obj_type()) {
+                    std::stringstream ss;
+                    ss << "Value '" << base_name << "' must be a Type";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+
+                Type* base = lookup->obj_type();
+                if (base->sealed) {
+                    std::stringstream ss;
+                    ss << "Cannot extend from sealed type '" << base_name << "'";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+                // TODO: This feels a bit hacky. Better way? Maybe separate args.
+                if (base->kind == Type::Kind::DATACLASS) {
+                    if (saw_dataclass) {
+                        throw compile_error("Cannot extend from multiple dataclasses",
+                                            base_expr->span);
+                    }
+                    saw_dataclass = true;
+                }
+                ValueRoot r_base(gc, Value::object(base));
+                append(gc, r_extends, r_base);
+            }
+        }
+        Root<Array> r_bases(gc, vector_to_array(gc, r_extends));
+        Type* base_dataclass = nullptr;
+        for (Value base : r_bases) {
+            if (base.obj_type()->kind == Type::Kind::DATACLASS) {
+                base_dataclass = base.obj_type();
+                break;
+            }
+        }
+        OptionalRoot<Type> r_base_dataclass(gc, std::move(base_dataclass));
+
+        // All slots, including those derived from base dataclasses.
+        Root<Vector> r_all_slots(gc, make_vector(gc, 0));
+        uint32_t num_base_slots = 0;
+        // Extra slots on top of those from base dataclasses.
+        Root<Vector> r_leaf_slots(gc, make_vector(gc, 0));
+        // Collect slots from the base dataclass, if it exists.
+        if (r_base_dataclass) {
+            aggregate_slots(gc, r_all_slots, *r_base_dataclass);
+            num_base_slots = r_all_slots->length;
+        }
+        // Collect slots from the direct dataclass definition.
+        {
+            DataExpr* data_expr = dynamic_cast<DataExpr*>(&has);
+            if (!data_expr) {
+                std::stringstream ss;
+                ss << message << " 'has' argument must be a vector of names";
+                throw compile_error(ss.str(), extends->span);
+            }
+            for (std::unique_ptr<Expr>& slot_expr : data_expr->components) {
+                NameExpr* slot_name_expr = dynamic_cast<NameExpr*>(slot_expr.get());
+                if (!slot_name_expr) {
+                    std::stringstream ss;
+                    ss << message << " 'has' argument must be a sequence of names";
+                    throw compile_error(ss.str(), slot_expr->span);
+                }
+                const std::string& slot_name = std::get<std::string>(slot_name_expr->name.value);
+                ValueRoot r_slot_name(gc, Value::object(make_string(gc, slot_name)));
+                append(gc, r_all_slots, r_slot_name);
+                append(gc, r_leaf_slots, r_slot_name);
+            }
+        }
+        // TODO: warn (or error) if there's a leaf slot shadowing a derived slot.
+
+        OptionalRoot<Array> r_slots(gc, vector_to_array(gc, r_leaf_slots));
+        Root<Type> r_type(gc,
+                          make_type(gc,
+                                    r_class_name,
+                                    r_bases,
+                                    /* sealed */ false,
+                                    Type::Kind::DATACLASS,
+                                    r_slots,
+                                    /* num_total_slots */ r_all_slots->length));
+        ValueRoot rv_type(gc, r_type.value());
+        append(gc, r_module, r_class_name, rv_type);
+
+        const auto lookup_or_create = [&gc, &r_module](Root<String>& r_name,
+                                                       uint32_t num_params,
+                                                       SourceSpan err_span) -> MultiMethod* {
+            Value* lookup = module_lookup(*r_module, *r_name);
+            if (lookup) {
+                if (lookup->is_obj_multimethod()) {
+                    return lookup->obj_multimethod();
+                } else {
+                    std::stringstream ss;
+                    ss << "'" << native_str(*r_name)
+                       << "' is already defined in module, but is not a multimethod";
+                    throw compile_error(ss.str(), err_span);
+                }
+            } else {
+                Root<Vector> r_methods(gc, make_vector(gc, 1));
+                Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                ValueRoot r_multimethod(
+                    gc,
+                    Value::object(
+                        make_multimethod(gc, r_name, num_params, r_methods, r_attributes)));
+                append(gc, r_module, r_name, r_multimethod);
+                return r_multimethod->obj_multimethod();
+            }
+        };
+
+        // Add a predicate method `<class_name>?`.
+        // Implementation:
+        //   load_reg @0
+        //   load_value <the dataclass>
+        //   invoke "instance?:" 2
+        {
+            Root<String> r_method_name(gc, concat(gc, r_class_name, "?"));
+            Root<MultiMethod> r_multimethod(
+                gc,
+                lookup_or_create(r_method_name, /* num_params */ 1, name.span));
+
+            OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+            Root<Vector> r_insts(gc, make_vector(gc, 0));
+            Root<Vector> r_args(gc, make_vector(gc, 0));
+            Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
+            CodeBuilder builder{
+                .r_module = r_module,
+                // Just the default receiver.
+                .num_params = 1,
+                .num_regs = 1,
+                .num_data = 0,
+                .r_upreg_map = r_upreg_map,
+                .r_insts = r_insts,
+                .r_args = r_args,
+                .r_upreg_loading = r_upreg_loading,
+                .bindings = {},
+                .base = nullptr,
+            };
+            // LOAD_REG: <local index>
+            builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+            builder.emit_arg(gc, Value::fixnum(0));
+            // LOAD_VALUE: <value>
+            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+            builder.emit_arg(gc, rv_type);
+            // INVOKE: <name>, <num args>
+            builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1);
+            builder.emit_arg(gc, Value::object(make_string(gc, "instance?:")));
+            builder.emit_arg(gc, Value::fixnum(2));
+
+            Root<Array> r_param_matchers(gc, make_array(gc, 1));
+            r_param_matchers->components()[0] = Value::null(); // 'any' matcher
+            OptionalRoot<Type> r_return_type(gc, nullptr);     // TODO: return type
+            OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+            Root<Vector> r_attributes(gc, make_vector(gc, 0));
+            Root<Method> r_method(gc,
+                                  make_method(gc,
+                                              r_param_matchers,
+                                              r_return_type,
+                                              r_code,
+                                              r_attributes,
+                                              /* native_handler */ nullptr,
+                                              /* intrinsic_handler */ nullptr));
+            add_method(gc, r_multimethod, r_method, /* require_unique */ true);
+        }
+
+        // Add a constructor method.
+        // Implementation:
+        //   load_reg @0
+        //   ...
+        //   load_reg @<full slot count>
+        //   make_instance <full slot count>
+        {
+            uint32_t num_slots = r_all_slots->length;
+            Root<String> r_method_name(gc,
+                                       r_all_slots->length > 0
+                                           ? concat_with_suffix(gc, r_all_slots, ":")
+                                           : make_string(gc, "new"));
+            Root<MultiMethod> r_multimethod(
+                gc,
+                lookup_or_create(r_method_name, /* num_params */ 1 + num_slots, name.span));
+
+            OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+            Root<Vector> r_insts(gc, make_vector(gc, 0));
+            Root<Vector> r_args(gc, make_vector(gc, 0));
+            Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
+            CodeBuilder builder{
+                .r_module = r_module,
+                .num_params = 1 + num_slots,
+                .num_regs = 1 + num_slots,
+                .num_data = 0,
+                .r_upreg_map = r_upreg_map,
+                .r_insts = r_insts,
+                .r_args = r_args,
+                .r_upreg_loading = r_upreg_loading,
+                .bindings = {},
+                .base = nullptr,
+            };
+            for (uint32_t i = 0; i <= num_slots; i++) {
+                // LOAD_REG: <local index>
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_arg(gc, Value::fixnum(i));
+            }
+            // MAKE_INSTANCE: <num slots>
+            builder.emit_op(gc,
+                            OpCode::MAKE_INSTANCE,
+                            /* stack_height_delta */ -1 - (int64_t)num_slots + 1);
+            builder.emit_arg(gc, Value::fixnum(num_slots));
+
+            Root<Array> r_param_matchers(gc, make_array(gc, 1 + num_slots));
+            r_param_matchers->components()[0] =
+                Value::object(make_ref(gc, rv_type)); // value matcher on the dataclass
+            // TODO: support types for slots. For now, the default 'null' value works for the rest
+            // of the matchers: 'any' matcher.
+            OptionalRoot<Type> r_return_type(gc, *r_type);
+            OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+            Root<Vector> r_attributes(gc, make_vector(gc, 0));
+            Root<Method> r_method(gc,
+                                  make_method(gc,
+                                              r_param_matchers,
+                                              r_return_type,
+                                              r_code,
+                                              r_attributes,
+                                              /* native_handler */ nullptr,
+                                              /* intrinsic_handler */ nullptr));
+            add_method(gc, r_multimethod, r_method, /* require_unique */ true);
+        }
+
+        uint32_t num_leaf_slots = r_leaf_slots->length;
+        for (uint32_t i = 0; i < num_leaf_slots; i++) {
+            Root<String> r_slot(gc,
+                                r_leaf_slots->v_array.obj_array()->components()[i].obj_string());
+
+            // Add a getter method.
+            // Implementation:
+            //   load_reg @0
+            //   get_slot <slot index>
+            {
+                Root<String> r_method_name(gc, concat(gc, ".", r_slot));
+                Root<MultiMethod> r_multimethod(
+                    gc,
+                    lookup_or_create(r_method_name, /* num_params */ 1, name.span));
+
+                OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+                Root<Vector> r_insts(gc, make_vector(gc, 0));
+                Root<Vector> r_args(gc, make_vector(gc, 0));
+                Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
+                CodeBuilder builder{
+                    .r_module = r_module,
+                    .num_params = 1,
+                    .num_regs = 1,
+                    .num_data = 0,
+                    .r_upreg_map = r_upreg_map,
+                    .r_insts = r_insts,
+                    .r_args = r_args,
+                    .r_upreg_loading = r_upreg_loading,
+                    .bindings = {},
+                    .base = nullptr,
+                };
+                // LOAD_REG: <local index>
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_arg(gc, Value::fixnum(0));
+                // GET_SLOT: <slot index>
+                builder.emit_op(gc, OpCode::GET_SLOT, /* stack_height_delta */ 0);
+                builder.emit_arg(gc, Value::fixnum(num_base_slots + i));
+
+                Root<Array> r_param_matchers(gc, make_array(gc, 1));
+                r_param_matchers->components()[0] = r_type.value(); // type matcher on the dataclass
+                OptionalRoot<Type> r_return_type(gc, nullptr);      // TODO: support slot types
+                OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+                Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                Root<Method> r_method(gc,
+                                      make_method(gc,
+                                                  r_param_matchers,
+                                                  r_return_type,
+                                                  r_code,
+                                                  r_attributes,
+                                                  /* native_handler */ nullptr,
+                                                  /* intrinsic_handler */ nullptr));
+                add_method(gc, r_multimethod, r_method, /* require_unique */ true);
+            }
+
+            // Add a setter method.
+            // Implementation:
+            //   load_reg @0
+            //   load_reg @1
+            //   set_slot <slot index>
+            //   load_reg @0    (... I guess ...)
+            {
+                Root<String> r_method_name(gc, concat(gc, r_slot, ":"));
+                Root<MultiMethod> r_multimethod(
+                    gc,
+                    lookup_or_create(r_method_name, /* num_params */ 2, name.span));
+
+                OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+                Root<Vector> r_insts(gc, make_vector(gc, 0));
+                Root<Vector> r_args(gc, make_vector(gc, 0));
+                Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
+                CodeBuilder builder{
+                    .r_module = r_module,
+                    .num_params = 2,
+                    .num_regs = 2,
+                    .num_data = 0,
+                    .r_upreg_map = r_upreg_map,
+                    .r_insts = r_insts,
+                    .r_args = r_args,
+                    .r_upreg_loading = r_upreg_loading,
+                    .bindings = {},
+                    .base = nullptr,
+                };
+                // LOAD_REG: <local index>
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_arg(gc, Value::fixnum(0));
+                // LOAD_REG: <local index>
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_arg(gc, Value::fixnum(1));
+                // GET_SLOT: <slot index>
+                builder.emit_op(gc, OpCode::SET_SLOT, /* stack_height_delta */ -2);
+                builder.emit_arg(gc, Value::fixnum(num_base_slots + i));
+                // LOAD_REG: <local index>
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_arg(gc, Value::fixnum(0));
+
+                Root<Array> r_param_matchers(gc, make_array(gc, 2));
+                r_param_matchers->components()[0] = r_type.value(); // type matcher on the dataclass
+                r_param_matchers->components()[1] =
+                    Value::null();                             // 'any' matcher (TODO: slot types)
+                OptionalRoot<Type> r_return_type(gc, nullptr); // TODO: return type
+                OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+                Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                Root<Method> r_method(gc,
+                                      make_method(gc,
+                                                  r_param_matchers,
+                                                  r_return_type,
+                                                  r_code,
+                                                  r_attributes,
+                                                  /* native_handler */ nullptr,
+                                                  /* intrinsic_handler */ nullptr));
+                add_method(gc, r_multimethod, r_method, /* require_unique */ true);
+            }
+        }
+    }
+
     Code* compile_into_module(GC& gc, Root<Module>& r_module,
                               std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
@@ -840,6 +1250,31 @@ namespace Katsu
                             }
                         }
                     }
+                } else if (expr->messages.size() == 2 &&
+                           std::get<std::string>(expr->messages[0].value) == "data" &&
+                           std::get<std::string>(expr->messages[1].value) == "has") {
+                    compile_dataclass(gc,
+                                      r_module,
+                                      "data:extends:has:",
+                                      expr->span,
+                                      expr->target ? expr->target->get() : nullptr,
+                                      *expr->args[0],
+                                      nullptr,
+                                      *expr->args[1]);
+                    continue;
+                } else if (expr->messages.size() == 3 &&
+                           std::get<std::string>(expr->messages[0].value) == "data" &&
+                           std::get<std::string>(expr->messages[1].value) == "extends" &&
+                           std::get<std::string>(expr->messages[2].value) == "has") {
+                    compile_dataclass(gc,
+                                      r_module,
+                                      "data:extends:has:",
+                                      expr->span,
+                                      expr->target ? expr->target->get() : nullptr,
+                                      *expr->args[0],
+                                      expr->args[1].get(),
+                                      *expr->args[2]);
+                    continue;
                 }
             }
             compile_expr(gc, builder, *top_level_expr);

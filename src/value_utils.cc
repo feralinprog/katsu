@@ -616,8 +616,23 @@ namespace Katsu
                                    /* extra_depth */ +1);
                             break;
                         }
+                        case MAKE_INSTANCE: {
+                            std::cout << "make-instance #"
+                                      << args->components()[arg_spot++].fixnum() << "\n";
+                            break;
+                        }
                         case VERIFY_IS_TYPE: {
                             std::cout << "verify-is-type\n";
+                            break;
+                        }
+                        case GET_SLOT: {
+                            std::cout << "get-slot $" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
+                            break;
+                        }
+                        case SET_SLOT: {
+                            std::cout << "set-slot $" << args->components()[arg_spot++].fixnum()
+                                      << "\n";
                             break;
                         }
                         default: {
