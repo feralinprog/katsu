@@ -708,6 +708,20 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     // TODO: type
     // TODO: subtype?:
     // TODO: instance?:
+
+    SECTION("TEST-ASSERT: - assertion passing")
+    {
+        input("TEST-ASSERT: t");
+        check(Value::null());
+    }
+
+    SECTION("TEST-ASSERT: - assertion failing")
+    {
+        input("TEST-ASSERT: f");
+        CHECK_THROWS_MATCHES(run(),
+                             std::logic_error,
+                             MessageMatches(ContainsSubstring("TEST-ASSERT: failed assertion")));
+    }
 }
 
 namespace Katsu

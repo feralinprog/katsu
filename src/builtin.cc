@@ -378,6 +378,14 @@ namespace Katsu
         return Value::null();
     }
 
+    Value native__TEST_ASSERT_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ TEST-ASSERT: bool
+        ASSERT(nargs == 2);
+        ASSERT_MSG(args[1]._bool(), "TEST-ASSERT: failed assertion");
+        return Value::null();
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -639,6 +647,13 @@ namespace Katsu
                        3,
                        matchers3,
                        &native__add_method_to_require_unique_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
+            add_native(vm.gc, r_module, "TEST-ASSERT:", 2, matchers2, &native__TEST_ASSERT_);
         }
 
         /*
