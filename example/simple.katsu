@@ -21,3 +21,64 @@ a instance?: Fixnum
 a instance?: Closure
 
 print: "this is " ~ "a test"
+
+method: [while: (cond: Closure) do: (body: Closure)] does: [
+    (cond call) then: [
+        body call
+        while: cond do: body
+    ] else: null
+]
+
+method: [run-test] does: [
+    mut: n = 100
+    while: [n > 0] do: [
+        pretty-print: n
+        n: n - 1
+    ]
+]
+(null) run-test
+
+data: Point has: { x; y }
+data: Point3D extends: { Point } has: { z }
+let: p = (Point3D x: 1 y: 2 z: 3)
+p .x
+p .y
+p .z
+(p x: 5; null)
+(p y: 6; null)
+(p z: 7; null)
+p .x
+p .y
+p .z
+
+p Point?
+p Point3D?
+
+(Point x: 1 y: 2) Point3D?
+
+data: Optional has: {}
+data: OptionalSome extends: { Optional } has: { value }
+data: OptionalNone extends: { Optional } has: {}
+
+method: [some: value] does: [ OptionalSome value: value ]
+method: [none]        does: [ OptionalNone new ]
+
+method: [(opt: OptionalSome) then: some-body else: none-body] does: [
+    some-body call: opt .value
+]
+method: [(opt: OptionalNone) then: some-body else: none-body] does: [
+    none-body call
+]
+
+(some: 5) then: [pretty-print: it] else: [print: "none"]
+(null none) then: [pretty-print: it] else: [print: "none"]
+
+method: [signal: thing] does: [
+    pretty-print: thing
+]
+
+method: [(opt: Optional) value!] does: [
+    opt then: [it] else: [signal: (NoneValue message: "none has no value")]
+]
+
+(null none) value!
