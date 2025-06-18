@@ -169,22 +169,23 @@ namespace Katsu
 
             // std::cout << "=== MODULE STATE ===\n";
             // pprint(r_module.value());
-            std::cout << "=== PARSED ===\n";
-            ExprPrinter printer(0);
-            top_level_expr->accept(printer);
+            // std::cout << "=== PARSED ===\n";
+            // ExprPrinter printer(0);
+            // top_level_expr->accept(printer);
 
             std::vector<std::unique_ptr<Expr>> top_level_exprs;
             top_level_exprs.emplace_back(std::move(top_level_expr));
-            std::cout << "=== COMPILING INTO MODULE ===\n";
+            // std::cout << "=== COMPILING INTO MODULE ===\n";
             Root<Code> code(gc, compile_into_module(gc, r_module, top_level_exprs));
-            std::cout << "=== GENERATED CODE ===\n";
-            pprint(code.value());
-            std::cout << "=== EVALUATING ===\n";
+            // std::cout << "=== GENERATED CODE ===\n";
+            // pprint(code.value());
+            // std::cout << "=== EVALUATING ===\n";
             result = vm.eval_toplevel(code);
-            std::cout << "=== EVALUATION RESULT ===\n";
+            // std::cout << "=== EVALUATION RESULT ===\n";
+            std::cout << "-> ";
             pprint(result);
 
-            std::cout << "\n\n\n";
+            // std::cout << "\n\n\n";
 
             // Ratchet past any semicolons and newlines, since the parser explicitly stops
             // when it sees either of these at the top level.
