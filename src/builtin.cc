@@ -352,6 +352,7 @@ namespace Katsu
     {
         // param-matchers make-method-with-return-type: type code: code attrs: attrs
         ASSERT(nargs == 4);
+        ASSERT(args[1].is_obj_type() || args[1].is_null());
         Root<Array> r_param_matchers(vm.gc, args[0].obj_array());
         OptionalRoot<Type> r_return_type(vm.gc,
                                          args[1].is_obj_type() ? args[1].obj_type() : nullptr);
@@ -431,6 +432,7 @@ namespace Katsu
         register_base_type(BuiltinId::_Closure, "Closure");
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
+        register_base_type(BuiltinId::_Type, "Type");
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
@@ -615,7 +617,7 @@ namespace Katsu
         {
             Root<Array> matchers4(vm.gc, make_array(vm.gc, 4));
             matchers4->components()[0] = vm.builtin(BuiltinId::_Array);
-            matchers4->components()[1] = vm.builtin(BuiltinId::_Type);
+            matchers4->components()[1] = Value::null(); // TODO: Type or Null
             matchers4->components()[2] = vm.builtin(BuiltinId::_Code);
             matchers4->components()[3] = vm.builtin(BuiltinId::_Vector);
             add_native(vm.gc,
