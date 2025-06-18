@@ -664,6 +664,7 @@ namespace Katsu
                 DataclassInstance* o = value.obj_instance();
                 std::cout << "*instance\n";
                 pchild(o->v_type, "v_type = ");
+                // TODO!
                 pnative() << "slots: (TODO)\n";
             } else {
                 std::cout << "object: ??? (object tag = " << static_cast<int>(value.object()->tag())
