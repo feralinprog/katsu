@@ -41,7 +41,7 @@ method: [while: (cond: Closure) do: (body: Closure)] does: [
 ]
 
 method: [run-test] does: [
-    mut: n = 1000000
+    mut: n = 10000
     while: [n > 0] do: [
         if: (n / 10000) * 10000 = n then: [
             pretty-print: n
@@ -90,8 +90,36 @@ method: [signal: thing] does: [
     pretty-print: thing
 ]
 
-method: [(opt: Optional) value!] does: [
-    opt then: [it] else: [signal: (NoneValue message: "none has no value")]
+# method: [(opt: Optional) value!] does: [
+#     opt then: [it] else: [signal: (NoneValue message: "none has no value")]
+# ]
+# 
+# (null none) value!
+
+pretty-print: {1; 2; 3}
+
+method: [(n: Fixnum) times: body] does: [
+    mut: i = 0
+    while: [i < n] do: [
+        body call: i
+        i: i + 1
+    ]
 ]
 
-(null none) value!
+5 times: [pretty-print: it]
+
+method: [(v: Vector) length] does: [
+    v unsafe-read-u64-at-offset: 1
+]
+
+let: v = {1;2;3;4}
+v length
+pretty-print: v
+v unsafe-write-value-at-offset: 2 value: "I swappa the arrey"
+pretty-print: v
+
+method: [get-current-module] does: [
+    pretty-print: [it]
+]
+
+0 get-current-module
