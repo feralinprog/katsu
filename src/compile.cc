@@ -497,7 +497,7 @@ namespace Katsu
     {
         if (receiver) {
             std::stringstream ss;
-            ss << "" << message << " takes no receiver";
+            ss << message << " takes no receiver";
             throw compile_error(ss.str(), span);
         }
 
@@ -510,7 +510,7 @@ namespace Katsu
         if (BlockExpr* b = dynamic_cast<BlockExpr*>(decl)) {
             if (!b->parameters.empty()) {
                 std::stringstream ss;
-                ss << "" << message << " 'declaration' argument should not specify any parameters";
+                ss << message << " 'declaration' argument should not specify any parameters";
                 throw compile_error(ss.str(), decl->span);
             }
             decl = b->body.get();
