@@ -181,8 +181,8 @@ namespace Katsu
             // std::cout << "=== EVALUATING ===\n";
             result = vm.eval_toplevel(code);
             // std::cout << "=== EVALUATION RESULT ===\n";
-            std::cout << "-> ";
-            pprint(result);
+            // std::cout << "-> ";
+            // pprint(result);
 
             // std::cout << "\n\n\n";
 
