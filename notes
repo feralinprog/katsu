@@ -5,6 +5,7 @@ TODO:
 * coroutines / fibers (should be supported by delimited continuations..?)
 * support builtin modules and module loading, in order to actually start a standard library / core
 * allow for docs everywhere!
+* save to image and load from image
 
 more TODO:
 * literal data structure syntax?
