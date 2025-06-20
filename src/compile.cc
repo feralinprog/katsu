@@ -38,8 +38,10 @@ namespace Katsu
         OptionalRoot<Vector>& r_upreg_map;
         // The OpCode instructions...
         Root<Vector>& r_insts;
-        // and their arguments.
+        // their arguments...
         Root<Vector>& r_args;
+        // and their source spans (e.g. from convert_span()).
+        Root<Vector>& r_inst_spans;
 
         // Mapping from upreg index to _base's_ local indices, for initializing upreg array when
         // creating a closure instance.
@@ -69,7 +71,9 @@ namespace Katsu
             this->bump_stack(stack_height_delta);
             ValueRoot r_op(gc, Value::fixnum(inst));
             append(gc, this->r_insts, r_op);
-            // TODO: do something with the `span`
+
+            ValueRoot r_span(gc, Value::object(convert_span(gc, span)));
+            append(gc, this->r_inst_spans, r_span);
         }
 
         void emit_arg(GC& gc, ValueRoot& r_arg)
@@ -120,7 +124,22 @@ namespace Katsu
             return nullptr;
         }
 
-        Code* finalize(GC& gc)
+        Tuple* convert_span(GC& gc, SourceSpan& span)
+        {
+            // TODO: should intern strings. This is hugely inefficient.
+            Root<String> r_source(gc, make_string(gc, *span.file.path));
+            Tuple* tuple = make_tuple(gc, 7);
+            tuple->components()[0] = r_source.value();
+            tuple->components()[1] = Value::fixnum(span.start.index);
+            tuple->components()[2] = Value::fixnum(span.start.line);
+            tuple->components()[3] = Value::fixnum(span.start.column);
+            tuple->components()[4] = Value::fixnum(span.end.index);
+            tuple->components()[5] = Value::fixnum(span.end.line);
+            tuple->components()[6] = Value::fixnum(span.end.column);
+            return tuple;
+        }
+
+        Code* finalize(GC& gc, SourceSpan& code_span)
         {
             Array* maybe_upreg_map;
             if (r_upreg_map) {
@@ -135,6 +154,9 @@ namespace Katsu
             Root<Array> r_insts_arr(gc, vector_to_array(gc, this->r_insts));
             Root<Array> r_args_arr(gc, vector_to_array(gc, this->r_args));
 
+            Root<Tuple> r_span(gc, convert_span(gc, code_span));
+            Root<Array> r_inst_spans_arr(gc, vector_to_array(gc, this->r_inst_spans));
+
             return make_code(gc,
                              this->r_module,
                              this->num_params,
@@ -142,7 +164,9 @@ namespace Katsu
                              this->num_data,
                              r_upreg_map_arr,
                              r_insts_arr,
-                             r_args_arr);
+                             r_args_arr,
+                             r_span,
+                             r_inst_spans_arr);
         }
     };
 
@@ -464,6 +488,7 @@ namespace Katsu
             OptionalRoot<Vector> r_upreg_map(gc, make_vector(gc, 0));
             Root<Vector> r_insts(gc, make_vector(gc, 0));
             Root<Vector> r_args(gc, make_vector(gc, 0));
+            Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder closure_builder{
                 .r_module = builder.r_module,
@@ -477,6 +502,7 @@ namespace Katsu
                 .r_upreg_map = r_upreg_map,
                 .r_insts = r_insts,
                 .r_args = r_args,
+                .r_inst_spans = r_inst_spans,
                 .r_upreg_loading = r_upreg_loading,
                 .bindings = {},
                 .base = &builder,
@@ -500,7 +526,7 @@ namespace Katsu
                          *expr->body,
                          /* tail_position */ true,
                          /* tail_call */ false);
-            ValueRoot r_closure_code(gc, Value::object(closure_builder.finalize(gc)));
+            ValueRoot r_closure_code(gc, Value::object(closure_builder.finalize(gc, expr->span)));
             uint64_t num_upreg_loads = closure_builder.r_upreg_loading->length;
             ASSERT(num_upreg_loads == closure_builder.r_upreg_map->length);
             for (uint64_t i = 0; i < num_upreg_loads; i++) {
@@ -748,6 +774,7 @@ namespace Katsu
         OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
         Root<Vector> r_insts(gc, make_vector(gc, 0));
         Root<Vector> r_args(gc, make_vector(gc, 0));
+        Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = module_builder.r_module,
@@ -757,6 +784,7 @@ namespace Katsu
             .r_upreg_map = r_upreg_map,
             .r_insts = r_insts,
             .r_args = r_args,
+            .r_inst_spans = r_inst_spans,
             .r_upreg_loading = r_upreg_loading,
             .bindings = {},
             .base = nullptr,
@@ -803,7 +831,7 @@ namespace Katsu
 
         // Code:
         // LOAD_VALUE: <value>
-        Root<Code> r_code(gc, builder.finalize(gc));
+        Root<Code> r_code(gc, builder.finalize(gc, span));
         module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, body->span);
         module_builder.emit_arg(gc, r_code.value());
 
@@ -1040,6 +1068,7 @@ namespace Katsu
             OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
             Root<Vector> r_insts(gc, make_vector(gc, 0));
             Root<Vector> r_args(gc, make_vector(gc, 0));
+            Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder builder{
                 .r_module = r_module,
@@ -1050,6 +1079,7 @@ namespace Katsu
                 .r_upreg_map = r_upreg_map,
                 .r_insts = r_insts,
                 .r_args = r_args,
+                .r_inst_spans = r_inst_spans,
                 .r_upreg_loading = r_upreg_loading,
                 .bindings = {},
                 .base = nullptr,
@@ -1068,7 +1098,7 @@ namespace Katsu
             Root<Array> r_param_matchers(gc, make_array(gc, 1));
             r_param_matchers->components()[0] = Value::null(); // 'any' matcher
             OptionalRoot<Type> r_return_type(gc, nullptr);     // TODO: return type
-            OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+            OptionalRoot<Code> r_code(gc, builder.finalize(gc, name.span));
             Root<Vector> r_attributes(gc, make_vector(gc, 0));
             Root<Method> r_method(gc,
                                   make_method(gc,
@@ -1100,6 +1130,7 @@ namespace Katsu
             OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
             Root<Vector> r_insts(gc, make_vector(gc, 0));
             Root<Vector> r_args(gc, make_vector(gc, 0));
+            Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder builder{
                 .r_module = r_module,
@@ -1109,6 +1140,7 @@ namespace Katsu
                 .r_upreg_map = r_upreg_map,
                 .r_insts = r_insts,
                 .r_args = r_args,
+                .r_inst_spans = r_inst_spans,
                 .r_upreg_loading = r_upreg_loading,
                 .bindings = {},
                 .base = nullptr,
@@ -1131,7 +1163,7 @@ namespace Katsu
             // TODO: support types for slots. For now, the default 'null' value works for the rest
             // of the matchers: 'any' matcher.
             OptionalRoot<Type> r_return_type(gc, *r_type);
-            OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+            OptionalRoot<Code> r_code(gc, builder.finalize(gc, span));
             Root<Vector> r_attributes(gc, make_vector(gc, 0));
             Root<Method> r_method(gc,
                                   make_method(gc,
@@ -1163,6 +1195,7 @@ namespace Katsu
                 OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
                 Root<Vector> r_insts(gc, make_vector(gc, 0));
                 Root<Vector> r_args(gc, make_vector(gc, 0));
+                Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
                 Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
                 CodeBuilder builder{
                     .r_module = r_module,
@@ -1172,6 +1205,7 @@ namespace Katsu
                     .r_upreg_map = r_upreg_map,
                     .r_insts = r_insts,
                     .r_args = r_args,
+                    .r_inst_spans = r_inst_spans,
                     .r_upreg_loading = r_upreg_loading,
                     .bindings = {},
                     .base = nullptr,
@@ -1186,7 +1220,7 @@ namespace Katsu
                 Root<Array> r_param_matchers(gc, make_array(gc, 1));
                 r_param_matchers->components()[0] = r_type.value(); // type matcher on the dataclass
                 OptionalRoot<Type> r_return_type(gc, nullptr);      // TODO: support slot types
-                OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+                OptionalRoot<Code> r_code(gc, builder.finalize(gc, span));
                 Root<Vector> r_attributes(gc, make_vector(gc, 0));
                 Root<Method> r_method(gc,
                                       make_method(gc,
@@ -1215,6 +1249,7 @@ namespace Katsu
                 OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
                 Root<Vector> r_insts(gc, make_vector(gc, 0));
                 Root<Vector> r_args(gc, make_vector(gc, 0));
+                Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
                 Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
                 CodeBuilder builder{
                     .r_module = r_module,
@@ -1224,6 +1259,7 @@ namespace Katsu
                     .r_upreg_map = r_upreg_map,
                     .r_insts = r_insts,
                     .r_args = r_args,
+                    .r_inst_spans = r_inst_spans,
                     .r_upreg_loading = r_upreg_loading,
                     .bindings = {},
                     .base = nullptr,
@@ -1246,7 +1282,7 @@ namespace Katsu
                 r_param_matchers->components()[1] =
                     Value::null();                             // 'any' matcher (TODO: slot types)
                 OptionalRoot<Type> r_return_type(gc, nullptr); // TODO: return type
-                OptionalRoot<Code> r_code(gc, builder.finalize(gc));
+                OptionalRoot<Code> r_code(gc, builder.finalize(gc, span));
                 Root<Vector> r_attributes(gc, make_vector(gc, 0));
                 Root<Method> r_method(gc,
                                       make_method(gc,
@@ -1270,6 +1306,7 @@ namespace Katsu
         OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
         Root<Vector> r_insts(gc, make_vector(gc, 0));
         Root<Vector> r_args(gc, make_vector(gc, 0));
+        Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = r_module,
@@ -1279,6 +1316,7 @@ namespace Katsu
             .r_upreg_map = r_upreg_map,
             .r_insts = r_insts,
             .r_args = r_args,
+            .r_inst_spans = r_inst_spans,
             .r_upreg_loading = r_upreg_loading,
             .bindings = {},
             .base = nullptr,
@@ -1399,7 +1437,7 @@ namespace Katsu
             builder.emit_arg(gc, Value::null());
         }
 
-        return builder.finalize(gc);
+        return builder.finalize(gc, span);
     }
 
     Code* compile_module(GC& gc, OptionalRoot<Module>& r_base, SourceSpan& span,

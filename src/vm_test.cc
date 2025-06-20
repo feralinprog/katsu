@@ -2,6 +2,7 @@
 
 #include "vm.h"
 
+#include "span.h"
 #include "value_utils.h"
 #include <cstring>
 
@@ -12,6 +13,11 @@ TEST_CASE("VM smoketest", "[vm]")
     GC gc(1024 * 1024);
     VM vm(gc, 10 * 1024);
     // Let destructors run.
+}
+
+Tuple* make_span(GC& gc)
+{
+    return make_tuple(gc, 7);
 }
 
 TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
@@ -33,6 +39,9 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
     Array* args = make_array(gc, /* length */ 1);
     args->components()[0] = Value::fixnum(1234);
     Root<Array> r_args(gc, std::move(args));
+    Root<Tuple> r_span(gc, make_span(gc));
+    Root<Array> r_inst_spans(gc, make_array(gc, /* length */ 1));
+    r_inst_spans->components()[0] = r_span.value();
 
     Root<Code> r_code(gc,
                       make_code(gc,
@@ -42,7 +51,9 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
                                 /* num_data */ 1,
                                 /* r_upreg_map */ r_upreg_map,
                                 /* r_insts */ r_insts,
-                                /* r_args */ r_args));
+                                /* r_args */ r_args,
+                                /* r_span */ r_span,
+                                /* r_inst_spans */ r_inst_spans));
 
     Value v_result = vm.eval_toplevel(r_code);
     CHECK(v_result == Value::fixnum(1234));
@@ -127,6 +138,11 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     args->components()[2] = r_method_name.value();
     args->components()[3] = Value::fixnum(2);
     Root<Array> r_args(gc, std::move(args));
+    Root<Tuple> r_span(gc, make_span(gc));
+    Root<Array> r_inst_spans(gc, make_array(gc, /* length */ 3));
+    r_inst_spans->components()[0] = r_span.value();
+    r_inst_spans->components()[1] = r_span.value();
+    r_inst_spans->components()[2] = r_span.value();
 
     Root<Code> r_code(gc,
                       make_code(gc,
@@ -136,7 +152,9 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                                 /* num_data */ 2,
                                 /* r_upreg_map */ r_upreg_map,
                                 /* r_insts */ r_insts,
-                                /* r_args */ r_args));
+                                /* r_args */ r_args,
+                                /* r_span */ r_span,
+                                /* r_inst_spans */ r_inst_spans));
 
     Value v_result = vm.eval_toplevel(r_code);
     CHECK(v_result == Value::fixnum(15));
