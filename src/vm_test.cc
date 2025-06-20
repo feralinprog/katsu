@@ -2,6 +2,7 @@
 
 #include "vm.h"
 
+#include "span.h"
 #include "value_utils.h"
 #include <cstring>
 
@@ -12,6 +13,18 @@ TEST_CASE("VM smoketest", "[vm]")
     GC gc(1024 * 1024);
     VM vm(gc, 10 * 1024);
     // Let destructors run.
+}
+
+SourceSpan make_span()
+{
+    return SourceSpan{
+        .file = SourceFile{
+            .path = std::make_shared<std::string>("fake.path"),
+            .source = std::make_shared<std::string>("fake contents"),
+        },
+        .start = SourceLocation{},
+        .end = SourceLocation{},
+    };
 }
 
 TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")

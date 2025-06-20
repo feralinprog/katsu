@@ -267,6 +267,8 @@ namespace Katsu
                     move_value(&v->v_upreg_map);
                     move_value(&v->v_insts);
                     move_value(&v->v_args);
+                    move_value(&v->v_span);
+                    move_value(&v->v_inst_spans);
                     obj_size = v->size();
                     break;
                 }

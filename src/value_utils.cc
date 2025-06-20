@@ -100,10 +100,17 @@ namespace Katsu
 
     Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
                     uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,
-                    Root<Array>& r_args)
+                    Root<Array>& r_args, Root<Tuple>& r_span, Root<Array>& r_inst_spans)
     {
         ASSERT_ARG(num_params <= num_regs);
+        ASSERT_ARG(r_inst_spans->length == r_insts->length);
         // TODO: check that insts are fixnums of the right range?
+        // TODO: check that insts refer to indices in r_args?
+        ASSERT_ARG(r_span->length == 7);
+        for (Value span : r_inst_spans) {
+            ASSERT_ARG(span.is_obj_tuple());
+            ASSERT_ARG(span.obj_tuple()->length == 7);
+        }
         Code* code = gc.alloc<Code>();
         code->v_module = r_module.value();
         code->num_params = num_params;
@@ -112,6 +119,8 @@ namespace Katsu
         code->v_upreg_map = r_upreg_map.value();
         code->v_insts = r_insts.value();
         code->v_args = r_args.value();
+        code->v_span = r_span.value();
+        code->v_inst_spans = r_inst_spans.value();
         return code;
     }
 

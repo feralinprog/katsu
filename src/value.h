@@ -596,8 +596,11 @@ namespace Katsu
         Value v_insts; // Array of fixnums
         // TODO: arg array inline?
         Value v_args; // Array (of arbitrary values)
-        // TODO: source span for the source of the bytecode (e.g. closure or method definition)
-        // TODO: source span per bytecode
+        // TODO: better representation of source spans.
+        // For now, just a Tuple of [filepath, start index, start row, start col, end index, end
+        // row, end col].
+        Value v_span;       // source span tuple
+        Value v_inst_spans; // Array (of source span tuples)
 
         // Size in bytes.
         static inline uint64_t size()

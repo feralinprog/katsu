@@ -224,6 +224,8 @@ TEST_CASE("GC follows internal references", "[gc]")
         obj->v_upreg_map = v_pointees[1];
         obj->v_insts = v_pointees[2];
         obj->v_args = v_pointees[3];
+        obj->v_span = v_pointees[4];
+        obj->v_inst_spans = v_pointees[5];
 
         Value v_obj = Value::object(obj);
         single_root_collect(&v_obj);
@@ -237,6 +239,8 @@ TEST_CASE("GC follows internal references", "[gc]")
         CHECK_POINTEE(1, obj->v_upreg_map);
         CHECK_POINTEE(2, obj->v_insts);
         CHECK_POINTEE(3, obj->v_args);
+        CHECK_POINTEE(4, obj->v_span);
+        CHECK_POINTEE(5, obj->v_inst_spans);
     }
 
     SECTION("Closure")

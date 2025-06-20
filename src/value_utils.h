@@ -37,7 +37,7 @@ namespace Katsu
     // Make a Code with specified fields.
     Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
                     uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,
-                    Root<Array>& r_args);
+                    Root<Array>& r_args, Root<Tuple>& r_span, Root<Array>& r_inst_spans);
     // Make a Closure with specified fields.
     Closure* make_closure(GC& gc, Root<Code>& r_code, Root<Array>& r_upregs);
     // Make a Method with specified fields.
