@@ -89,7 +89,8 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
         std::vector<std::unique_ptr<Expr>> top_level_exprs;
         top_level_exprs.emplace_back(std::move(top_level_expr));
-        Root<Code> code(gc, compile_into_module(gc, r_module, top_level_exprs));
+        Root<Code> code(gc,
+                        compile_into_module(gc, r_module, top_level_expr->span, top_level_exprs));
         return vm.eval_toplevel(code);
     };
 

@@ -1,6 +1,7 @@
 #include "compile.h"
 
 #include "assertions.h"
+#include "span.h"
 #include "value_utils.h"
 #include "vm.h"
 
@@ -58,7 +59,7 @@ namespace Katsu
             }
         }
 
-        void emit_op(GC& gc, OpCode op, int64_t stack_height_delta)
+        void emit_op(GC& gc, OpCode op, int64_t stack_height_delta, SourceSpan& span)
         {
             // Instruction encoding:
             // <3 bytes arg-offset> <1 byte opcode>
@@ -68,6 +69,7 @@ namespace Katsu
             this->bump_stack(stack_height_delta);
             ValueRoot r_op(gc, Value::fixnum(inst));
             append(gc, this->r_insts, r_op);
+            // TODO: do something with the `span`
         }
 
         void emit_arg(GC& gc, ValueRoot& r_arg)
@@ -156,7 +158,7 @@ namespace Katsu
             }
             compile_expr(gc, builder, *expr->arg, /* tail_position */ false, /* tail_call */ false);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1);
+            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
@@ -176,7 +178,7 @@ namespace Katsu
                          /* tail_position */ false,
                          /* tail_call */ false);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -2 + 1);
+            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -2 + 1, _expr.span);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(2));
         } else if (NameExpr* expr = dynamic_cast<NameExpr*>(&_expr)) {
@@ -221,16 +223,16 @@ namespace Katsu
 
                 if (local->_mutable) {
                     // LOAD_REF: <local index>
-                    builder.emit_op(gc, OpCode::LOAD_REF, /* stack_height_delta */ +1);
+                    builder.emit_op(gc, OpCode::LOAD_REF, /* stack_height_delta */ +1, _expr.span);
                     builder.emit_arg(gc, Value::fixnum(local->local_index));
                 } else {
                     // LOAD_REG: <local index>
-                    builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                    builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                     builder.emit_arg(gc, Value::fixnum(local->local_index));
                 }
             } else if (module_lookup(*builder.r_module, *r_name)) {
                 // LOAD_MODULE: <name>
-                builder.emit_op(gc, OpCode::LOAD_MODULE, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_MODULE, /* stack_height_delta */ +1, _expr.span);
                 builder.emit_arg(gc, r_name.value());
             } else {
                 throw compile_error("name is not defined in module or in local scope",
@@ -240,13 +242,19 @@ namespace Katsu
             switch (expr->literal.type) {
                 case TokenType::INTEGER: {
                     // LOAD_VALUE: <value>
-                    builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                    builder.emit_op(gc,
+                                    OpCode::LOAD_VALUE,
+                                    /* stack_height_delta */ +1,
+                                    _expr.span);
                     builder.emit_arg(gc, Value::fixnum(std::get<long long>(expr->literal.value)));
                     break;
                 }
                 case TokenType::STRING: {
                     // LOAD_VALUE: <value>
-                    builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                    builder.emit_op(gc,
+                                    OpCode::LOAD_VALUE,
+                                    /* stack_height_delta */ +1,
+                                    _expr.span);
                     builder.emit_arg(
                         gc,
                         Value::object(make_string(gc, std::get<std::string>(expr->literal.value))));
@@ -274,7 +282,7 @@ namespace Katsu
                          /* tail_position */ false,
                          /* tail_call */ false);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1);
+            builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(&_expr)) {
@@ -326,10 +334,16 @@ namespace Katsu
                                      /* tail_position */ false,
                                      /* tail_call */ false);
                         // STORE_REF: <local index>
-                        builder.emit_op(gc, OpCode::STORE_REF, /* stack_height_delta */ -1);
+                        builder.emit_op(gc,
+                                        OpCode::STORE_REF,
+                                        /* stack_height_delta */ -1,
+                                        _expr.span);
                         builder.emit_arg(gc, Value::fixnum(local.local_index));
                         // LOAD_VALUE: null
-                        builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                        builder.emit_op(gc,
+                                        OpCode::LOAD_VALUE,
+                                        /* stack_height_delta */ +1,
+                                        _expr.span);
                         builder.emit_arg(gc, Value::null());
                         return;
                     }
@@ -377,17 +391,22 @@ namespace Katsu
                                 // INIT_REF: <local index>
                                 builder.emit_op(gc,
                                                 OpCode::INIT_REF,
-                                                /* stack_height_delta */ -1);
+                                                /* stack_height_delta */ -1,
+                                                _expr.span);
                                 builder.emit_arg(gc, Value::fixnum(local_index));
                             } else {
                                 // STORE_REG: <local index>
                                 builder.emit_op(gc,
                                                 OpCode::STORE_REG,
-                                                /* stack_height_delta */ -1);
+                                                /* stack_height_delta */ -1,
+                                                _expr.span);
                                 builder.emit_arg(gc, Value::fixnum(local_index));
                             }
                             // LOAD:VALUE: null
-                            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                            builder.emit_op(gc,
+                                            OpCode::LOAD_VALUE,
+                                            /* stack_height_delta */ +1,
+                                            _expr.span);
                             builder.emit_arg(gc, Value::null());
                             return;
                         }
@@ -424,7 +443,7 @@ namespace Katsu
             } else {
                 // Load the default receiver, which is always register 0.
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                 builder.emit_arg(gc, Value::fixnum(0));
             }
             for (const std::unique_ptr<Expr>& arg : expr->args) {
@@ -433,7 +452,8 @@ namespace Katsu
             // INVOKE: <name>, <num args>
             builder.emit_op(gc,
                             invoke_op,
-                            /* stack_height_delta */ -(int64_t)expr->args.size());
+                            /* stack_height_delta */ -(int64_t)expr->args.size(),
+                            _expr.span);
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(1 + expr->args.size()));
         } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
@@ -488,12 +508,13 @@ namespace Katsu
                     closure_builder.r_upreg_loading->v_array.obj_array()->components()[i].fixnum();
                 // TODO: check range
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                 builder.emit_arg(gc, Value::fixnum(load_index));
             }
             builder.emit_op(gc,
                             OpCode::MAKE_CLOSURE,
-                            /* stack_height_delta */ -(int64_t)num_upreg_loads + 1);
+                            /* stack_height_delta */ -(int64_t)num_upreg_loads + 1,
+                            _expr.span);
             builder.emit_arg(gc, *r_closure_code);
         } else if (DataExpr* expr = dynamic_cast<DataExpr*>(&_expr)) {
             for (const std::unique_ptr<Expr>& component : expr->components) {
@@ -506,13 +527,14 @@ namespace Katsu
             // MAKE_VECTOR: <num components>
             builder.emit_op(gc,
                             OpCode::MAKE_VECTOR,
-                            /* stack_height_delta */ -(int64_t)expr->components.size() + 1);
+                            /* stack_height_delta */ -(int64_t)expr->components.size() + 1,
+                            _expr.span);
             builder.emit_arg(gc, Value::fixnum(expr->components.size()));
         } else if (SequenceExpr* expr = dynamic_cast<SequenceExpr*>(&_expr)) {
             if (expr->components.empty()) {
                 // Empty sequence -> just load null.
                 // LOAD_VALUE: <value>
-                builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, _expr.span);
                 builder.emit_arg(gc, Value::null());
                 return;
             }
@@ -526,7 +548,10 @@ namespace Katsu
                              /* tail_position */ tail_position && last,
                              /* tail_call */ false);
                 if (!last) {
-                    builder.emit_op(gc, OpCode::DROP, /* stack_height_delta */ -1);
+                    builder.emit_op(gc,
+                                    OpCode::DROP,
+                                    /* stack_height_delta */ -1,
+                                    expr->components[i]->span);
                 }
             }
         } else if (TupleExpr* expr = dynamic_cast<TupleExpr*>(&_expr)) {
@@ -540,7 +565,8 @@ namespace Katsu
             // MAKE_TUPLE: <num components>
             builder.emit_op(gc,
                             OpCode::MAKE_TUPLE,
-                            /* stack_height_delta */ -(int64_t)expr->components.size() + 1);
+                            /* stack_height_delta */ -(int64_t)expr->components.size() + 1,
+                            _expr.span);
             builder.emit_arg(gc, Value::fixnum(expr->components.size()));
         } else {
             ASSERT_MSG(false, "forgot an Expr subtype");
@@ -586,7 +612,10 @@ namespace Katsu
                 param_names.push_back(std::get<std::string>(d->name.value));
                 // Add an any-matcher by loading null.
                 // LOAD_VALUE: <value>
-                module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                module_builder.emit_op(gc,
+                                       OpCode::LOAD_VALUE,
+                                       /* stack_height_delta */ +1,
+                                       d->span);
                 module_builder.emit_arg(gc, Value::null());
                 return;
             } else if (ParenExpr* d = dynamic_cast<ParenExpr*>(&param_decl)) {
@@ -603,7 +632,8 @@ namespace Katsu
                         // We must ensure it's a Type at runtime.
                         module_builder.emit_op(gc,
                                                OpCode::VERIFY_IS_TYPE,
-                                               /* stack_height_delta */ 0);
+                                               /* stack_height_delta */ 0,
+                                               n->args[0]->span);
                         return;
                     }
                 }
@@ -619,7 +649,7 @@ namespace Katsu
             param_names.push_back("self");
             // Add an any-matcher by loading null.
             // LOAD_VALUE: <value>
-            module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+            module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, d->span);
             module_builder.emit_arg(gc, Value::null());
         } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
             unary = true;
@@ -652,7 +682,10 @@ namespace Katsu
                 param_names.push_back("self");
                 // Add an any-matcher by loading null.
                 // LOAD_VALUE: <value>
-                module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+                module_builder.emit_op(gc,
+                                       OpCode::LOAD_VALUE,
+                                       /* stack_height_delta */ +1,
+                                       d->span);
                 module_builder.emit_arg(gc, Value::null());
             }
 
@@ -759,18 +792,19 @@ namespace Katsu
         // MAKE_ARRAY: <length>
         module_builder.emit_op(gc,
                                OpCode::MAKE_ARRAY,
-                               /* stack_height_delta */ -(int64_t)param_names.size() + 1);
+                               /* stack_height_delta */ -(int64_t)param_names.size() + 1,
+                               decl->span);
         module_builder.emit_arg(gc, Value::fixnum(param_names.size()));
 
         // Return type: (TODO: support return types for methods)
         // LOAD_VALUE: <value>
-        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, span);
         module_builder.emit_arg(gc, Value::null());
 
         // Code:
         // LOAD_VALUE: <value>
         Root<Code> r_code(gc, builder.finalize(gc));
-        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, body->span);
         module_builder.emit_arg(gc, r_code.value());
 
         // Attributes:
@@ -783,13 +817,13 @@ namespace Katsu
         } else {
             // Generate a 0-length vector.
             // MAKE_VECTOR: <length>
-            module_builder.emit_op(gc, OpCode::MAKE_VECTOR, /* stack_height_delta */ +1);
+            module_builder.emit_op(gc, OpCode::MAKE_VECTOR, /* stack_height_delta */ +1, span);
             module_builder.emit_arg(gc, Value::fixnum(0));
         }
 
         // Create the method.
         // INVOKE: <name>, <num args>
-        module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -4 + 1);
+        module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -4 + 1, span);
         module_builder.emit_arg(
             gc,
             Value::object(make_string(gc, "make-method-with-return-type:code:attrs:")));
@@ -797,18 +831,18 @@ namespace Katsu
 
         // Multimethod:
         // LOAD_VALUE: <value>
-        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, decl->span);
         module_builder.emit_arg(gc, r_multimethod.value());
 
         // Require unique = true
         // TODO: allow user to specify redefinition?
         // LOAD_VALUE: <value>
-        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+        module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, span);
         module_builder.emit_arg(gc, Value::_bool(true));
 
         // Add the method.
         // INVOKE: <name>, <num args>
-        module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -3 + 1);
+        module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -3 + 1, span);
         module_builder.emit_arg(gc,
                                 Value::object(make_string(gc, "add-method-to:require-unique:")));
         module_builder.emit_arg(gc, Value::fixnum(3));
@@ -1021,13 +1055,13 @@ namespace Katsu
                 .base = nullptr,
             };
             // LOAD_REG: <local index>
-            builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+            builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, name.span);
             builder.emit_arg(gc, Value::fixnum(0));
             // LOAD_VALUE: <value>
-            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, name.span);
             builder.emit_arg(gc, rv_type);
             // INVOKE: <name>, <num args>
-            builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1);
+            builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1, name.span);
             builder.emit_arg(gc, Value::object(make_string(gc, "instance?:")));
             builder.emit_arg(gc, Value::fixnum(2));
 
@@ -1081,13 +1115,14 @@ namespace Katsu
             };
             for (uint32_t i = 0; i <= num_slots; i++) {
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, span);
                 builder.emit_arg(gc, Value::fixnum(i));
             }
             // MAKE_INSTANCE: <num slots>
             builder.emit_op(gc,
                             OpCode::MAKE_INSTANCE,
-                            /* stack_height_delta */ -1 - (int64_t)num_slots + 1);
+                            /* stack_height_delta */ -1 - (int64_t)num_slots + 1,
+                            span);
             builder.emit_arg(gc, Value::fixnum(num_slots));
 
             Root<Array> r_param_matchers(gc, make_array(gc, 1 + num_slots));
@@ -1118,6 +1153,7 @@ namespace Katsu
             // Implementation:
             //   load_reg @0
             //   get_slot <slot index>
+            // TODO: use slot-specific span for opcodes.
             {
                 Root<String> r_method_name(gc, concat(gc, ".", r_slot));
                 Root<MultiMethod> r_multimethod(
@@ -1141,10 +1177,10 @@ namespace Katsu
                     .base = nullptr,
                 };
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, span);
                 builder.emit_arg(gc, Value::fixnum(0));
                 // GET_SLOT: <slot index>
-                builder.emit_op(gc, OpCode::GET_SLOT, /* stack_height_delta */ 0);
+                builder.emit_op(gc, OpCode::GET_SLOT, /* stack_height_delta */ 0, span);
                 builder.emit_arg(gc, Value::fixnum(num_base_slots + i));
 
                 Root<Array> r_param_matchers(gc, make_array(gc, 1));
@@ -1169,6 +1205,7 @@ namespace Katsu
             //   load_reg @1
             //   set_slot <slot index>
             //   load_reg @0    (... I guess ...)
+            // TODO: use slot-specific span for opcodes.
             {
                 Root<String> r_method_name(gc, concat(gc, r_slot, ":"));
                 Root<MultiMethod> r_multimethod(
@@ -1192,16 +1229,16 @@ namespace Katsu
                     .base = nullptr,
                 };
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, span);
                 builder.emit_arg(gc, Value::fixnum(0));
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, span);
                 builder.emit_arg(gc, Value::fixnum(1));
                 // GET_SLOT: <slot index>
-                builder.emit_op(gc, OpCode::SET_SLOT, /* stack_height_delta */ -2);
+                builder.emit_op(gc, OpCode::SET_SLOT, /* stack_height_delta */ -2, span);
                 builder.emit_arg(gc, Value::fixnum(num_base_slots + i));
                 // LOAD_REG: <local index>
-                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1);
+                builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, span);
                 builder.emit_arg(gc, Value::fixnum(0));
 
                 Root<Array> r_param_matchers(gc, make_array(gc, 2));
@@ -1224,7 +1261,7 @@ namespace Katsu
         }
     }
 
-    Code* compile_into_module(GC& gc, Root<Module>& r_module,
+    Code* compile_into_module(GC& gc, Root<Module>& r_module, SourceSpan& span,
                               std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
         // TODO: for future -- first find all multimethod definitions, add them to module (with zero
@@ -1307,12 +1344,14 @@ namespace Katsu
                                 // STORE_MODULE: <name>
                                 builder.emit_op(gc,
                                                 OpCode::STORE_MODULE,
-                                                /* stack_height_delta */ -1);
+                                                /* stack_height_delta */ -1,
+                                                n->name.span);
                                 builder.emit_arg(gc, r_name.value());
                                 // LOAD:VALUE: null
                                 builder.emit_op(gc,
                                                 OpCode::LOAD_VALUE,
-                                                /* stack_height_delta */ +1);
+                                                /* stack_height_delta */ +1,
+                                                n->name.span);
                                 builder.emit_arg(gc, Value::null());
                                 continue;
                             }
@@ -1356,19 +1395,19 @@ namespace Katsu
         // to get a value from). In this case, just add stub code to load null.
         if (builder.r_insts->length == 0) {
             // LOAD_VALUE: null
-            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1);
+            builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, span);
             builder.emit_arg(gc, Value::null());
         }
 
         return builder.finalize(gc);
     }
 
-    Code* compile_module(GC& gc, OptionalRoot<Module>& r_base,
+    Code* compile_module(GC& gc, OptionalRoot<Module>& r_base, SourceSpan& span,
                          std::vector<std::unique_ptr<Expr>>& module_top_level_exprs,
                          Module*& out_module)
     {
         Root<Module> r_module(gc, make_module(gc, r_base, /* capacity */ 0));
-        Code* code = compile_into_module(gc, r_module, module_top_level_exprs);
+        Code* code = compile_into_module(gc, r_module, span, module_top_level_exprs);
         out_module = *r_module;
         return code;
     }

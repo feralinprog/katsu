@@ -175,7 +175,9 @@ namespace Katsu
             std::vector<std::unique_ptr<Expr>> top_level_exprs;
             top_level_exprs.emplace_back(std::move(top_level_expr));
             // std::cout << "=== COMPILING INTO MODULE ===\n";
-            Root<Code> code(gc, compile_into_module(gc, r_module, top_level_exprs));
+            Root<Code> code(
+                gc,
+                compile_into_module(gc, r_module, top_level_exprs[0]->span, top_level_exprs));
             // std::cout << "=== GENERATED CODE ===\n";
             // pprint(code.value());
             // std::cout << "=== EVALUATING ===\n";
