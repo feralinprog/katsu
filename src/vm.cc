@@ -63,8 +63,7 @@ namespace Katsu
                 visitor(&frame->data()[i]);
             }
 
-            frame = reinterpret_cast<Frame*>(
-                align_up(reinterpret_cast<uint64_t>(frame) + frame->size(), TAG_BITS));
+            frame = frame->next();
         }
     }
 
