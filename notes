@@ -1,5 +1,4 @@
 TODO:
-* track source span location in bytecode!
 * invoke ops should have the actual multimethod, not the name to lookup in module
 * signal a condition on error instead of just dying
 * delimited continuations

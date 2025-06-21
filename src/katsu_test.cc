@@ -763,14 +763,13 @@ TEST_CASE("integration - whole file", "[katsu]")
         CHECK(ss_actual.str() == ss_expected.str());
     };
 
-    // // Check pprint directly against an expected string. Kind of hacky, but useful if it's
-    // annoying
-    // // to create an actual expected Value.
-    // auto check_pprint = [&run](const std::string& expected) {
-    //     std::stringstream ss_actual;
-    //     ss_actual << run();
-    //     CHECK(ss_actual.str() == expected);
-    // };
+    // Check pprint directly against an expected string. Kind of hacky, but useful if it's annoying
+    // to create an actual expected Value.
+    auto check_pprint = [&run](const std::string& expected) {
+        std::stringstream ss_actual;
+        ss_actual << run();
+        CHECK(ss_actual.str() == expected);
+    };
 
     // auto check_that = [&run](Catch::Matchers::MatcherBase<Value>&& matcher) {
     //     CHECK_THAT(run(), matcher);
@@ -1022,4 +1021,38 @@ TEST-ASSERT: (thing .slot-c = 30)
     // - dataclass extending from multiple dataclass bases
     // - dataclass extending from dataclass base and another type (mixin)
     // - dataclass needing to share an existing multimethod (with conflict)
+
+    SECTION("unary method")
+    {
+        input(R"(
+method: [unary] does: [ 1234 ]
+unary
+        )");
+        // Intuitively this should call `unary` and produce 1234; it doesn't currently.
+        check_pprint(R"(*multimethod
+  v_name = *string: "unary"
+  v_methods = *vector: length=1 [
+    v_array = *array: length=1
+      0 = *method
+        v_param_matchers = *array: length=1
+          0 = null
+        v_return_type = null
+        v_code = *code
+          num_params = 1
+          num_regs = 1
+          num_data = 1
+          v_upreg_map = null
+          bytecode:
+          [0]: load_value: fixnum 1234
+        v_attributes = *vector: length=0 [
+          v_array = *array: length=0
+        ]
+        native_handler = 0
+        intrinsic_handler = 0
+  ]
+  v_attributes = *vector: length=0 [
+    v_array = *array: length=0
+  ]
+)");
+    }
 }

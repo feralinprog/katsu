@@ -380,6 +380,8 @@ TEST_CASE("GC follows internal references", "[gc]")
         CHECK_POINTEE(5, obj->slots()[0]);
         CHECK_POINTEE(6, obj->slots()[1]);
     }
+
+    // TODO: test CallSegment
 }
 
 // TODO: test ValueRoot more (e.g. move semantics, destructor)
