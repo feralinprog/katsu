@@ -419,6 +419,27 @@ namespace Katsu
         return Value::null();
     }
 
+    Value native__unsafe_read_u32_at_offset_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj read-u32-at-offset: offset
+        ASSERT(nargs == 2);
+        ASSERT(args[0].is_object());
+        uint32_t read = *((uint32_t*)args[0].object() + args[1].fixnum());
+        return Value::fixnum((int64_t)read);
+    }
+
+    Value native__unsafe_write_u32_at_offset_value_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj write-u32-at-offset: offset value: u32
+        ASSERT(nargs == 3);
+        ASSERT(args[0].is_object());
+        ASSERT(args[2].fixnum() >= 0);
+        // TODO: check range
+        uint32_t write = (uint32_t)args[2].fixnum();
+        *((uint32_t*)args[0].object() + args[1].fixnum()) = write;
+        return Value::null();
+    }
+
     Value native__unsafe_read_value_at_offset_(VM& vm, int64_t nargs, Value* args)
     {
         // obj read-value-at-offset: offset
@@ -743,6 +764,31 @@ namespace Katsu
                        3,
                        matchers3,
                        &native__unsafe_write_u64_at_offset_value_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // 'any' matcher
+            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc,
+                       r_module,
+                       "unsafe-read-u32-at-offset:",
+                       2,
+                       matchers2,
+                       &native__unsafe_read_u32_at_offset_);
+        }
+
+        {
+            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
+            matchers3->components()[0] = Value::null(); // 'any' matcher
+            matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
+            matchers3->components()[2] = vm.builtin(BuiltinId::_Fixnum);
+            add_native(vm.gc,
+                       r_module,
+                       "unsafe-write-u32-at-offset:value:",
+                       3,
+                       matchers3,
+                       &native__unsafe_write_u32_at_offset_value_);
         }
 
         {

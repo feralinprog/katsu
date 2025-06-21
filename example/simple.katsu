@@ -123,3 +123,189 @@ method: [get-current-module] does: [
 ]
 
 0 get-current-module
+
+
+
+
+method: [f: n] does: [
+    (null) get-call-stack
+]
+method: [g: n] does: [
+    f: n
+]
+method: [h: n] does: [
+    g: n
+]
+let: s = (h: 0)
+
+method: [(segment: CallSegment) length] does: [
+    segment unsafe-read-u64-at-offset: 1
+]
+
+data: Frame has: { segment; offset }
+method: [(frame: Frame) unsafe-read-u64-at-offset: (offset: Fixnum)] does: [
+    frame .segment unsafe-read-u64-at-offset: (2 + frame .offset + offset)
+]
+method: [(frame: Frame) unsafe-read-value-at-offset: (offset: Fixnum)] does: [
+    frame .segment unsafe-read-value-at-offset: (2 + frame .offset + offset)
+]
+method: [(frame: Frame) .code] does: [
+    frame unsafe-read-value-at-offset: 1
+]
+method: [(frame: Frame) .inst-spot] does: [
+    frame .segment unsafe-read-u32-at-offset: (2 + frame .offset + 2) * 2
+]
+method: [(frame: Frame) .#regs] does: [
+    frame unsafe-read-u64-at-offset: 3
+]
+method: [(frame: Frame) .#data] does: [
+    frame unsafe-read-u64-at-offset: 4
+]
+method: [(frame: Frame) .data-depth] does: [
+    frame unsafe-read-u64-at-offset: 5
+]
+method: [(frame: Frame) .module] does: [
+    frame unsafe-read-value-at-offset: 6
+]
+method: [(frame: Frame) next] does: [
+    Frame segment: frame .segment offset: (
+        frame .offset + 7 + frame .#regs + frame .#data
+    )
+]
+
+pretty-print: s length
+let: fm = (Frame segment: s offset: 0)
+print: "MODULE FRAME:"
+pretty-print: fm .code
+pretty-print: fm .inst-spot
+pretty-print: fm .#regs
+pretty-print: fm .#data
+pretty-print: fm .data-depth
+#pretty-print: fm .module
+
+let: fh = fm next
+print: "'h' FRAME:"
+pretty-print: fh .code
+pretty-print: fh .inst-spot
+pretty-print: fh .#regs
+pretty-print: fh .#data
+pretty-print: fh .data-depth
+#pretty-print: fm .module
+
+let: fg = fh next
+print: "'g' FRAME:"
+pretty-print: fg .code
+pretty-print: fg .inst-spot
+pretty-print: fg .#regs
+pretty-print: fg .#data
+pretty-print: fg .data-depth
+#pretty-print: fm .module
+
+let: ff = fg next
+print: "'f' FRAME:"
+pretty-print: ff .code
+pretty-print: ff .inst-spot
+pretty-print: ff .#regs
+pretty-print: ff .#data
+pretty-print: ff .data-depth
+#pretty-print: fm .module
+
+method: [(code: Code) .module] does: [
+    code unsafe-read-value-at-offset: 1
+]
+method: [(code: Code) .#params] does: [
+    code unsafe-read-u32-at-offset: 2 * 2
+]
+method: [(code: Code) .#regs] does: [
+    code unsafe-read-u32-at-offset: 2 * 2 + 1
+]
+method: [(code: Code) .#data] does: [
+    code unsafe-read-u32-at-offset: 3 * 2
+]
+method: [(code: Code) .upreg-map] does: [
+    code unsafe-read-value-at-offset: 4
+]
+method: [(code: Code) .insts] does: [
+    code unsafe-read-value-at-offset: 5
+]
+method: [(code: Code) .args] does: [
+    code unsafe-read-value-at-offset: 6
+]
+method: [(code: Code) .span] does: [
+    code unsafe-read-value-at-offset: 7
+]
+method: [(code: Code) .inst-spans] does: [
+    code unsafe-read-value-at-offset: 8
+]
+
+let: c = ff .code
+print: "'f' CODE:"
+pretty-print: c .module type
+pretty-print: c .#params
+pretty-print: c .#regs
+pretty-print: c .#data
+pretty-print: c .upreg-map
+pretty-print: c .insts
+pretty-print: c .args
+pretty-print: c .span
+pretty-print: c .inst-spans
+
+method: [(t: Tuple) length] does: [
+    t unsafe-read-u64-at-offset: 1
+]
+method: [(t: Tuple) unsafe-at: (i: Fixnum)] does: [
+    t unsafe-read-value-at-offset: 2 + i
+]
+
+method: [(a: Array) length] does: [
+    a unsafe-read-u64-at-offset: 1
+]
+method: [(a: Array) unsafe-at: (i: Fixnum)] does: [
+    a unsafe-read-value-at-offset: 2 + i
+]
+
+let: tup = (1, 2, 3)
+pretty-print: tup length
+pretty-print: (tup unsafe-at: 0)
+pretty-print: (tup unsafe-at: 1)
+pretty-print: (tup unsafe-at: 2)
+
+data: SourceLocation has: { index; line; column }
+data: SourceSpan has: { file; start; end }
+method: [(t: Tuple) >SourceSpan] does: [
+    SourceSpan file: (t unsafe-at: 0) start: (
+        SourceLocation index: (t unsafe-at: 1) line: (t unsafe-at: 2) column: (t unsafe-at: 3)
+    ) end: (
+        SourceLocation index: (t unsafe-at: 4) line: (t unsafe-at: 5) column: (t unsafe-at: 6)
+    )
+]
+
+let: digit-strings = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+method: [(n: Fixnum) digit>string] does: [
+    digit-strings unsafe-at: n
+]
+
+method: [(a: Fixnum) mod: (n: Fixnum)] does: [ a - (a / n) * n ]
+
+print: "-----------------"
+
+method: [(n: Fixnum) >string] does: [
+    n < 0 then: ["-" ~ (- n) >string] else: [
+        n < 10 then: [n digit>string] else: [
+            (n / 10) >string ~ (n mod: 10) digit>string
+        ]
+    ]
+]
+method: [(_: Null) >string] does: ["null"]
+method: [(b: Bool) >string] does: [b then: "t" else: "f"]
+
+method: [(span: SourceSpan) >string] does: [
+    "<" ~ span .file ~ ":" ~ (
+        (span .start .line + 1) >string ~ ":" ~ (span .start .column + 1) >string
+    ) ~ "-" ~ (
+        (span .end .line + 1) >string ~ "." ~ (span .end .column + 1) >string
+    ) ~ ">"
+]
+
+let: i = 12
+print: ((Frame segment: (null) get-call-stack offset: 0) .code .inst-spans unsafe-at: i) >SourceSpan >string
