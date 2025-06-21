@@ -221,6 +221,7 @@ namespace Katsu
         _Method,
         _MultiMethod,
         _Type,
+        _CallSegment,
 
         // Keep this last!
         NUM_BUILTINS,

@@ -56,6 +56,11 @@ namespace Katsu
     // Make a DataclassInstance with specified dataclass, with slots uninitialized.
     DataclassInstance* make_instance_nofill(GC& gc, Root<Type>& r_type);
 
+    struct Frame;
+    // Make a CallSegment with the specified lowest frame and total length (in bytes) of all frames
+    // in the segment.
+    CallSegment* make_call_segment(GC& gc, Frame* segment_bottom, uint64_t total_length);
+
     // Append a value to a vector, reallocating if necessary to expand the vector.
     // For convenience, this returns a pointer to the resulting Vector (which may have been moved
     // due to reallocation).

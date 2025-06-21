@@ -230,6 +230,24 @@ namespace Katsu
         return inst;
     }
 
+    CallSegment* make_call_segment(GC& gc, Frame* segment_bottom, uint64_t total_length)
+    {
+        ASSERT_ARG(segment_bottom);
+        ASSERT_ARG(total_length <= SIZE_MAX);
+        CallSegment* segment = gc.alloc<CallSegment>(total_length);
+        segment->length = total_length;
+        memcpy(segment->frames(), segment_bottom, total_length);
+        // Invalidate `caller` in each freshly copied frame.
+        Frame* past_end = reinterpret_cast<Frame*>(reinterpret_cast<uint8_t*>(segment->frames()) +
+                                                   segment->length);
+        Frame* frame;
+        for (frame = segment->frames(); frame < past_end; frame = frame->next()) {
+            frame->caller = nullptr;
+        }
+        ASSERT_ARG(frame == past_end);
+        return segment;
+    }
+
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value)
     {
         Vector* vector = *r_vector;
@@ -993,6 +1011,7 @@ namespace Katsu
                     case ObjectTag::MULTIMETHOD: return vm.builtin(BuiltinId::_MultiMethod);
                     case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
                     case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
+                    case ObjectTag::CALL_SEGMENT: return vm.builtin(BuiltinId::_CallSegment);
                     default: ASSERT_MSG(false, "forgot an ObjectTag?");
                 }
             }

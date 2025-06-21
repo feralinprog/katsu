@@ -1,6 +1,7 @@
 #include "gc.h"
 
 #include "assertions.h"
+#include "vm.h" // for Frame
 
 #include <cstring>
 #include <map>
@@ -145,6 +146,11 @@ namespace Katsu
                         // number of slots in the instance's v_type. However, the v_type (and its
                         // constituent fields) may be forwarding pointers now.
                         obj_size = DataclassInstance::size(get_num_slots(v->v_type));
+                        break;
+                    }
+                    case ObjectTag::CALL_SEGMENT: {
+                        auto v = obj->object<CallSegment*>();
+                        obj_size = v->size();
                         break;
                     }
                     default: [[unlikely]] ALWAYS_ASSERT_MSG(false, "missed an object tag?");
@@ -317,6 +323,31 @@ namespace Katsu
                     }
                     // WARNING: special case (as just above).
                     obj_size = DataclassInstance::size(num_slots);
+                    break;
+                }
+                case ObjectTag::CALL_SEGMENT: {
+                    auto v = obj->object<CallSegment*>();
+                    // This is effectively VM::visit_roots().
+                    Frame* frame = v->frames();
+                    Frame* past_end = reinterpret_cast<Frame*>(
+                        reinterpret_cast<uint8_t*>(v->frames()) + v->length);
+                    while (frame < past_end) {
+                        move_value(&frame->v_code);
+                        move_value(&frame->v_module);
+
+                        for (uint32_t i = 0; i < frame->num_regs; i++) {
+                            move_value(&frame->regs()[i]);
+                        }
+
+                        // Note that we don't need to go visit all the way to num_data.
+                        // Only up to data_depth is guaranteed valid.
+                        for (uint32_t i = 0; i < frame->data_depth; i++) {
+                            move_value(&frame->data()[i]);
+                        }
+
+                        frame = frame->next();
+                    }
+                    obj_size = v->size();
                     break;
                 }
                 default: ALWAYS_ASSERT_MSG(false, "missed an object tag?");

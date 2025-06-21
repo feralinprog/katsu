@@ -29,6 +29,7 @@ namespace Katsu
      *   - multimethods
      *   - type values
      *   - dataclass instances
+     *   - call stack segment (a group of call frames)
      *
      * Some small objects (e.g. fixnums, bools, etc.) are stored inline; others are represented as
      * tagged pointers to the actual contents (subclasses of Object) elsewhere in memory that
@@ -113,6 +114,7 @@ namespace Katsu
         MULTIMETHOD,
         TYPE,
         INSTANCE,
+        CALL_SEGMENT,
     };
 
     static const char* object_tag_str(ObjectTag tag)
@@ -130,6 +132,7 @@ namespace Katsu
             case ObjectTag::MULTIMETHOD: return "multimethod";
             case ObjectTag::TYPE: return "type";
             case ObjectTag::INSTANCE: return "instance";
+            case ObjectTag::CALL_SEGMENT: return "call-segment";
             default: return "!unknown!";
         }
     }
@@ -148,6 +151,7 @@ namespace Katsu
             case ObjectTag::MULTIMETHOD: return "MULTIMETHOD";
             case ObjectTag::TYPE: return "TYPE";
             case ObjectTag::INSTANCE: return "INSTANCE";
+            case ObjectTag::CALL_SEGMENT: return "CALL_SEGMENT";
             default: return "!UNKNOWN!";
         }
     }
@@ -231,6 +235,7 @@ namespace Katsu
     struct MultiMethod;
     struct Type;
     struct DataclassInstance;
+    struct CallSegment;
 
     // TODO: create related generic types which are guaranteed to have the right tag?
     // Like TaggedValue<int64_t>, guaranteed to be a fixnum.
@@ -347,6 +352,10 @@ namespace Katsu
         {
             return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::INSTANCE;
         }
+        bool is_obj_call_segment() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::CALL_SEGMENT;
+        }
 
         int64_t fixnum() const
         {
@@ -412,6 +421,10 @@ namespace Katsu
         DataclassInstance* obj_instance() const
         {
             return this->object()->object<DataclassInstance*>();
+        }
+        CallSegment* obj_call_segment() const
+        {
+            return this->object()->object<CallSegment*>();
         }
 
         static Value fixnum(int64_t num)
@@ -750,6 +763,31 @@ namespace Katsu
         // actual object contents).
     };
 
+
+    // From vm.h.
+    struct Frame;
+    struct CallSegment : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::CALL_SEGMENT;
+
+        // Total number of bytes of frame content.
+        uint64_t length;
+        inline Frame* frames()
+        {
+            return reinterpret_cast<Frame*>(&this->length + 1);
+        }
+
+        // Size in bytes.
+        static inline uint64_t size(uint64_t length)
+        {
+            return sizeof(CallSegment) + length;
+        }
+        inline uint64_t size() const
+        {
+            return CallSegment::size(this->length);
+        }
+    };
+
     // Specializations for static_value():
     template <> inline int64_t static_value<int64_t>(Value value)
     {
@@ -844,5 +882,10 @@ namespace Katsu
     {
         ASSERT(object.tag() == ObjectTag::INSTANCE);
         return reinterpret_cast<DataclassInstance*>(&object);
+    }
+    template <> inline CallSegment* static_object<CallSegment*>(Object& object)
+    {
+        ASSERT(object.tag() == ObjectTag::CALL_SEGMENT);
+        return reinterpret_cast<CallSegment*>(&object);
     }
 };

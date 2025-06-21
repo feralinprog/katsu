@@ -436,6 +436,19 @@ namespace Katsu
         return Value::null();
     }
 
+    void intrinsic__get_call_stack(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ get-call-stack
+        ASSERT(nargs == 1);
+        vm.frame()->inst_spot++;
+        Frame* past_top = vm.frame()->next();
+        Frame* bottom = vm.bottom_frame();
+        uint64_t total_stack_length =
+            reinterpret_cast<uint8_t*>(past_top) - reinterpret_cast<uint8_t*>(bottom);
+        vm.frame()->push(
+            Value::object(make_call_segment(vm.gc, vm.bottom_frame(), total_stack_length)));
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -491,6 +504,7 @@ namespace Katsu
         register_base_type(BuiltinId::_Method, "Method");
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
         register_base_type(BuiltinId::_Type, "Type");
+        register_base_type(BuiltinId::_CallSegment, "CallSegment");
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
@@ -754,6 +768,17 @@ namespace Katsu
                        3,
                        matchers3,
                        &native__unsafe_write_value_at_offset_value_);
+        }
+
+        {
+            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
+            matchers1->components()[0] = Value::null(); // any
+            add_intrinsic(vm.gc,
+                          r_module,
+                          "get-call-stack",
+                          1,
+                          matchers1,
+                          &intrinsic__get_call_stack);
         }
 
         /*
