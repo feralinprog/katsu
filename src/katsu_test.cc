@@ -811,6 +811,20 @@ let: a = (adder: 3)
         check(Value::fixnum(71));
     }
 
+    SECTION("duplicate immutable bindings")
+    {
+        input(R"(
+method: [test: n] does: [
+    "thisisatest"
+    let: x = n
+    let: x = x + 10
+    x
+]
+test: 5
+        )");
+        check(Value::fixnum(15));
+    }
+
     SECTION("recursion")
     {
         input(R"(
