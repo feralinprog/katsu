@@ -1,11 +1,11 @@
 module: M has: [
     # all multimethods must be at module top level; cannot be nested
-    let: [test: (a: String)] do: [ print: a ]
+    let: (test: (a: String)) do: [ print: a ]
     # methods can use other methods (and types) that are defined later
     # but can only use variables / constants that were previously defined (e.g. TOP_LEVEL_VAR is unusable here,
     # as otherwise there could be a loop between TOP_LEVEL_VAR definition invoking test: while test: uses TOP_LEVEL_VAR)
-    let: [test: (n: Int)] do: [ a * 2 ]
-    let: [do-thing-with: a] do: [ print: "doesn't actually do anything with a" ]
+    let: (test: (n: Int)) do: [ a * 2 ]
+    let: (do-thing-with: a) do: [ print: "doesn't actually do anything with a" ]
 
     # constants / variables cannot be used out-of-order, but definitions can use any types / methods in the module,
     # even if out of order. (TODO: actually, what if `later-test:` uses TOP_LEVEL_VAR..? still broken.)
@@ -14,10 +14,10 @@ module: M has: [
     let: TOP_LEVEL_VAR_2 = 10 + TOP_LEVEL_VAR
     print: "calculated variables!"
 
-    let: [later-test: (n: Int)] do: [ (n + 2) pr ]
+    let: (later-test: (n: Int)) do: [ (n + 2) pr ]
 
     # can use OutOfOrder!
-    let: [(self: OutOfOrder) whatever] do: [
+    let: ((self: OutOfOrder) whatever) do: [
         # cannot define any multimethods in here
         # (... or maybe allow multimethod definitions, but like `local: [sig] does: [ thing ]` to make it clear the semantics
         # are different; it would shadow whatever multimethod definition was in use and entirely replace all the individual

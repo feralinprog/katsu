@@ -1,6 +1,6 @@
 pretty-print: 10 + 20
 
-let: [adder: (n0: Fixnum)] do: [
+let: (adder: (n0: Fixnum)) do: [
     mut: n = n0
     let: delta = n0 + 30
     \x [
@@ -22,17 +22,17 @@ a instance?: Closure
 
 print: "this is " ~ "a test"
 
-let: [if: (cond: Bool) then: tbody else: fbody] do: [
+let: (if: (cond: Bool) then: tbody else: fbody) do: [
     # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
     TAIL-CALL: (cond then: tbody else: fbody)
 ]
 
-let: [if: (cond: Bool) then: tbody] do: [
+let: (if: (cond: Bool) then: tbody) do: [
     # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
     TAIL-CALL: (cond then: tbody else: null)
 ]
 
-let: [while: (cond: Closure) do: (body: Closure)] do: [
+let: (while: (cond: Closure) do: (body: Closure)) do: [
     # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
     TAIL-CALL: ((cond call) then: [
         body call
@@ -40,7 +40,7 @@ let: [while: (cond: Closure) do: (body: Closure)] do: [
     ] else: null)
 ]
 
-let: [run-test] do: [
+let: run-test do: [
     mut: n = 10000
     while: [n > 0] do: [
         if: (n / 10000) * 10000 = n then: [
@@ -73,24 +73,24 @@ data: Optional has: {}
 data: OptionalSome extends: { Optional } has: { value }
 data: OptionalNone extends: { Optional } has: {}
 
-let: [some: value] do: [ OptionalSome value: value ]
-let: [none]        do: [ OptionalNone new ]
+let: (some: value) do: [ OptionalSome value: value ]
+let: none          do: [ OptionalNone new ]
 
-let: [(opt: OptionalSome) then: some-body else: none-body] do: [
+let: ((opt: OptionalSome) then: some-body else: none-body) do: [
     some-body call: opt .value
 ]
-let: [(opt: OptionalNone) then: some-body else: none-body] do: [
+let: ((opt: OptionalNone) then: some-body else: none-body) do: [
     none-body call
 ]
 
 (some: 5) then: [pretty-print: it] else: [print: "none"]
 (null none) then: [pretty-print: it] else: [print: "none"]
 
-let: [signal: thing] do: [
+let: (signal: thing) do: [
     pretty-print: thing
 ]
 
-# let: [(opt: Optional) value!] do: [
+# let: ((opt: Optional) value!) do: [
 #     opt then: [it] else: [signal: (NoneValue message: "none has no value")]
 # ]
 # 
@@ -98,7 +98,7 @@ let: [signal: thing] do: [
 
 pretty-print: {1; 2; 3}
 
-let: [(n: Fixnum) times: body] do: [
+let: ((n: Fixnum) times: body) do: [
     mut: i = 0
     while: [i < n] do: [
         body call: i
@@ -108,7 +108,7 @@ let: [(n: Fixnum) times: body] do: [
 
 5 times: [pretty-print: it]
 
-let: [(v: Vector) length] do: [
+let: (v: Vector) length do: [
     v unsafe-read-u64-at-offset: 1
 ]
 
@@ -118,59 +118,51 @@ pretty-print: v
 v unsafe-write-value-at-offset: 2 value: "I swappa the arrey"
 pretty-print: v
 
-let: [get-current-module] do: [
-    pretty-print: [it]
-]
 
-0 get-current-module
-
-
-
-
-let: [f: n] do: [
+let: (f: n) do: [
     (null) get-call-stack
 ]
-let: [g: n] do: [
+let: (g: n) do: [
     f: n
 ]
-let: [h: n] do: [
+let: (h: n) do: [
     g: n
 ]
 let: s = (h: 0)
 
-let: [(segment: CallSegment) length] do: [
+let: (segment: CallSegment) length do: [
     segment unsafe-read-u64-at-offset: 1
 ]
 
 data: Frame has: { segment; offset }
-let: [(frame: Frame) unsafe-read-u64-at-offset: (offset: Fixnum)] do: [
+let: ((frame: Frame) unsafe-read-u64-at-offset: (offset: Fixnum)) do: [
     frame .segment unsafe-read-u64-at-offset: (2 + frame .offset + offset)
 ]
-let: [(frame: Frame) unsafe-read-value-at-offset: (offset: Fixnum)] do: [
+let: ((frame: Frame) unsafe-read-value-at-offset: (offset: Fixnum)) do: [
     frame .segment unsafe-read-value-at-offset: (2 + frame .offset + offset)
 ]
-let: [(frame: Frame) .code] do: [
+let: (frame: Frame) .code do: [
     frame unsafe-read-value-at-offset: 1
 ]
-let: [(frame: Frame) .inst-spot] do: [
+let: (frame: Frame) .inst-spot do: [
     frame .segment unsafe-read-u32-at-offset: (2 + frame .offset + 2) * 2
 ]
-let: [(frame: Frame) .#regs] do: [
+let: (frame: Frame) .#regs do: [
     frame unsafe-read-u64-at-offset: 3
 ]
-let: [(frame: Frame) .#data] do: [
+let: (frame: Frame) .#data do: [
     frame unsafe-read-u64-at-offset: 4
 ]
-let: [(frame: Frame) .data-depth] do: [
+let: (frame: Frame) .data-depth do: [
     frame unsafe-read-u64-at-offset: 5
 ]
-let: [(frame: Frame) .module] do: [
+let: (frame: Frame) .module do: [
     frame unsafe-read-value-at-offset: 6
 ]
-let: [(frame: Frame) .marker] do: [
+let: (frame: Frame) .marker do: [
     frame unsafe-read-value-at-offset: 7
 ]
-let: [(frame: Frame) next] do: [
+let: (frame: Frame) next do: [
     Frame segment: frame .segment offset: (
         frame .offset + 8 + frame .#regs + frame .#data
     )
@@ -213,31 +205,31 @@ pretty-print: ff .#data
 pretty-print: ff .data-depth
 #pretty-print: fm .module
 
-let: [(code: Code) .module] do: [
+let: (code: Code) .module do: [
     code unsafe-read-value-at-offset: 1
 ]
-let: [(code: Code) .#params] do: [
+let: (code: Code) .#params do: [
     code unsafe-read-u32-at-offset: 2 * 2
 ]
-let: [(code: Code) .#regs] do: [
+let: (code: Code) .#regs do: [
     code unsafe-read-u32-at-offset: 2 * 2 + 1
 ]
-let: [(code: Code) .#data] do: [
+let: (code: Code) .#data do: [
     code unsafe-read-u32-at-offset: 3 * 2
 ]
-let: [(code: Code) .upreg-map] do: [
+let: (code: Code) .upreg-map do: [
     code unsafe-read-value-at-offset: 4
 ]
-let: [(code: Code) .insts] do: [
+let: (code: Code) .insts do: [
     code unsafe-read-value-at-offset: 5
 ]
-let: [(code: Code) .args] do: [
+let: (code: Code) .args do: [
     code unsafe-read-value-at-offset: 6
 ]
-let: [(code: Code) .span] do: [
+let: (code: Code) .span do: [
     code unsafe-read-value-at-offset: 7
 ]
-let: [(code: Code) .inst-spans] do: [
+let: (code: Code) .inst-spans do: [
     code unsafe-read-value-at-offset: 8
 ]
 
@@ -253,17 +245,17 @@ pretty-print: c .args
 pretty-print: c .span
 pretty-print: c .inst-spans
 
-let: [(t: Tuple) length] do: [
+let: (t: Tuple) length do: [
     t unsafe-read-u64-at-offset: 1
 ]
-let: [(t: Tuple) unsafe-at: (i: Fixnum)] do: [
+let: ((t: Tuple) unsafe-at: (i: Fixnum)) do: [
     t unsafe-read-value-at-offset: 2 + i
 ]
 
-let: [(a: Array) length] do: [
+let: (a: Array) length do: [
     a unsafe-read-u64-at-offset: 1
 ]
-let: [(a: Array) unsafe-at: (i: Fixnum)] do: [
+let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
     a unsafe-read-value-at-offset: 2 + i
 ]
 
@@ -275,7 +267,7 @@ pretty-print: (tup unsafe-at: 2)
 
 data: SourceLocation has: { index; line; column }
 data: SourceSpan has: { file; start; end }
-let: [(t: Tuple) >SourceSpan] do: [
+let: (t: Tuple) >SourceSpan do: [
     SourceSpan file: (t unsafe-at: 0) start: (
         SourceLocation index: (t unsafe-at: 1) line: (t unsafe-at: 2) column: (t unsafe-at: 3)
     ) end: (
@@ -284,26 +276,26 @@ let: [(t: Tuple) >SourceSpan] do: [
 ]
 
 let: digit-strings = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
-let: [(n: Fixnum) digit>string] do: [
+let: (n: Fixnum) digit>string do: [
     digit-strings unsafe-at: n
 ]
 
-let: [(a: Fixnum) mod: (n: Fixnum)] do: [ a - (a / n) * n ]
+let: ((a: Fixnum) mod: (n: Fixnum)) do: [ a - (a / n) * n ]
 
 print: "-----------------"
 
-let: [(s: String) >string] do: [ s ]
-let: [(n: Fixnum) >string] do: [
+let: (s: String) >string do: [ s ]
+let: (n: Fixnum) >string do: [
     n < 0 then: ["-" ~ (- n) >string] else: [
         n < 10 then: [n digit>string] else: [
             (n / 10) >string ~ (n mod: 10) digit>string
         ]
     ]
 ]
-let: [(_: Null) >string] do: ["null"]
-let: [(b: Bool) >string] do: [b then: "t" else: "f"]
+let: (_: Null) >string do: ["null"]
+let: (b: Bool) >string do: [b then: "t" else: "f"]
 
-let: [(span: SourceSpan) >string] do: [
+let: (span: SourceSpan) >string do: [
     "<" ~ span .file ~ ":" ~ (
         (span .start .line + 1) >string ~ ":" ~ (span .start .column + 1) >string
     ) ~ "-" ~ (
@@ -334,10 +326,10 @@ print: "zzzzz"
 
 print: "----------------------------------"
 
-let: [shift: f] do: [ f call/marked: t ]
-let: [reset: f] do: [ f call/dc: t ]
+let: (shift: f) do: [ f call/marked: t ]
+let: (reset: f) do: [ f call/dc: t ]
 
-let: [f with-return] do: [
+let: f with-return do: [
     shift: [
         f call: \v [ reset: [v] ]
     ]
@@ -351,7 +343,7 @@ print: (\return [
 
 print: "----------------------------------"
 
-let: [f cleanup: c] do: [
+let: (f cleanup: c) do: [
     [ f call ] call/marked: t
     c call
 ]

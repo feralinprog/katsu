@@ -614,15 +614,6 @@ namespace Katsu
             decl = p->inner.get();
         }
 
-        if (BlockExpr* b = dynamic_cast<BlockExpr*>(decl)) {
-            if (!b->parameters.empty()) {
-                std::stringstream ss;
-                ss << message << " 'declaration' argument should not specify any parameters";
-                throw compile_error(ss.str(), decl->span);
-            }
-            decl = b->body.get();
-        }
-
         std::vector<std::string> method_name_parts{};
         std::vector<std::string> param_names{};
         // Parameter matchers are evaluated at runtime later; this generates code to evaluate them.
