@@ -206,13 +206,6 @@ namespace Katsu
             builder.emit_arg(gc, r_name.value());
             builder.emit_arg(gc, Value::fixnum(2));
         } else if (NameExpr* expr = dynamic_cast<NameExpr*>(&_expr)) {
-            // TODO: somehow distinguish between a plain `x` being
-            // * `<default-receiver> x`, i.e. invoking `x` on the default receiver; or
-            // * `x`, i.e. load the local or module value `x`
-            // maybe if the name is in module scope but is a multimethod..?
-            // but then compilation would vary depending on whether module value is multimethod or
-            // something else. Currently this always assumes it's a local/module load, not a unary
-            // message.
             const std::string& name = std::get<std::string>(expr->name.value);
             Root<String> r_name(gc, make_string(gc, name));
             size_t var_depth;
@@ -254,10 +247,26 @@ namespace Katsu
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                     builder.emit_arg(gc, Value::fixnum(local->local_index));
                 }
-            } else if (module_lookup(*builder.r_module, *r_name)) {
-                // LOAD_MODULE: <name>
-                builder.emit_op(gc, OpCode::LOAD_MODULE, /* stack_height_delta */ +1, _expr.span);
-                builder.emit_arg(gc, r_name.value());
+            } else if (Value* lookup = module_lookup(*builder.r_module, *r_name)) {
+                if (lookup->is_obj_multimethod()) {
+                    Value v_name = lookup->obj_multimethod()->v_name;
+                    ValueRoot r_name(gc, std::move(v_name));
+                    // Load the default receiver, which is always register 0.
+                    // LOAD_REG: <local index>
+                    builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
+                    builder.emit_arg(gc, Value::fixnum(0));
+                    // INVOKE: <name>, <num args>
+                    builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
+                    builder.emit_arg(gc, *r_name);
+                    builder.emit_arg(gc, Value::fixnum(1));
+                } else {
+                    // LOAD_MODULE: <name>
+                    builder.emit_op(gc,
+                                    OpCode::LOAD_MODULE,
+                                    /* stack_height_delta */ +1,
+                                    _expr.span);
+                    builder.emit_arg(gc, r_name.value());
+                }
             } else {
                 throw compile_error("name is not defined in module or in local scope",
                                     expr->name.span);

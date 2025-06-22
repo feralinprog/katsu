@@ -49,7 +49,7 @@ let: run-test do: [
         n: n - 1
     ]
 ]
-(null) run-test
+run-test
 
 data: Point has: { x; y }
 data: Point3D extends: { Point } has: { z }
@@ -84,17 +84,17 @@ let: ((opt: OptionalNone) then: some-body else: none-body) do: [
 ]
 
 (some: 5) then: [pretty-print: it] else: [print: "none"]
-(null none) then: [pretty-print: it] else: [print: "none"]
+none then: [pretty-print: it] else: [print: "none"]
 
-let: (signal: thing) do: [
-    pretty-print: thing
-]
+# let: (signal: thing) do: [
+#     pretty-print: thing
+# ]
 
 # let: ((opt: Optional) value!) do: [
 #     opt then: [it] else: [signal: (NoneValue message: "none has no value")]
 # ]
 # 
-# (null none) value!
+# none value!
 
 pretty-print: {1; 2; 3}
 
@@ -120,7 +120,7 @@ pretty-print: v
 
 
 let: (f: n) do: [
-    (null) get-call-stack
+    get-call-stack
 ]
 let: (g: n) do: [
     f: n
