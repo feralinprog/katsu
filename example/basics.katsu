@@ -2,13 +2,13 @@
 
 # TODO: need to fix the inlining argument re-binding.
 # phi nodes need to know which basic block argument comes from, not just which argument it is...
-method: [a swap: b] does: [
+let: [a swap: b] do: [
     print: a
     TAIL-CALL: (b swap: a)
 ] :: { +inline; +tail-recursive }
 "a" swap: "b"
 
-method: [(n: Number) recurse] does: [
+let: [(n: Number) recurse] do: [
     if: n > 0 then: [
         print: n
         TAIL-CALL: (n - 1) recurse
@@ -18,10 +18,10 @@ method: [(n: Number) recurse] does: [
 ]
 2 recurse
 
-method: [if: (cond: Bool) then: body] does: [
+let: [if: (cond: Bool) then: body] do: [
     TAIL-CALL: (if: cond then: body else: null)
 ] :: { +inline }
-method: [(n: Number) recurse] does: [
+let: [(n: Number) recurse] do: [
     if: n > 0 then: [
         print: n
         TAIL-CALL: (n - 1) recurse
@@ -29,29 +29,29 @@ method: [(n: Number) recurse] does: [
 ]
 2 recurse
 
-method: [sum: a and: b and: c] does: [
+let: [sum: a and: b and: c] do: [
     let: x = a + b
     let: y = x + c
     y
 ] :: { +inline }
 print: (sum: 1 and: 2 and: 3)
 
-method: [(a: Number) plus: (b: Number)] does: [
+let: [(a: Number) plus: (b: Number)] do: [
     a + b
 ]
 print: (1 plus: 2)
 
-method: [a str~: b] does: [
+let: [a str~: b] do: [
     a >string ~ b >string
 ]
 print: ("abc" str~: 2)
 
 # TODO: precompute <null> and use this, so it's not looked up at runtime.
 # (really, figure out how this can work. maybe something like:
-# >> method: [if: cond then: body] does: (bake: [ if: cond then: body else: $null ])
+# >> let: [if: cond then: body] do: (bake: [ if: cond then: body else: $null ])
 # where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
-method: [if: (cond: Bool) then: body] does: [ TAIL-CALL: (if: cond then: body else: [ null ]) ] :: { +inline }
-method: [if: cond then: body] does: [ "blah" ]
+let: [if: (cond: Bool) then: body] do: [ TAIL-CALL: (if: cond then: body else: [ null ]) ] :: { +inline }
+let: [if: cond then: body] do: [ "blah" ]
 if: 2 > 1 then: [ print: "good: 2 > 1" ]
 if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
 
@@ -67,14 +67,14 @@ print: a
 #   but this would _not_ be directly compiled into a while loop.
 #   NOTE: this hint is pessimistic if the body is not actually tail-recursive, and prohibits various
 #       other optimizations.
-method: [while: (cond: Quote) do: (body: Quote)] does: [
+let: [while: (cond: Quote) do: (body: Quote)] do: [
     if: cond call then: [
         body call
         TAIL-CALL: (while: cond do: body)
     ]
 ] :: { +inline }
 
-method: [test-while] does: [
+let: [test-while] do: [
     mut: i = 10
     while: [i > 0] do: [
         print: i
@@ -84,7 +84,7 @@ method: [test-while] does: [
 ]
 test-while
 
-method: [from: low to<: high do: (body: Quote)] does: [
+let: [from: low to<: high do: (body: Quote)] do: [
     mut: i = low
     while: [i < high] do: [
         body call: i
@@ -101,7 +101,7 @@ print: not t
 print: - 5
 print: (1 + 3 * 6 / 2 * 3) == 4
 
-method: [vec each: action] does: [
+let: [vec each: action] do: [
     mut: i = 0
     while: [i < vec length] do: [
         action call: (vec at: i)
@@ -109,7 +109,7 @@ method: [vec each: action] does: [
     ]
 ]
 
-method: [vec each-reversed: action] does: [
+let: [vec each-reversed: action] do: [
     mut: i = vec length - 1
     while: [i >= 0] do: [
         action call: (vec at: i)
@@ -134,21 +134,21 @@ data append: "last elem"
 print: data
 
 let: other = { "more"; "data" }
-method: [prefix extend: suffix] does: [
+let: [prefix extend: suffix] do: [
     suffix each: \v [prefix append: v]
 ]
 print: other
 data extend: other
 print: data
 
-#method: [length] does: [
+#let: [length] do: [
 #    mut: count = 0
 #    self each: [ set-count: count + 1 ]
 #    count
 #]
 print: data length
 
-method: [vec map: f] does: [
+let: [vec map: f] do: [
     let: new-vec = {}
     vec each: \v [new-vec append: (f call: v)]
     new-vec
@@ -157,7 +157,7 @@ print: data
 data each: [print]
 print: (data map: [length])
 
-method: [vec from: initial-value accumulate: f] does: [
+let: [vec from: initial-value accumulate: f] do: [
     mut: cur = initial-value
     vec each: \v [set-cur: (f call*: (cur, v))]
     cur
@@ -166,19 +166,19 @@ print: ((data map: [length]) from: 0 accumulate: \sum-so-far current-value [
     sum-so-far + current-value
 ])
 
-method: [vec map2: f] does: [
+let: [vec map2: f] do: [
     vec from: {} accumulate: \new-vec x [
         new-vec append: (f call: x)
     ]
 ]
 print: (data map2: [length])
 
-method: [vec strsum] does: [
+let: [vec strsum] do: [
     vec from: "" accumulate: \a b [a ~ b >string]
 ]
 ({{"a";"b"};{"c";"d"}} map2: [strsum]) each: [print]
 
-method: [vec select: filter] does: [
+let: [vec select: filter] do: [
     vec from: {} accumulate: \new-vec x [
         if: (filter call: x) then: [ new-vec append: x ] else: new-vec
     ]
@@ -186,7 +186,7 @@ method: [vec select: filter] does: [
 print: (data select: [it length < 2])
 print: (data select: [it length >= 2])
 
-method: [v print-with-wrapper: s] does: [
+let: [v print-with-wrapper: s] do: [
     print: s ~ v >string ~ s
 ]
 data each: [print-with-wrapper: "!"]
@@ -194,7 +194,7 @@ data each: [print-with-wrapper: "!"]
 # example of runtime error
 #data each: [strsum]
 
-method: [nonlocal-return-test: f] does: [
+let: [nonlocal-return-test: f] do: [
     print: "should get here"
     f call: 5
     print: "should not get here!"
@@ -229,7 +229,7 @@ t type == Bool
 
 data: :Point3D extends: { Point } has: { :z }
 
-method: [(p: Point) +: (q: Point)] does: [
+let: [(p: Point) +: (q: Point)] do: [
     Point x: (p .x + q .x) y: (p .y + q .y)
 ]
 
@@ -241,7 +241,7 @@ p + q3
 p3 + q
 p3 + q3
 
-method: [(p: Point3D) +: (q: Point3D)] does: [
+let: [(p: Point3D) +: (q: Point3D)] do: [
     Point3D x: (p .x + q .x) y: (p .y + q .y) z: (p .z + q .z)
 ]
 p + q
@@ -249,7 +249,7 @@ p + q3
 p3 + q
 p3 + q3
 
-method: [while-with-break: cond do: body] does: [
+let: [while-with-break: cond do: body] do: [
     \cc [
         while: cond do: [body call: cc]
     ] call/cc
@@ -262,7 +262,7 @@ while-with-break: [t] do: \break [
     set-i: i + 1
 ]
 
-method: [while-with-break-and-continue: cond do: body] does: [
+let: [while-with-break-and-continue: cond do: body] do: [
     \break-cc [
         while: cond do: [
             \cont-cc [
@@ -294,13 +294,13 @@ data: :NoSuchRestart extends: { Condition } has: { :restart }
 # TODO: remove these. May need to add proper modules which have lookups resolved at the end.
 defer-method: :signal:
 
-method: [assert: condition] does: [
+let: [assert: condition] do: [
     if: not condition call then: [
         signal: (AssertionFailure message: "Assertion failed: " ~ condition >string condition: condition)
     ]
 ]
 
-method: [receiver switch: (options: Vector)] does: [
+let: [receiver switch: (options: Vector)] do: [
     \ret [
         options each: \option [
             assert: [option length == 2]
@@ -333,19 +333,19 @@ switch: {
     print: "result: " ~ result >string
 ] call
 
-method: [top: return] does: [
+let: [top: return] do: [
     print: "top, before return"
     1 + (return call: "<the result from top>")
     print: "top, after return (BAD)"
 ]
-method: [middle: return] does: [
+let: [middle: return] do: [
     print: "middle, before calling top"
     [top: return] cleanup: [
         print: "middle, doing cleanup"
     ]
     print: "middle, after calling top (BAD)"
 ]
-method: [bottom: return] does: [
+let: [bottom: return] do: [
     print: "bottom, before calling middle"
     [middle: return] cleanup: [
         print: "bottom, doing cleanup"
@@ -376,7 +376,7 @@ print: \ret [bottom: ret] call/rc
     print: "second cleanup"
 ]
 
-method: [do-a-tail-cleanup] does: [ [ [ 1234 ] call ] cleanup: [ print: "other cleanup" ] ]
+let: [do-a-tail-cleanup] do: [ [ [ 1234 ] call ] cleanup: [ print: "other cleanup" ] ]
 [ do-a-tail-cleanup ] cleanup: [ print: "some cleanup" ]
 
 ###################################################################
@@ -386,10 +386,10 @@ data: :Optional has: {
     :value
 }
 
-method: [some: value] does: [ Optional has-value?: t value: value ]
-method: [none]        does: [ Optional has-value?: f value: null ]
+let: [some: value] do: [ Optional has-value?: t value: value ]
+let: [none]        do: [ Optional has-value?: f value: null ]
 
-method: [(opt: Optional) then: some-body else: none-body] does: [
+let: [(opt: Optional) then: some-body else: none-body] do: [
     if: opt .has-value? then: [
         some-body call: opt .value
     ] else: [
@@ -397,7 +397,7 @@ method: [(opt: Optional) then: some-body else: none-body] does: [
     ]
 ]
 
-method: [(opt: Optional) value!] does: [
+let: [(opt: Optional) value!] do: [
     opt then: [it] else: [signal: (NoneValue message: "none has no value")]
 ]
 
@@ -408,7 +408,7 @@ none then: [print] else: [print: "none"]
 #   length
 #   at:
 mixin: :Sequence
-method: [(seq: Sequence) each: (action: Quote)] does: [
+let: [(seq: Sequence) each: (action: Quote)] do: [
     mut: i = 0
     while: [i < seq length] do: [
         action call: (seq at: i)
@@ -418,8 +418,8 @@ method: [(seq: Sequence) each: (action: Quote)] does: [
 
 mix-in: Sequence to: Vector
 
-method: [(opt: Optional) length] does: [ opt then: 1 else: 0 ]
-method: [(opt: Optional) at: (i: Number)] does: [
+let: [(opt: Optional) length] do: [ opt then: 1 else: 0 ]
+let: [(opt: Optional) at: (i: Number)] do: [
     if: i == 0 then: [
         opt value!
     ] else: [
@@ -441,13 +441,13 @@ none each: [print]
 data: :AssocEntry has: { :key; :value }
 
 data: :Assoc has: { :entries }
-method: [assoc: vector-entries] does: [
+let: [assoc: vector-entries] do: [
     Assoc entries: (vector-entries map: \entry [ AssocEntry key: (entry at: 0) value: (entry at: 1) ])
 ]
 
-method: [(assoc: Assoc) each-entry: (action: Quote)] does: [ assoc .entries each: action ]
+let: [(assoc: Assoc) each-entry: (action: Quote)] do: [ assoc .entries each: action ]
 
-method: [(a: Assoc) if-has: key then*: then-fn else: else-fn] does: [
+let: [(a: Assoc) if-has: key then*: then-fn else: else-fn] do: [
     \ret [
         a each-entry: [
             if: it .key == key then: [ret call: (then-fn call: it)]
@@ -456,35 +456,35 @@ method: [(a: Assoc) if-has: key then*: then-fn else: else-fn] does: [
     ] call/rc
 ]
 
-method: [(a: Assoc) if-has: key then: then-fn else: else-fn] does: [
+let: [(a: Assoc) if-has: key then: then-fn else: else-fn] do: [
     a if-has: key then*: [then-fn call: it .value] else: else-fn
 ]
 
-method: [(a: Assoc) at*: key] does: [
+let: [(a: Assoc) at*: key] do: [
     a if-has: key then: [some: it] else: [none]
 ]
 
-method: [(a: Assoc) at: key] does: [ (a at*: key) value! ]
+let: [(a: Assoc) at: key] do: [ (a at*: key) value! ]
 
-method: [(a: Assoc) has: key] does: [ (a at*: key) .has-value?  ]
+let: [(a: Assoc) has: key] do: [ (a at*: key) .has-value?  ]
 
-method: [(a: Assoc) put-entry: (entry: AssocEntry)] does: [
+let: [(a: Assoc) put-entry: (entry: AssocEntry)] do: [
     a if-has: entry .key then*: [ it set-value: entry .value ] else: [
         a .entries append: entry
     ]
 ]
-method: [(a: Assoc) at: key put: value] does: [
+let: [(a: Assoc) at: key put: value] do: [
     a put-entry: (AssocEntry key: key value: value)
 ]
 
 # Add all pairs from :b into :a, keeping the value from :a if there is a conflict.
-method: [(a: Assoc) extend: (b: Assoc)] does: [
+let: [(a: Assoc) extend: (b: Assoc)] do: [
     b each-entry: \entry [
         a if-has: entry .key then: null else: [a put-entry: entry]
     ]
 ]
 
-method: [(a: Assoc) keys] does: [
+let: [(a: Assoc) keys] do: [
     let: keys-vec = {}
     a each-entry: \entry [ keys-vec append: entry .key ]
     keys-vec
@@ -510,20 +510,20 @@ m
 defer-method: :get:
 
 let: namestack = { assoc: {} }
-method: [push-scope: (vars: Assoc)] does: [namestack append: vars]
-method: [pop-scope] does: [namestack pop]
-method: [scope has-var: (var: Symbol)] does: [ scope has: var ]
-method: [scope get-var: (var: Symbol)] does: [ scope get: var ]
-method: [scope set: (var: Symbol) value: value] does: [ scope at: var put: value ]
-method: [(name: Symbol) get] does: [
+let: [push-scope: (vars: Assoc)] do: [namestack append: vars]
+let: [pop-scope] do: [namestack pop]
+let: [scope has-var: (var: Symbol)] do: [ scope has: var ]
+let: [scope get-var: (var: Symbol)] do: [ scope get: var ]
+let: [scope set: (var: Symbol) value: value] do: [ scope at: var put: value ]
+let: [(name: Symbol) get] do: [
     \ret [
         namestack each-reversed: \scope [
             scope if-has: name then: [ret call: it] else: none
         ]
     ] call/rc
 ]
-method: [(name: Symbol) set: value] does: [(namestack at: (namestack length - 1)) at: name put: value ]
-method: [with-scope: (body: Quote)] does: [
+let: [(name: Symbol) set: value] do: [(namestack at: (namestack length - 1)) at: name put: value ]
+let: [with-scope: (body: Quote)] do: [
     push-scope: (assoc: {})
     body cleanup: [pop-scope]
 ]
@@ -544,17 +544,17 @@ print: :x get
 # Stack of list-of-pairs, where each pair holds a predicate quote
 # and a handler quote.
 let: handler-stack = {}
-method: [(body: Quote) with-handlers: (handlers: Vector)] does: [
+let: [(body: Quote) with-handlers: (handlers: Vector)] do: [
     handler-stack append: handlers
     body cleanup: [handler-stack pop]
 ]
 
-method: [(predicate: Quote) matches-condition?: condition] does: [ predicate call: condition ]
-method: [(type: Type) matches-condition?: condition] does: [ condition is-instance: type ]
-method: [value matches-condition?: condition] does: [ condition == value ]
+let: [(predicate: Quote) matches-condition?: condition] do: [ predicate call: condition ]
+let: [(type: Type) matches-condition?: condition] do: [ condition is-instance: type ]
+let: [value matches-condition?: condition] do: [ condition == value ]
 
 # Call a handler if one matches; else return null.
-method: [(handlers: Vector) call-handler*: condition] does: [
+let: [(handlers: Vector) call-handler*: condition] do: [
     \ret [
         handlers each: [
             let: predicate = (it at: 0)
@@ -567,12 +567,12 @@ method: [(handlers: Vector) call-handler*: condition] does: [
 
 # Stack of assocs (from symbol to restart quote).
 let: restart-stack = {}
-method: [(body: Quote) with-restarts: (restarts: Assoc)] does: [
+let: [(body: Quote) with-restarts: (restarts: Assoc)] do: [
     restart-stack append: restarts
     body cleanup: [restart-stack pop]
 ]
 
-method: [(restart: Symbol) get-restart] does: [
+let: [(restart: Symbol) get-restart] do: [
     \ret [
         restart-stack each-reversed: [
             it if-has: restart then: \quote [ret call: quote] else: null
@@ -581,17 +581,17 @@ method: [(restart: Symbol) get-restart] does: [
     ] call/rc
 ]
 
-method: [(restart: Symbol) invoke-restart] does: [
+let: [(restart: Symbol) invoke-restart] do: [
     restart get-restart call
 ]
 
-method: [all-active-restarts] does: [
+let: [all-active-restarts] do: [
     let: restarts = (assoc: {})
     restart-stack each-reversed: [restarts extend: it]
     restarts
 ]
 
-method: [signal: condition] does: [
+let: [signal: condition] do: [
     \ret [
         handler-stack each-reversed: [
             if: not (let: handler-result = (it call-handler*: condition)) Null? then: [
@@ -613,7 +613,7 @@ method: [signal: condition] does: [
 
 # Handle a signal from the VM.
 # TODO: have VM just produce actual Condition (or subtype thereof) objects.
-method: [tup condition-tuple>object] does: [
+let: [tup condition-tuple>object] do: [
     \condition message [
         condition switch: {
             { [it == :internal-error]; [InternalError message: message] }
@@ -622,7 +622,7 @@ method: [tup condition-tuple>object] does: [
         }
     ] call*: tup
 ]
-method: [handle-signal: condition-tuple] does: [ signal: condition-tuple condition-tuple>object ]
+let: [handle-signal: condition-tuple] do: [ signal: condition-tuple condition-tuple>object ]
 
 # Catches eval_toplevel issue with exit condition.
 #print: ("a" plus: "b")

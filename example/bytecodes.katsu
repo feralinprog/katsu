@@ -1,4 +1,4 @@
-method: [adder: n0] does: [
+let: [adder: n0] do: [
     mut: n = n0
     let: delta = n0
     \x [

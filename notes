@@ -12,7 +12,7 @@ more TODO:
   * %{ { key; value}; { key; value } ... }
 * modules should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)
 * allow force-inlining at call site?
-* method:does: should allow marking arguments optional (-> just generate all combos)
+* let:do: should allow marking arguments optional (-> just generate all combos)
 * macros / annotations / hook in to parser for custom syntax?
   * tail-call
   * 'let' syntax

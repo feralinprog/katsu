@@ -946,8 +946,8 @@ namespace Katsu
          * - module imports/exports (actually start a standard library)
          *
          * also move / add some things to compile-time builtins:
-         * - method:does:
-         * - method:does:::
+         * - let:do:
+         * - let:do:::
          * - let:
          * - mut:
          * - data:has:

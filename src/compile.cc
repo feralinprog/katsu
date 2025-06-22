@@ -623,7 +623,7 @@ namespace Katsu
             decl = b->body.get();
         } else {
             // TODO: implement non-block method declarations
-            ASSERT_MSG(false, "non-block decls for method:does: not implemented");
+            ASSERT_MSG(false, "non-block decls for let:do: not implemented");
         }
 
         std::vector<std::string> method_name_parts{};
@@ -1328,14 +1328,14 @@ namespace Katsu
         // have bytecode actually write a null into local @0.
 
         for (std::unique_ptr<Expr>& top_level_expr : module_top_level_exprs) {
-            // TODO: handle method:does:[::] as a builtin, looked up in module.
+            // TODO: handle let:do:[::] as a builtin, looked up in module.
             if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(top_level_expr.get())) {
                 if (expr->messages.size() == 2 &&
-                    std::get<std::string>(expr->messages[0].value) == "method" &&
-                    std::get<std::string>(expr->messages[1].value) == "does") {
+                    std::get<std::string>(expr->messages[0].value) == "let" &&
+                    std::get<std::string>(expr->messages[1].value) == "do") {
                     compile_method(gc,
                                    builder,
-                                   "method:does:",
+                                   "let:do:",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
                                    *expr->args[0],
@@ -1343,14 +1343,14 @@ namespace Katsu
                                    nullptr);
                     continue;
                 } else if (expr->messages.size() == 3 &&
-                           std::get<std::string>(expr->messages[0].value) == "method" &&
-                           std::get<std::string>(expr->messages[1].value) == "does" &&
+                           std::get<std::string>(expr->messages[0].value) == "let" &&
+                           std::get<std::string>(expr->messages[1].value) == "do" &&
                            std::get<std::string>(expr->messages[2].value) == ":"
 
                 ) {
                     compile_method(gc,
                                    builder,
-                                   "method:does:::",
+                                   "let:do:::",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
                                    *expr->args[0],

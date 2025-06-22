@@ -794,7 +794,7 @@ a + b
     SECTION("basic method, closure, mutable bindings")
     {
         input(R"(
-method: [adder: n0] does: [
+let: [adder: n0] do: [
     mut: n = n0
     let: delta = n0 + 30
     \x [
@@ -814,7 +814,7 @@ let: a = (adder: 3)
     SECTION("duplicate immutable bindings")
     {
         input(R"(
-method: [test: n] does: [
+let: [test: n] do: [
     "thisisatest"
     let: x = n
     let: x = x + 10
@@ -828,13 +828,13 @@ test: 5
     SECTION("recursion")
     {
         input(R"(
-method: [n triangular-num: result] does: [
+let: [n triangular-num: result] do: [
     (n = 0) then: result else: [
         (n - 1) triangular-num: (n + result)
     ]
 ]
 
-method: [n triangular-num] does: [n triangular-num: 0]
+let: [n triangular-num] do: [n triangular-num: 0]
 
 100 triangular-num
         )");
@@ -846,14 +846,14 @@ method: [n triangular-num] does: [n triangular-num: 0]
     SECTION("tail recursion")
     {
         input(R"(
-method: [n triangular-num: result] does: [
+let: [n triangular-num: result] do: [
     # TODO: then:else: should probably assume tail-call if in tail position, even if not requested
     TAIL-CALL: ((n = 0) then: result else: [
         TAIL-CALL: ((n - 1) triangular-num: (n + result))
     ])
 ]
 
-method: [n triangular-num] does: [n triangular-num: 0]
+let: [n triangular-num] do: [n triangular-num: 0]
 
 2000 triangular-num
         )");
@@ -864,7 +864,7 @@ method: [n triangular-num] does: [n triangular-num: 0]
     SECTION("nontail position - cannot tail call")
     {
         input(R"(
-method: [testing] does: [
+let: [testing] do: [
     TAIL-CALL: testing
     "but does something afterwards"
 ]
@@ -889,7 +889,7 @@ TAIL-CALL: (1 + 2)
         SECTION("multimethod accepts stated argument types")
         {
             input(R"(
-method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
+let: [(a: Fixnum) mm-test: (b: Fixnum)] do: [ "Fixnum - Fixnum" ]
 
 5 mm-test: 10
             )");
@@ -899,7 +899,7 @@ method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 1")
         {
             input(R"(
-method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
+let: [(a: Fixnum) mm-test: (b: Fixnum)] do: [ "Fixnum - Fixnum" ]
 
 "abc" mm-test: 10
             )");
@@ -909,7 +909,7 @@ method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 2")
         {
             input(R"(
-method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
+let: [(a: Fixnum) mm-test: (b: Fixnum)] do: [ "Fixnum - Fixnum" ]
 
 5 mm-test: "def"
             )");
@@ -919,9 +919,9 @@ method: [(a: Fixnum) mm-test: (b: Fixnum)] does: [ "Fixnum - Fixnum" ]
         SECTION("multimethod downselection - case 1")
         {
             input(R"(
-method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
-method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
-method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+let: [(a: Fixnum) mm-test:  b         ] do: [ "Fixnum - any" ]
+let: [ a          mm-test: (b: Fixnum)] do: [ "any - Fixnum" ]
+let: [ a          mm-test:  b         ] do: [ "any - any"    ]
 
 5 mm-test: "def"
             )");
@@ -931,9 +931,9 @@ method: [ a          mm-test:  b         ] does: [ "any - any"    ]
         SECTION("multimethod downselection - case 2")
         {
             input(R"(
-method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
-method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
-method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+let: [(a: Fixnum) mm-test:  b         ] do: [ "Fixnum - any" ]
+let: [ a          mm-test: (b: Fixnum)] do: [ "any - Fixnum" ]
+let: [ a          mm-test:  b         ] do: [ "any - any"    ]
 
 "abc" mm-test: 10
             )");
@@ -943,9 +943,9 @@ method: [ a          mm-test:  b         ] does: [ "any - any"    ]
         SECTION("multimethod downselection - case 3")
         {
             input(R"(
-method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
-method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
-method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+let: [(a: Fixnum) mm-test:  b         ] do: [ "Fixnum - any" ]
+let: [ a          mm-test: (b: Fixnum)] do: [ "any - Fixnum" ]
+let: [ a          mm-test:  b         ] do: [ "any - any"    ]
 
 "abc" mm-test: "def"
             )");
@@ -955,9 +955,9 @@ method: [ a          mm-test:  b         ] does: [ "any - any"    ]
         SECTION("multimethod downselection - case 3 (ambiguous)")
         {
             input(R"(
-method: [(a: Fixnum) mm-test:  b         ] does: [ "Fixnum - any" ]
-method: [ a          mm-test: (b: Fixnum)] does: [ "any - Fixnum" ]
-method: [ a          mm-test:  b         ] does: [ "any - any"    ]
+let: [(a: Fixnum) mm-test:  b         ] do: [ "Fixnum - any" ]
+let: [ a          mm-test: (b: Fixnum)] do: [ "any - Fixnum" ]
+let: [ a          mm-test:  b         ] do: [ "any - any"    ]
 
 5 mm-test: 10
             )");
@@ -969,7 +969,7 @@ method: [ a          mm-test:  b         ] does: [ "any - any"    ]
     {
         input(R"(
 # TODO: allow mut:s at module level, so we don't need this workaround
-method: [init hacky-make-mut] does: [
+let: [init hacky-make-mut] do: [
     mut: boxed = init
     \new-value [
         boxed # TODO: delete this required workaround
@@ -983,10 +983,10 @@ method: [init hacky-make-mut] does: [
 ]
 
 let: verify-matcher = ("matcher not evaluated" hacky-make-mut)
-method: [give-me-Fixnum] does: [ verify-matcher call: "matcher evaluated"; Fixnum ]
+let: [give-me-Fixnum] do: [ verify-matcher call: "matcher evaluated"; Fixnum ]
 
 let: verify-multimethod = ("multimethod not evaluated" hacky-make-mut)
-method: [(a: (null give-me-Fixnum)) mm-test] does: [ verify-multimethod call: "multimethod evaluated" ]
+let: [(a: (null give-me-Fixnum)) mm-test] do: [ verify-multimethod call: "multimethod evaluated" ]
 
 5 mm-test
 
@@ -1039,7 +1039,7 @@ TEST-ASSERT: (thing .slot-c = 30)
     SECTION("unary method")
     {
         input(R"(
-method: [unary] does: [ 1234 ]
+let: [unary] do: [ 1234 ]
 unary
         )");
         // Intuitively this should call `unary` and produce 1234; it doesn't currently.
