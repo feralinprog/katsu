@@ -167,9 +167,12 @@ method: [(frame: Frame) .data-depth] does: [
 method: [(frame: Frame) .module] does: [
     frame unsafe-read-value-at-offset: 6
 ]
+method: [(frame: Frame) .marker] does: [
+    frame unsafe-read-value-at-offset: 7
+]
 method: [(frame: Frame) next] does: [
     Frame segment: frame .segment offset: (
-        frame .offset + 7 + frame .#regs + frame .#data
+        frame .offset + 8 + frame .#regs + frame .#data
     )
 ]
 
@@ -289,6 +292,7 @@ method: [(a: Fixnum) mod: (n: Fixnum)] does: [ a - (a / n) * n ]
 
 print: "-----------------"
 
+method: [(s: String) >string] does: [ s ]
 method: [(n: Fixnum) >string] does: [
     n < 0 then: ["-" ~ (- n) >string] else: [
         n < 10 then: [n digit>string] else: [
@@ -309,3 +313,70 @@ method: [(span: SourceSpan) >string] does: [
 
 let: i = 12
 print: ((Frame segment: (null) get-call-stack offset: 0) .code .inst-spans unsafe-at: i) >SourceSpan >string
+
+
+print: "----------------------------------"
+
+print: "aaaaa"
+[
+    print: "  bbbbb"
+    let: input = (\k [
+        print: "    ccccc"
+        print: "    result of k('abcdef'): " ~ (k call: "abcdef")
+        print: "    result of k('123456'): " ~ (k call: "123456")
+        print: "    ddddd"
+    ] call/dc: t)
+    print: "  eeeee"
+    # Pretend to do some calculations, and return the result:
+    "calcs(" ~ input ~ ")"
+] call/marked: t
+print: "zzzzz"
+
+print: "----------------------------------"
+
+method: [shift: f] does: [ f call/marked: t ]
+method: [reset: f] does: [ f call/dc: t ]
+
+method: [f with-return] does: [
+    shift: [
+        f call: \v [ reset: [v] ]
+    ]
+]
+
+print: (\return [
+    print: "doing some things"
+    return call: "early return"
+    print: "oops, after return!"
+] with-return)
+
+print: "----------------------------------"
+
+method: [f cleanup: c] does: [
+    [ f call ] call/marked: t
+    c call
+]
+
+\r [
+    print: "doing some setup"
+    [
+        print: "doing some calcs"
+        r call
+        print: "after early return - shouldn't see this at all"
+    ] cleanup: [
+        print: "cleaning up!"
+    ]
+    print: "after cleanup - also shouldn't see this, since early return should still be active"
+] with-return
+
+let: m1 = "marker 1"
+let: m2 = "marker 2"
+[
+    [
+        [
+            print: "escaping to marker"
+        ] call/dc: m1
+        print: "after call/dc: m1"
+    ] call/marked: m2
+    print: "after call/marker: m2"
+] call/marked: m1
+print: "after call/marker: m1"

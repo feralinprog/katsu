@@ -52,6 +52,7 @@ namespace Katsu
         while (frame <= this->current_frame) {
             visitor(&frame->v_code);
             visitor(&frame->v_module);
+            visitor(&frame->v_marker);
 
             for (uint32_t i = 0; i < frame->num_regs; i++) {
                 visitor(&frame->regs()[i]);
@@ -84,8 +85,11 @@ namespace Katsu
         uint32_t code_num_regs = r_code->num_regs;
         uint32_t code_num_data = r_code->num_data;
 
-        Frame* frame =
-            this->alloc_frame(code_num_regs, code_num_data, r_code.value(), r_code->v_module);
+        Frame* frame = this->alloc_frame(code_num_regs,
+                                         code_num_data,
+                                         r_code.value(),
+                                         r_code->v_module,
+                                         /* v_marker */ Value::null());
         for (uint32_t i = 0; i < code_num_regs; i++) {
             frame->regs()[i] = Value::null();
         }
@@ -124,6 +128,8 @@ namespace Katsu
             std::cout << "num_data = " << frame->num_data << "\n";
             std::cout << "data_depth = " << frame->data_depth << "\n";
             // TODO: show v_module only if folding is possible, otherwise too noisy.
+            std::cout << "v_marker: ";
+            pprint(frame->v_marker, /* initial_indent */ false);
 
             std::cout << "regs:\n";
             for (uint32_t i = 0; i < frame->num_regs; i++) {
@@ -136,8 +142,7 @@ namespace Katsu
                 pprint(frame->data()[i], /* initial_indent */ false, /* depth */ 1);
             }
 
-            frame = reinterpret_cast<Frame*>(
-                align_up(reinterpret_cast<uint64_t>(frame) + frame->size(), TAG_BITS));
+            frame = frame->next();
         }
     }
 
@@ -388,7 +393,8 @@ namespace Katsu
         return *lookup;
     }
 
-    Frame* VM::alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module)
+    Frame* VM::alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module,
+                           Value v_marker)
     {
         Frame* frame = this->current_frame ? this->current_frame->next()
                                            : reinterpret_cast<Frame*>(this->call_stack_mem);
@@ -408,8 +414,20 @@ namespace Katsu
         frame->num_data = num_data;
         frame->data_depth = 0;
         frame->v_module = v_module;
+        frame->v_marker = v_marker;
         // regs() / data() is up to caller to initialize as desired.
         return frame;
+    }
+
+    Frame* VM::alloc_frames(uint64_t total_length)
+    {
+        Frame* bottom_frame = this->current_frame ? this->current_frame->next()
+                                                  : reinterpret_cast<Frame*>(this->call_stack_mem);
+        if (reinterpret_cast<uint8_t*>(bottom_frame) + total_length >
+            this->call_stack_mem + this->call_stack_size) {
+            throw std::runtime_error("katsu stack overflow");
+        }
+        return reinterpret_cast<Frame*>(reinterpret_cast<uint8_t*>(bottom_frame) + total_length);
     }
 
     // Doesn't allocate.
@@ -586,8 +604,11 @@ namespace Katsu
             ASSERT_MSG(code->v_upreg_map.is_null(), "method's v_code's v_upreg_map should be null");
             ASSERT(num_args == code->num_params);
 
-            Frame* frame =
-                this->alloc_frame(code->num_regs, code->num_data, method->v_code, code->v_module);
+            Frame* frame = this->alloc_frame(code->num_regs,
+                                             code->num_data,
+                                             method->v_code,
+                                             code->v_module,
+                                             /* v_marker */ Value::null());
             for (uint32_t i = 0; i < num_args; i++) {
                 frame->regs()[i] = args[i];
             }

@@ -223,7 +223,8 @@ namespace Katsu
         return Value::null();
     }
 
-    void call_impl(OpenVM& vm, bool tail_call, Value v_callable, int64_t nargs, Value* args)
+    void call_impl(OpenVM& vm, bool tail_call, Value v_callable, int64_t nargs, Value* args,
+                   Value v_marker = Value::null())
     {
         // In case of tail-call, we need to temporarily store the args as we unwind the current
         // frame and replace it with a new frame.
@@ -253,8 +254,11 @@ namespace Katsu
                 throw std::runtime_error("called a closure with wrong number of arguments");
             }
 
-            Frame* next =
-                vm.alloc_frame(code->num_regs, code->num_data, Value::object(code), code->v_module);
+            Frame* next = vm.alloc_frame(code->num_regs,
+                                         code->num_data,
+                                         Value::object(code),
+                                         code->v_module,
+                                         v_marker);
 
             // In the closure's frame:
             // - local 0...n are the call arguments (which may just be <null>, in the special case
@@ -286,6 +290,32 @@ namespace Katsu
                 frame->inst_spot++;
             }
             vm.set_frame(next);
+        } else if (v_callable.is_obj_call_segment()) {
+            CallSegment* segment = v_callable.obj_call_segment();
+            // Place the segment's frames on top of the stack, and push the one argument provided.
+            if (nargs != 1) {
+                // TODO: Katsu error instead, should be able to handle it
+                throw std::runtime_error(
+                    "called a call-segment with wrong number of arguments (should be 1)");
+            }
+            ASSERT_MSG(!tail_call, "tail-call call segment not implemented");
+            Frame* old_top = vm.frame();
+            old_top->inst_spot++;
+            Frame* past_old_top = old_top->next();
+            Frame* past_new_top = vm.alloc_frames(segment->length);
+            memcpy(past_old_top, segment->frames(), segment->length);
+            // Set up caller-pointers throughout the new stack region.
+            Frame* prev = old_top;
+            Frame* cur = past_old_top;
+            while (cur < past_new_top) {
+                cur->caller = prev;
+                prev = cur;
+                cur = cur->next();
+            }
+            ASSERT(cur == past_new_top);
+            Frame* new_top = prev;
+            vm.set_frame(new_top);
+            new_top->push(args[0]);
         } else {
             // Just push the callable; it returns itself.
             // TODO: what if multimethod or method? should actually be callable
@@ -293,7 +323,7 @@ namespace Katsu
             if (!tail_call) {
                 frame->inst_spot++;
             }
-            frame->data()[frame->data_depth++] = v_callable;
+            frame->push(v_callable);
         }
     }
 
@@ -302,21 +332,33 @@ namespace Katsu
         // cond then: tbody else: fbody
         ASSERT(nargs == 3);
         Value body = (args[0].is_bool() && args[0]._bool()) ? args[1] : args[2];
-        call_impl(vm, tail_call, /* v_callable */ body, /* nargs */ 0, /* args */ nullptr);
+        call_impl(vm,
+                  tail_call,
+                  /* v_callable */ body,
+                  /* nargs */ 0,
+                  /* args */ nullptr);
     }
 
     void intrinsic__call(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // value call
         ASSERT(nargs == 1);
-        call_impl(vm, tail_call, /* v_callable */ args[0], /* nargs */ 0, /* args */ nullptr);
+        call_impl(vm,
+                  tail_call,
+                  /* v_callable */ args[0],
+                  /* nargs */ 0,
+                  /* args */ nullptr);
     }
 
     void intrinsic__call_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // value call: arg
         ASSERT(nargs == 2);
-        call_impl(vm, tail_call, /* v_callable */ args[0], /* nargs */ 1, /* args */ &args[1]);
+        call_impl(vm,
+                  tail_call,
+                  /* v_callable */ args[0],
+                  /* nargs */ 1,
+                  /* args */ &args[1]);
     }
 
     void intrinsic__call_star_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
@@ -468,6 +510,49 @@ namespace Katsu
             reinterpret_cast<uint8_t*>(past_top) - reinterpret_cast<uint8_t*>(bottom);
         vm.frame()->push(
             Value::object(make_call_segment(vm.gc, vm.bottom_frame(), total_stack_length)));
+    }
+
+    void intrinsic__call_marked_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // value call/marked: marker
+        ASSERT(nargs == 2);
+        Value v_callable = args[0];
+        Value v_marker = args[1];
+        call_impl(vm, tail_call, v_callable, /* nargs */ 0, /* args */ &v_marker, v_marker);
+    }
+
+    void intrinsic__call_dc_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // TODO: tail-call call/dc:?
+        ASSERT_MSG(!tail_call, "call/dc: tail-call not implemented");
+        // value call/dc: marker
+        ASSERT(nargs == 2);
+        ValueRoot r_callable(vm.gc, std::move(args[0]));
+        Value v_marker = args[1];
+        // Search call stack (from top) for the marker, move that portion of the stack into a
+        // CallSegment, and then call the callable value with that CallSegment.
+        Frame* marked = vm.frame();
+        while (marked && marked->v_marker != v_marker) {
+            marked = marked->caller;
+        }
+        if (!marked) {
+            // TODO: raise to katsu
+            throw std::runtime_error("did not find marker in call stack");
+        }
+        vm.frame()->inst_spot++;
+        Frame* past_top = vm.frame()->next();
+        uint64_t total_length =
+            reinterpret_cast<uint8_t*>(past_top) - reinterpret_cast<uint8_t*>(marked);
+        Value v_segment = Value::object(make_call_segment(vm.gc, marked, total_length));
+        vm.set_frame(marked->caller);
+        // Rewind the new top frame; we are pretending that it is about to call the segment.
+        vm.frame()->inst_spot--;
+        call_impl(vm,
+                  /* tail_call */ false,
+                  /* v_callable */ *r_callable,
+                  /* nargs */ 1,
+                  /* args */ &v_segment,
+                  /* v_marker */ Value::null());
     }
 
     Value make_base_type(GC& gc, Root<String>& r_name)
@@ -825,6 +910,20 @@ namespace Katsu
                           1,
                           matchers1,
                           &intrinsic__get_call_stack);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "call/marked:", 2, matchers2, &intrinsic__call_marked_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = Value::null(); // any
+            add_intrinsic(vm.gc, r_module, "call/dc:", 2, matchers2, &intrinsic__call_dc_);
         }
 
         /*

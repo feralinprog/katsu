@@ -1069,4 +1069,100 @@ unary
   ]
 )");
     }
+
+    SECTION("delimited continuation - example")
+    {
+        cout_capture capture;
+        input(R"CODE(
+print: "aaaaa"
+[
+    print: "  bbbbb"
+    let: input = (\k [
+        print: "    ccccc"
+        print: "    result of k('abcdef'): " ~ (k call: "abcdef")
+        print: "    result of k('123456'): " ~ (k call: "123456")
+        print: "    ddddd"
+    ] call/dc: t)
+    print: "  eeeee"
+    # Pretend to do some calculations, and return the result:
+    "calcs(" ~ input ~ ")"
+] call/marked: t
+print: "zzzzz"
+        )CODE");
+        check(Value::null());
+        CHECK(capture.str() == R"(aaaaa
+  bbbbb
+    ccccc
+  eeeee
+    result of k('abcdef'): calcs(abcdef)
+  eeeee
+    result of k('123456'): calcs(123456)
+    ddddd
+zzzzz
+)");
+    }
+
+    SECTION("delimited continuation - wrong marker")
+    {
+        cout_capture capture;
+        input(R"CODE(
+[
+    [null] call/dc: f
+] call/marked: t
+        )CODE");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("did not find marker in call stack"));
+        CHECK(capture.str() == "");
+    }
+
+    SECTION("delimited continuation - multiple markers - outer")
+    {
+        SECTION("outer")
+        {
+            cout_capture capture;
+            input(R"CODE(
+let: m1 = "marker 1"
+let: m2 = "marker 2"
+[
+    [
+        [
+            print: "escaping to marker"
+        ] call/dc: m1
+        print: "after call/dc: m1"
+    ] call/marked: m2
+    print: "after call/marked: m2"
+] call/marked: m1
+print: "after call/marked: m1"
+            )CODE");
+            check(Value::null());
+            CHECK(capture.str() == R"(escaping to marker
+after call/marked: m1
+)");
+        }
+
+        SECTION("inner")
+        {
+            cout_capture capture;
+            input(R"CODE(
+let: m1 = "marker 1"
+let: m2 = "marker 2"
+[
+    [
+        [
+            print: "escaping to marker"
+        ] call/dc: m2
+        print: "after call/dc: m2"
+    ] call/marked: m2
+    print: "after call/marked: m2"
+] call/marked: m1
+print: "after call/marked: m1"
+        )CODE");
+            check(Value::null());
+            CHECK(capture.str() == R"(escaping to marker
+after call/marked: m2
+after call/marked: m1
+)");
+        }
+    }
 }

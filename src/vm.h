@@ -142,6 +142,9 @@ namespace Katsu
 
         Value v_module; // Module
 
+        // Any value, used for delimiting continuations.
+        Value v_marker;
+
         // Variable-length array of length `num_regs`.
         inline Value* regs()
         {
@@ -263,7 +266,13 @@ namespace Katsu
         // Allocates a call frame. The caller must initialize the new frame's regs() and
         // data(), in particular before any GC operations. Returns the new frame, which the caller
         // must set as the current_frame if desired. Raises runtime_error on stack overflow.
-        Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module);
+        Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module,
+                           Value v_marker);
+
+        // Allocates a region for multiple call frames. The caller must initialize the entire region
+        // before further VM or GC operations. Returns just past the top-most frame. Does not update
+        // the VM's current_frame. Raises runtime_error on stack overflow.
+        Frame* alloc_frames(uint64_t total_length);
 
         // Invoke a value (which could be a closure or multimethod) with some arguments. The
         // arguments may be just past the end of the current frame's data stack. This also takes
@@ -310,9 +319,15 @@ namespace Katsu
 
         // See VM::alloc_frame().
         inline Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code,
-                                  Value v_module)
+                                  Value v_module, Value v_marker)
         {
-            return this->vm.alloc_frame(num_regs, num_data, v_code, v_module);
+            return this->vm.alloc_frame(num_regs, num_data, v_code, v_module, v_marker);
+        }
+
+        // See VM::alloc_frames().
+        inline Frame* alloc_frames(uint64_t total_length)
+        {
+            return this->vm.alloc_frames(total_length);
         }
 
         inline void unwind_frame(bool tail_call)

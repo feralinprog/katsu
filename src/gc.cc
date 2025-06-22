@@ -334,6 +334,7 @@ namespace Katsu
                     while (frame < past_end) {
                         move_value(&frame->v_code);
                         move_value(&frame->v_module);
+                        move_value(&frame->v_marker);
 
                         for (uint32_t i = 0; i < frame->num_regs; i++) {
                             move_value(&frame->regs()[i]);
