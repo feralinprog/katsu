@@ -1,4 +1,5 @@
 TODO:
+* standalone unary invocations should be invocations instead of loading a multimethod name from module
 * invoke ops should have the actual multimethod, not the name to lookup in module
 * signal a condition on error instead of just dying
 * delimited continuations
@@ -17,3 +18,13 @@ more TODO:
   * tail-call
   * 'let' syntax
   * replace @ret [...] with [...] call/rc w/ slot added so return: uses the return-continuation
+
+References for delimited continuations:
+* I used the following sources most directly:
+  - https://www.deinprogramm.de/sperber/papers/shift-reset-direct.pdf
+  - https://cs.ru.nl/~dfrumin/notes/delim.html
+  - https://gist.github.com/sebfisch/2235780
+* Some further resources (I haven't fully processed these yet):
+  - https://okmij.org/ftp/continuations/implementations.html#dynamic-wind
+  - http://pllab.is.ocha.ac.jp/~asai/cw2011tutorial/main-e.pdf
+  - https://okmij.org/ftp/continuations/caml-shift-journal.pdf
