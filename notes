@@ -2,7 +2,6 @@ TODO:
 * standalone unary invocations should be invocations instead of loading a multimethod name from module
 * invoke ops should have the actual multimethod, not the name to lookup in module
 * signal a condition on error instead of just dying
-* delimited continuations
 * coroutines / fibers (should be supported by delimited continuations..?)
 * support builtin modules and module loading, in order to actually start a standard library / core
 * allow for docs everywhere!
