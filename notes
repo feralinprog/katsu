@@ -28,3 +28,4 @@ References for delimited continuations:
   - https://okmij.org/ftp/continuations/implementations.html#dynamic-wind
   - http://pllab.is.ocha.ac.jp/~asai/cw2011tutorial/main-e.pdf
   - https://okmij.org/ftp/continuations/caml-shift-journal.pdf
+  - https://www.gnu.org/software/guile/manual/html_node/Shift-and-Reset.html
