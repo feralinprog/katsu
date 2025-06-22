@@ -811,6 +811,15 @@ let: a = (adder: 3)
         check(Value::fixnum(71));
     }
 
+    SECTION("method definition - non block")
+    {
+        input(R"(
+let: (n add-one) do: [ n + 1 ]
+5 add-one
+        )");
+        check(Value::fixnum(6));
+    }
+
     SECTION("duplicate immutable bindings")
     {
         input(R"(

@@ -621,9 +621,6 @@ namespace Katsu
                 throw compile_error(ss.str(), decl->span);
             }
             decl = b->body.get();
-        } else {
-            // TODO: implement non-block method declarations
-            ASSERT_MSG(false, "non-block decls for let:do: not implemented");
         }
 
         std::vector<std::string> method_name_parts{};
