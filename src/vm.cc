@@ -363,10 +363,12 @@ namespace Katsu
 
     void VM::unwind_frame(bool tail_call)
     {
+#if DEBUG_ASSERTIONS
         Code* frame_code = this->current_frame->v_code.obj_code();
         Array* frame_insts = frame_code->v_insts.obj_array();
         // Make sure all instructions were used.
         ASSERT(this->current_frame->inst_spot == frame_insts->length);
+#endif
 
         // Unwind the frame!
         ASSERT(this->current_frame->caller);
@@ -508,11 +510,13 @@ namespace Katsu
     Method* multimethod_dispatch(VM& vm, MultiMethod* multimethod, Value* args)
     {
         Vector* methods = multimethod->v_methods.obj_vector();
+#if DEBUG_ASSERTIONS
         for (Value v_method : methods) {
             ASSERT(v_method.is_obj_method());
             ASSERT(v_method.obj_method()->v_param_matchers.obj_array()->length ==
                    multimethod->num_params);
         }
+#endif
 
         // TODO: optimize this (by a lot!).
         // Perform two passes:

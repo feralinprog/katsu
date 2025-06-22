@@ -107,10 +107,12 @@ namespace Katsu
         // TODO: check that insts are fixnums of the right range?
         // TODO: check that insts refer to indices in r_args?
         ASSERT_ARG(r_span->length == 7);
+#if DEBUG_ASSERTIONS
         for (Value span : r_inst_spans) {
             ASSERT_ARG(span.is_obj_tuple());
             ASSERT_ARG(span.obj_tuple()->length == 7);
         }
+#endif
         Code* code = gc.alloc<Code>();
         code->v_module = r_module.value();
         code->num_params = num_params;
@@ -153,10 +155,12 @@ namespace Katsu
             ASSERT_ARG(r_param_matchers->length == r_code->num_params);
         }
 
+#if DEBUG_ASSERTIONS
         for (uint64_t i = 0; i < r_param_matchers->length; i++) {
             Value matcher = r_param_matchers->components()[i];
             ASSERT_ARG(matcher.is_null() || matcher.is_obj_type() || matcher.is_obj_ref());
         }
+#endif
 
         Method* method = gc.alloc<Method>();
         method->v_param_matchers = r_param_matchers.value();
@@ -171,11 +175,13 @@ namespace Katsu
     MultiMethod* make_multimethod(GC& gc, Root<String>& r_name, uint32_t num_params,
                                   Root<Vector>& r_methods, Root<Vector>& r_attributes)
     {
+#if DEBUG_ASSERTIONS
         for (Value v_method : r_methods) {
             ASSERT_ARG(v_method.is_obj_method());
             Method* method = v_method.obj_method();
             ASSERT_ARG(method->v_param_matchers.obj_array()->length == num_params);
         }
+#endif
         MultiMethod* multimethod = gc.alloc<MultiMethod>();
         multimethod->v_name = r_name.value();
         multimethod->num_params = num_params;
@@ -1015,7 +1021,7 @@ namespace Katsu
                     default: ASSERT_MSG(false, "forgot an ObjectTag?");
                 }
             }
-            default: ASSERT_MSG(false, "forgot a Tag?");
+            default: ALWAYS_ASSERT_MSG(false, "forgot a Tag?");
         }
     }
 
