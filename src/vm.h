@@ -276,7 +276,7 @@ namespace Katsu
 
         // Invoke a value (which could be a closure or multimethod) with some arguments. The
         // arguments may be just past the end of the current frame's data stack. This also takes
-        // responsibility for updating the top call frame's instruction and argument spots.
+        // responsibility for updating the top call frame's instruction spot.
         void invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args);
 
         // Memory region for the call stack.

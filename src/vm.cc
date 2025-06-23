@@ -232,7 +232,7 @@ namespace Katsu
 
                 bool tail_call = op == OpCode::INVOKE_TAIL;
 
-                // invoke() takes care of shifting the instruction / arg spots.
+                // invoke() takes care of shifting the instruction spot.
                 this->invoke(v_method, tail_call, num_args, args);
                 break;
             }
