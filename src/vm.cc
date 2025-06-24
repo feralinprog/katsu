@@ -224,16 +224,30 @@ namespace Katsu
             }
             case OpCode::INVOKE:
             case OpCode::INVOKE_TAIL: {
-                Value v_method =
-                    module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
-                int64_t num_args = arg(+1).fixnum();
-                // TODO: check uint32_t
-                Value* args = this->current_frame->pop_many(num_args);
+                try {
+                    Value v_method =
+                        module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
+                    int64_t num_args = arg(+1).fixnum();
+                    // TODO: check uint32_t
+                    Value* args = this->current_frame->pop_many(num_args);
 
-                bool tail_call = op == OpCode::INVOKE_TAIL;
+                    bool tail_call = op == OpCode::INVOKE_TAIL;
 
-                // invoke() takes care of shifting the instruction spot.
-                this->invoke(v_method, tail_call, num_args, args);
+                    // invoke() takes care of shifting the instruction spot.
+                    this->invoke(v_method, tail_call, num_args, args);
+                } catch (const std::runtime_error& e) {
+                    // Don't need args any more; we can do GC operations.
+                    String* handler_name =
+                        make_string(this->gc, "handle-raw-condition-with-message:");
+                    Value v_method =
+                        module_lookup_or_fail(this->current_frame->v_module, handler_name);
+                    ValueRoot r_method(this->gc, std::move(v_method));
+                    Root<String> r_condition_name(this->gc,
+                                                  make_string(this->gc, "internal-error"));
+                    Root<String> r_message(this->gc, make_string(this->gc, e.what()));
+                    Value args[2] = {r_condition_name.value(), r_message.value()};
+                    this->invoke(*r_method, /* tail_call */ false, /* num_args */ 2, args);
+                }
                 break;
             }
             case OpCode::DROP: {
@@ -391,6 +405,7 @@ namespace Katsu
     Value& VM::module_lookup_or_fail(Value v_module, String* name)
     {
         Value* lookup = module_lookup(v_module.obj_module(), name);
+        // TODO: change message depending on caller!
         ASSERT_MSG(lookup, "didn't find invocation name in module");
         return *lookup;
     }

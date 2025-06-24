@@ -58,6 +58,15 @@ namespace Katsu
     }
 };
 
+Value testonly_handle_condition(VM& vm, int64_t nargs, Value* args)
+{
+    ASSERT(nargs == 2);
+    ASSERT(args[0].is_obj_string());
+    ASSERT(args[1].is_obj_string());
+    std::string message =
+        native_str(args[0].obj_string()) + ": " + native_str(args[1].obj_string());
+    throw std::runtime_error(message);
+}
 
 TEST_CASE("integration - single top level expression", "[katsu]")
 {
@@ -83,6 +92,18 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
 
         register_builtins(vm, r_module);
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc,
+                       r_module,
+                       "handle-raw-condition-with-message:",
+                       2,
+                       matchers2,
+                       &testonly_handle_condition);
+        }
 
         std::unique_ptr<Expr> top_level_expr =
             parser->parse(stream, 0 /* precedence */, true /* is_toplevel */);
@@ -619,9 +640,10 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     SECTION("then:else: - body with parameters")
     {
         input(R"(t then: \a b [a + b] else: ["false result"])");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("called a closure with wrong number of arguments"));
+        CHECK_THROWS_MATCHES(
+            run(),
+            std::runtime_error,
+            Message("internal-error: called a closure with wrong number of arguments"));
     }
 
     SECTION("call - closure")
@@ -647,9 +669,10 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     SECTION("call - closure but wrong parameter count")
     {
         input(R"(\a b ["closure result"] call)");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("called a closure with wrong number of arguments"));
+        CHECK_THROWS_MATCHES(
+            run(),
+            std::runtime_error,
+            Message("internal-error: called a closure with wrong number of arguments"));
     }
 
     SECTION("call: - closure")
@@ -670,9 +693,10 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     SECTION("call: - closure but wrong parameter count")
     {
         input(R"(\a b [a + b] call: 10)");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("called a closure with wrong number of arguments"));
+        CHECK_THROWS_MATCHES(
+            run(),
+            std::runtime_error,
+            Message("internal-error: called a closure with wrong number of arguments"));
     }
 
     SECTION("call*: - closure")
@@ -685,7 +709,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"(\x [x + 5] call*: ())");
         CHECK_THROWS_MATCHES(run(),
                              std::runtime_error,
-                             Message("call*: arguments must be non-empty"));
+                             Message("internal-error: call*: arguments must be non-empty"));
     }
     SECTION("call*: - closure with multiple parameters")
     {
@@ -702,26 +726,30 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"([it + 5] call*: ())");
         CHECK_THROWS_MATCHES(run(),
                              std::runtime_error,
-                             Message("call*: arguments must be non-empty"));
+                             Message("internal-error: call*: arguments must be non-empty"));
     }
     SECTION("call*: - closure but not enough arguments")
     {
         input(R"(\a b [a + b] call*: (10,))");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("called a closure with wrong number of arguments"));
+        CHECK_THROWS_MATCHES(
+            run(),
+            std::runtime_error,
+            Message("internal-error: called a closure with wrong number of arguments"));
     }
     SECTION("call*: - closure but too many arguments")
     {
         input(R"(\a b [a + b] call*: (10, 20, 30))");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("called a closure with wrong number of arguments"));
+        CHECK_THROWS_MATCHES(
+            run(),
+            std::runtime_error,
+            Message("internal-error: called a closure with wrong number of arguments"));
     }
     SECTION("call*: - arguments not a tuple")
     {
         input(R"(\a b [a + b] call*: { 10; 20; 30 })");
-        CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("internal-error: no matching methods"));
     }
     SECTION("call*: - callable not a closure")
     {
@@ -931,21 +959,29 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 1")
         {
             input(R"(
+let: (c handle-raw-condition-with-message: m) do: [
+    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: no matching methods"
+    12345
+]
 let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
 
 "abc" mm-test: 10
             )");
-            CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
+            check(Value::fixnum(12345));
         }
 
         SECTION("multimethod rejects undeclared argument types - case 2")
         {
             input(R"(
+let: (c handle-raw-condition-with-message: m) do: [
+    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: no matching methods"
+    12345
+]
 let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
 
 5 mm-test: "def"
             )");
-            CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("no matching methods"));
+            check(Value::fixnum(12345));
         }
 
         SECTION("multimethod downselection - case 1")
@@ -987,13 +1023,17 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
         SECTION("multimethod downselection - case 3 (ambiguous)")
         {
             input(R"(
+let: (c handle-raw-condition-with-message: m) do: [
+    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: ambiguous method resolution"
+    12345
+]
 let: ((a: Fixnum) mm-test:  b         ) do: [ "Fixnum - any" ]
 let: ( a          mm-test: (b: Fixnum)) do: [ "any - Fixnum" ]
 let: ( a          mm-test:  b         ) do: [ "any - any"    ]
 
 5 mm-test: 10
             )");
-            CHECK_THROWS_MATCHES(run(), std::runtime_error, Message("ambiguous method resolution"));
+            check(Value::fixnum(12345));
         }
     }
 
@@ -1111,16 +1151,16 @@ zzzzz
 
     SECTION("delimited continuation - wrong marker")
     {
-        cout_capture capture;
         input(R"CODE(
+let: (c handle-raw-condition-with-message: m) do: [
+    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: did not find marker in call stack"
+    12345
+]
 [
     [null] call/dc: f
 ] call/marked: t
         )CODE");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("did not find marker in call stack"));
-        CHECK(capture.str() == "");
+        check(Value::fixnum(12345));
     }
 
     SECTION("delimited continuation - multiple markers - outer")

@@ -111,6 +111,12 @@ let: ((n: Fixnum) times: body) do: [
 let: (v: Vector) length do: [
     v unsafe-read-u64-at-offset: 1
 ]
+let: (v: Vector) backing-array do: [
+    v unsafe-read-value-at-offset: 2
+]
+let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
+    v backing-array unsafe-at: i
+]
 
 let: v = {1;2;3;4}
 v length
@@ -360,15 +366,91 @@ let: (f cleanup: c) do: [
     print: "after cleanup - also shouldn't see this, since early return should still be active"
 ] with-return
 
-let: m1 = "marker 1"
-let: m2 = "marker 2"
-[
-    [
-        [
-            print: "escaping to marker"
-        ] call/dc: m1
-        print: "after call/dc: m1"
-    ] call/marked: m2
-    print: "after call/marker: m2"
-] call/marked: m1
-print: "after call/marker: m1"
+let: ((segment: CallSegment) each-frame: f) do: [
+    mut: frame = (Frame segment: segment offset: 0)
+    # TODO: multiplying by 8 (= sizeof(Value)) is super hacky here.
+    while: [frame .offset * 8 < segment length] do: [
+        f call: frame
+        frame: frame next
+    ]
+]
+
+let: (segment: CallSegment) print-trace-except-top do: [
+    segment each-frame: \fr [
+        # TODO: *8 here also super hacky
+        let: top? = fr next .offset * 8 >= segment length
+        if: not top? then: [
+            # Go back one instruction; each frame indicates where to _return_ to, and the previous
+            # op is the caller.
+            let: span = (fr .code .inst-spans unsafe-at: (fr .inst-spot - 1)) >SourceSpan 
+            print: "at " ~ (span >string)
+        ]
+    ]
+]
+
+let: (condition handle-raw-condition-with-message: message) do: [
+    print: "Error: " ~ condition ~ ": " ~ message
+    let: stack = get-call-stack
+    # Skip the top frame; it's pointing to within this method (to the get-call-stack invocation).
+    stack print-trace-except-top
+    # 1 / 0
+]
+
+let: n do-test do: [
+    TAIL-CALL: (n = 0 then: [ () >string ] else: [
+        (n - 1) do-test
+    ])
+]
+5 do-test
+
+data: StopIteration has: { value }
+let: ((v: Vector) each: f) do: [
+    mut: i = 0
+    mut: last = null
+    while: [i < v length and not (last instance?: StopIteration)] do: [
+        last
+        last: (f call: (v unsafe-at: i))
+        i: i + 1
+    ]
+    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+]
+
+data: Exception has: { message; stack }
+# let: ((_ = Exception) message: message) does: [
+#     Exception message: message stack: null
+# ]
+
+let: (e: Exception) throw do: [
+    e stack: get-call-stack
+    [e] call/dc: 0
+]
+# handlers should be a vector of (type, handler) pairs.
+let: (try: body except: handlers) do: [
+    let: result = (body call/marked: 0)
+    (result instance?: Exception) then: [
+        let: e = result
+        # Search through handlers for a handler matching this exception.
+        mut: handled = f
+        let: handler-result = (handlers each: \h [
+            handled
+            let: handler-type = (h unsafe-at: 0)
+            let: handler-fn = (h unsafe-at: 1)
+            if: (e instance?: handler-type) then: [
+                e; handled
+                handled: t
+                StopIteration value: (handler-fn call: e)
+            ]
+        ])
+        handled then: [ handler-result ] else: [ e throw ]
+    ] else: [
+        result
+    ]
+]
+
+try: [
+    print: "before throw"
+    (Exception message: "I'm an exception!" stack: null) throw
+    print: "after throw"
+] except: {
+    (Exception, \e [ print: "Got exception: " ~ e .message; e .stack print-trace-except-top ])
+}
