@@ -643,7 +643,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
-            Message("internal-error: called a closure with wrong number of arguments"));
+            Message("argument-count-mismatch: called a closure with wrong number of arguments"));
     }
 
     SECTION("call - closure")
@@ -672,7 +672,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
-            Message("internal-error: called a closure with wrong number of arguments"));
+            Message("argument-count-mismatch: called a closure with wrong number of arguments"));
     }
 
     SECTION("call: - closure")
@@ -696,7 +696,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
-            Message("internal-error: called a closure with wrong number of arguments"));
+            Message("argument-count-mismatch: called a closure with wrong number of arguments"));
     }
 
     SECTION("call*: - closure")
@@ -709,7 +709,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"(\x [x + 5] call*: ())");
         CHECK_THROWS_MATCHES(run(),
                              std::runtime_error,
-                             Message("internal-error: call*: arguments must be non-empty"));
+                             Message("invalid-argument: arguments must be non-empty"));
     }
     SECTION("call*: - closure with multiple parameters")
     {
@@ -726,7 +726,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"([it + 5] call*: ())");
         CHECK_THROWS_MATCHES(run(),
                              std::runtime_error,
-                             Message("internal-error: call*: arguments must be non-empty"));
+                             Message("invalid-argument: arguments must be non-empty"));
     }
     SECTION("call*: - closure but not enough arguments")
     {
@@ -734,7 +734,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
-            Message("internal-error: called a closure with wrong number of arguments"));
+            Message("argument-count-mismatch: called a closure with wrong number of arguments"));
     }
     SECTION("call*: - closure but too many arguments")
     {
@@ -742,14 +742,15 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
-            Message("internal-error: called a closure with wrong number of arguments"));
+            Message("argument-count-mismatch: called a closure with wrong number of arguments"));
     }
     SECTION("call*: - arguments not a tuple")
     {
         input(R"(\a b [a + b] call*: { 10; 20; 30 })");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("internal-error: no matching methods"));
+        CHECK_THROWS_MATCHES(
+            run(),
+            std::runtime_error,
+            Message("no-matching-method: multimethod has no methods matching the given arguments"));
     }
     SECTION("call*: - callable not a closure")
     {
@@ -960,7 +961,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         {
             input(R"(
 let: (c handle-raw-condition-with-message: m) do: [
-    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: no matching methods"
+    TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
 ]
 let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
@@ -974,7 +975,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         {
             input(R"(
 let: (c handle-raw-condition-with-message: m) do: [
-    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: no matching methods"
+    TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
 ]
 let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
@@ -1024,7 +1025,7 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
         {
             input(R"(
 let: (c handle-raw-condition-with-message: m) do: [
-    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: ambiguous method resolution"
+    TEST-ASSERT: (c ~ ": " ~ m) = "ambiguous-method-resolution: multimethod has multiple best methods matching the given arguments"
     12345
 ]
 let: ((a: Fixnum) mm-test:  b         ) do: [ "Fixnum - any" ]
@@ -1153,7 +1154,7 @@ zzzzz
     {
         input(R"CODE(
 let: (c handle-raw-condition-with-message: m) do: [
-    TEST-ASSERT: (c ~ ": " ~ m) = "internal-error: did not find marker in call stack"
+    TEST-ASSERT: (c ~ ": " ~ m) = "marker-not-found: did not find marker in call stack"
     12345
 ]
 [

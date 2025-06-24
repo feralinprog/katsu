@@ -1,6 +1,7 @@
 #include "builtin.h"
 
 #include "assert.h"
+#include "condition.h"
 #include "value_utils.h"
 #include "vm.h"
 
@@ -264,8 +265,8 @@ namespace Katsu
             ASSERT(upregs->length == upreg_map->length);
 
             if ((nargs == 0 && code->num_params != 1) || (nargs > 0 && code->num_params != nargs)) {
-                // TODO: Katsu error instead, should be able to handle it
-                throw std::runtime_error("called a closure with wrong number of arguments");
+                throw condition_error("argument-count-mismatch",
+                                      "called a closure with wrong number of arguments");
             }
 
             Frame* next = vm.alloc_frame(code->num_regs,
@@ -308,8 +309,8 @@ namespace Katsu
             CallSegment* segment = v_callable.obj_call_segment();
             // Place the segment's frames on top of the stack, and push the one argument provided.
             if (nargs != 1) {
-                // TODO: Katsu error instead, should be able to handle it
-                throw std::runtime_error(
+                throw condition_error(
+                    "argument-count-mismatch",
                     "called a call-segment with wrong number of arguments (should be 1)");
             }
             ASSERT_MSG(!tail_call, "tail-call call segment not implemented");
@@ -381,12 +382,9 @@ namespace Katsu
         ASSERT(nargs == 2);
         Value v_callable = args[0];
         Value v_args = args[1];
-        if (!v_args.is_obj_tuple()) {
-            throw std::runtime_error("call*: arguments must be a tuple");
-        }
         Tuple* args_tuple = v_args.obj_tuple();
         if (args_tuple->length == 0) {
-            throw std::runtime_error("call*: arguments must be non-empty");
+            throw condition_error("invalid-argument", "arguments must be non-empty");
         }
         call_impl(vm,
                   tail_call,
@@ -550,8 +548,7 @@ namespace Katsu
             marked = marked->caller;
         }
         if (!marked) {
-            // TODO: raise to katsu
-            throw std::runtime_error("did not find marker in call stack");
+            throw condition_error("marker-not-found", "did not find marker in call stack");
         }
         vm.frame()->inst_spot++;
         Frame* past_top = vm.frame()->next();

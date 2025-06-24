@@ -1,6 +1,7 @@
 #include "vm.h"
 
 #include "assertions.h"
+#include "condition.h"
 #include "value_utils.h"
 
 #include <algorithm>
@@ -235,15 +236,14 @@ namespace Katsu
 
                     // invoke() takes care of shifting the instruction spot.
                     this->invoke(v_method, tail_call, num_args, args);
-                } catch (const std::runtime_error& e) {
+                } catch (const condition_error& e) {
                     // Don't need args any more; we can do GC operations.
                     String* handler_name =
                         make_string(this->gc, "handle-raw-condition-with-message:");
                     Value v_method =
                         module_lookup_or_fail(this->current_frame->v_module, handler_name);
                     ValueRoot r_method(this->gc, std::move(v_method));
-                    Root<String> r_condition_name(this->gc,
-                                                  make_string(this->gc, "internal-error"));
+                    Root<String> r_condition_name(this->gc, make_string(this->gc, e.condition));
                     Root<String> r_message(this->gc, make_string(this->gc, e.what()));
                     Value args[2] = {r_condition_name.value(), r_message.value()};
                     this->invoke(*r_method, /* tail_call */ false, /* num_args */ 2, args);
@@ -557,8 +557,8 @@ namespace Katsu
             }
         }
         if (!min) {
-            // TODO: raise to katsu
-            throw std::runtime_error("no matching methods");
+            throw condition_error("no-matching-method",
+                                  "multimethod has no methods matching the given arguments");
         }
 
         // Pass 2:
@@ -569,7 +569,9 @@ namespace Katsu
                 continue;
             }
             if (!(*min <= *method)) {
-                throw std::runtime_error("ambiguous method resolution");
+                throw condition_error(
+                    "ambiguous-method-resolution",
+                    "multimethod has multiple best methods matching the given arguments");
             }
         }
 
@@ -579,8 +581,7 @@ namespace Katsu
     void VM::invoke(Value v_callable, bool tail_call, int64_t num_args, Value* args)
     {
         if (!v_callable.is_obj_multimethod()) {
-            // TODO: make this a katsu runtime error instead
-            throw std::runtime_error("can only invoke a multimethod");
+            throw condition_error("invoke-non-multimethod", "can only invoke a multimethod");
         }
         MultiMethod* multimethod = v_callable.obj_multimethod();
 

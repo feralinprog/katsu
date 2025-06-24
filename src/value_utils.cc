@@ -1,6 +1,7 @@
 #include "value_utils.h"
 
 #include "assertions.h"
+#include "condition.h"
 #include "vm.h"
 
 #include <cstring>
@@ -878,8 +879,9 @@ namespace Katsu
         for (uint64_t i = 0; i < bases->length; i++) {
             Type* base = bases->components()[i].obj_type();
             if (array_contains(base->v_linearization.obj_array(), r_type.value())) {
-                // TODO: let katsu deal with it, and also provide r_type info.
-                throw std::runtime_error("inheritance cycle starting from {type}");
+                // TODO: provide r_type info.
+                throw condition_error("inheritance-cycle",
+                                      "inheritance cycle starting from {type}");
             }
         }
 
@@ -900,8 +902,9 @@ namespace Katsu
 
         bool merged = c3_merge(gc, r_linearizations, r_merged);
         if (!merged) {
-            // TODO: let katsu deal with it, and also provide r_type info.
-            throw std::runtime_error("could not determine linearization of {type}");
+            // TODO: provide r_type info.
+            throw condition_error("type-linearization-failure",
+                                  "could not determine linearization of {type}");
         }
 
         return vector_to_array(gc, r_merged);

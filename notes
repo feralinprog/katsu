@@ -1,11 +1,11 @@
 TODO:
-* signal a condition only on (say) throw signal_error(...), to indicate condition name
 * invoke ops should have the actual multimethod, not the name to lookup in module
 * coroutines / fibers (should be supported by delimited continuations..?)
 * support builtin modules and module loading, in order to actually start a standard library / core
 * allow for docs everywhere!
 * save to image and load from image
 * allow mut:s at module level
+* handle more errors in C++ and raise as conditions
 
 more TODO:
 * literal data structure syntax?
