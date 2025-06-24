@@ -144,6 +144,20 @@ namespace Katsu
         return Value::_bool(args[0] != args[1]);
     }
 
+    Value native__str_eq_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a = b
+        ASSERT(nargs == 2);
+        return Value::_bool(string_eq(args[0].obj_string(), args[1].obj_string()));
+    }
+
+    Value native__str_ne_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a != b
+        ASSERT(nargs == 2);
+        return Value::_bool(!string_eq(args[0].obj_string(), args[1].obj_string()));
+    }
+
     Value native__gt_(VM& vm, int64_t nargs, Value* args)
     {
         // a > b
@@ -674,6 +688,20 @@ namespace Katsu
             matchers2->components()[1] = Value::null(); // any
             add_native(vm.gc, r_module, "id!=:", 2, matchers2, &native__id_ne_);
             add_native(vm.gc, r_module, "!=:", 2, matchers2, &native__id_ne_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "=:", 2, matchers2, &native__str_eq_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_native(vm.gc, r_module, "!=:", 2, matchers2, &native__str_ne_);
         }
 
         {

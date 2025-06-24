@@ -392,8 +392,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("object =: negative case")
     {
-        // TODO: this should be a positive case in the future!
-        input(R"("abc" = "abc")");
+        input(R"({} = {})");
         check(Value::_bool(false));
     }
 
@@ -442,8 +441,31 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("object !=: positive case")
     {
-        // TODO: this should be a negative case in the future!
-        input(R"("abc" != "abc")");
+        input(R"({} != {})");
+        check(Value::_bool(true));
+    }
+
+    SECTION("string =: positive case")
+    {
+        input(R"(("a" ~ "b") = "ab")");
+        check(Value::_bool(true));
+    }
+
+    SECTION("string =: negative case")
+    {
+        input(R"(("a" ~ "b") = "ac")");
+        check(Value::_bool(false));
+    }
+
+    SECTION("string !=: negative case")
+    {
+        input(R"(("a" ~ "b") != "ab")");
+        check(Value::_bool(false));
+    }
+
+    SECTION("string !=: positive case")
+    {
+        input(R"(("a" ~ "b") != "ac")");
         check(Value::_bool(true));
     }
 
