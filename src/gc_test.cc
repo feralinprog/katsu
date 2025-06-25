@@ -177,22 +177,20 @@ TEST_CASE("GC follows internal references", "[gc]")
         CHECK_POINTEE(0, obj->v_array);
     }
 
-    SECTION("Module")
+    SECTION("Assoc")
     {
         // Set up object.
-        Module* obj = gc.alloc<Module>();
-        obj->v_base = v_pointees[0];
+        Assoc* obj = gc.alloc<Assoc>();
         obj->length = 0x12345678; // not actually used by the GC
-        obj->v_array = v_pointees[1];
+        obj->v_array = v_pointees[0];
 
         Value v_obj = Value::object(obj);
         single_root_collect(&v_obj);
 
         // Unpack and verify object.
-        REQUIRE_NOTHROW(obj = v_obj.obj_module());
-        CHECK_POINTEE(0, obj->v_base);
+        REQUIRE_NOTHROW(obj = v_obj.obj_assoc());
         CHECK(obj->length == 0x12345678);
-        CHECK_POINTEE(1, obj->v_array);
+        CHECK_POINTEE(0, obj->v_array);
     }
 
     // Kind of already tested in other sections implicitly...

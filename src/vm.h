@@ -140,7 +140,7 @@ namespace Katsu
         // Current size of the data stack (up to `num_data`).
         uint64_t data_depth;
 
-        Value v_module; // Module
+        Value v_module; // Assoc
 
         // Any value, used for delimiting continuations.
         Value v_marker;
@@ -217,7 +217,7 @@ namespace Katsu
         _Tuple,
         _Array,
         _Vector,
-        _Module,
+        _Assoc,
         _String,
         _Code,
         _Closure,
@@ -260,7 +260,7 @@ namespace Katsu
 
         void unwind_frame(bool tail_call);
 
-        // Look up the method_name in the module, following v_base until null.
+        // Look up the method_name in the module.
         static Value& module_lookup_or_fail(Value v_module, String* name);
 
         // Allocates a call frame. The caller must initialize the new frame's regs() and

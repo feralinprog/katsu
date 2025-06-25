@@ -147,8 +147,7 @@ namespace Katsu
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
         VM vm(gc, call_stack_size);
-        OptionalRoot<Module> r_module_base(gc, nullptr);
-        Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
+        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
 
         register_builtins(vm, r_module);
 

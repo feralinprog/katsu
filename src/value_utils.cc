@@ -74,14 +74,13 @@ namespace Katsu
         return make_vector(gc, length, r_array);
     }
 
-    Module* make_module(GC& gc, OptionalRoot<Module>& r_base, uint64_t capacity)
+    Assoc* make_assoc(GC& gc, uint64_t capacity)
     {
         Root<Array> r_array(gc, make_array(gc, /* length */ capacity * 2));
-        Module* module = gc.alloc<Module>();
-        module->v_base = r_base.value();
-        module->length = 0;
-        module->v_array = r_array.value();
-        return module;
+        Assoc* assoc = gc.alloc<Assoc>();
+        assoc->length = 0;
+        assoc->v_array = r_array.value();
+        return assoc;
     }
 
     String* make_string(GC& gc, const std::string& src)
@@ -99,7 +98,7 @@ namespace Katsu
         return str;
     }
 
-    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
+    Code* make_code(GC& gc, Root<Assoc>& r_module, uint32_t num_params, uint32_t num_regs,
                     uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,
                     Root<Array>& r_args, Root<Tuple>& r_span, Root<Array>& r_inst_spans)
     {
@@ -283,24 +282,24 @@ namespace Katsu
         return vector;
     }
 
-    Module* append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value)
+    Assoc* append(GC& gc, Root<Assoc>& r_assoc, Root<String>& r_name, ValueRoot& r_value)
     {
-        Module* module = *r_module;
+        Assoc* assoc = *r_assoc;
 
-        uint64_t array_capacity = module->v_array.obj_array()->length;
-        ASSERT_MSG(array_capacity % 2 == 0, "module backing array should have even length");
+        uint64_t array_capacity = assoc->v_array.obj_array()->length;
+        ASSERT_MSG(array_capacity % 2 == 0, "assoc backing array should have even length");
         uint64_t entries_capacity = array_capacity / 2;
-        if (module->length == entries_capacity) {
-            // Reallocate the backing array! The original backing array (and module) are kept alive
-            // by the r_vector root while we copy components over.
+        if (assoc->length == entries_capacity) {
+            // Reallocate the backing array! The original backing array (and assoc) are kept alive
+            // by the r_assoc root while we copy components over.
             // TODO: probably don't need to double. Maybe 1.5x?
             uint64_t new_entries_capacity = entries_capacity == 0 ? 1 : entries_capacity * 2;
             uint64_t new_array_capacity = new_entries_capacity * 2;
             Array* new_array = make_array_nofill(gc, new_array_capacity);
-            module = *r_module;
+            assoc = *r_assoc;
             // Copy components and null-fill the rest.
             {
-                Array* array = module->v_array.obj_array();
+                Array* array = assoc->v_array.obj_array();
                 for (uint64_t i = 0; i < array_capacity; i++) {
                     new_array->components()[i] = array->components()[i];
                 }
@@ -308,13 +307,13 @@ namespace Katsu
                     new_array->components()[i] = Value::null();
                 }
             }
-            module->v_array = Value::object(new_array);
+            assoc->v_array = Value::object(new_array);
         }
 
-        Module::Entry& entry = module->entries()[module->length++];
+        Assoc::Entry& entry = assoc->entries()[assoc->length++];
         entry.v_key = r_name.value();
         entry.v_value = *r_value;
-        return module;
+        return assoc;
     }
 
     Array* vector_to_array(GC& gc, Root<Vector>& r_vector)
@@ -327,26 +326,23 @@ namespace Katsu
         return array;
     }
 
-    Value* module_lookup(Module* module, String* name)
+    Value* assoc_lookup(Assoc* assoc, String* name)
     {
         uint64_t name_length = name->length;
         // TODO: check against size_t?
 
-        while (module) {
-            uint64_t num_entries = module->length;
-            for (uint64_t i = 0; i < num_entries; i++) {
-                Module::Entry& entry = module->entries()[i];
-                String* entry_name = entry.v_key.obj_string();
-                if (entry_name->length != name_length) {
-                    continue;
-                }
-                if (memcmp(entry_name->contents(), name->contents(), name_length) != 0) {
-                    continue;
-                }
-                // Match!
-                return &entry.v_value;
+        uint64_t num_entries = assoc->length;
+        for (uint64_t i = 0; i < num_entries; i++) {
+            Assoc::Entry& entry = assoc->entries()[i];
+            String* entry_name = entry.v_key.obj_string();
+            if (entry_name->length != name_length) {
+                continue;
             }
-            module = module->v_base.is_null() ? nullptr : module->v_base.obj_module();
+            if (memcmp(entry_name->contents(), name->contents(), name_length) != 0) {
+                continue;
+            }
+            // Match!
+            return &entry.v_value;
         }
 
         return nullptr;
@@ -531,11 +527,10 @@ namespace Katsu
                 pchild(o->v_array, "v_array = ");
                 indent(depth);
                 std::cout << "]\n";
-            } else if (value.is_obj_module()) {
-                Module* o = value.obj_module();
-                std::cout << "*module: length=" << o->length << "\n";
+            } else if (value.is_obj_assoc()) {
+                Assoc* o = value.obj_assoc();
+                std::cout << "*assoc: length=" << o->length << "\n";
                 pchild(o->v_array, "v_array = ");
-                pchild(o->v_base, "v_base = ");
             } else if (value.is_obj_string()) {
                 String* o = value.obj_string();
                 std::cout << "*string: \"";
@@ -1012,7 +1007,7 @@ namespace Katsu
                     case ObjectTag::TUPLE: return vm.builtin(BuiltinId::_Tuple);
                     case ObjectTag::ARRAY: return vm.builtin(BuiltinId::_Array);
                     case ObjectTag::VECTOR: return vm.builtin(BuiltinId::_Vector);
-                    case ObjectTag::MODULE: return vm.builtin(BuiltinId::_Module);
+                    case ObjectTag::ASSOC: return vm.builtin(BuiltinId::_Assoc);
                     case ObjectTag::STRING: return vm.builtin(BuiltinId::_String);
                     case ObjectTag::CODE: return vm.builtin(BuiltinId::_Code);
                     case ObjectTag::CLOSURE: return vm.builtin(BuiltinId::_Closure);

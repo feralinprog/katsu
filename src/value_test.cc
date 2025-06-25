@@ -163,7 +163,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Ref, Tuple)                           \
     F(Ref, Array)                           \
     F(Ref, Vector)                          \
-    F(Ref, Module)                          \
+    F(Ref, Assoc)                           \
     F(Ref, String)                          \
     F(Ref, Code)                            \
     F(Ref, Closure)                         \
@@ -176,7 +176,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Tuple, Tuple)                         \
     F(Tuple, Array)                         \
     F(Tuple, Vector)                        \
-    F(Tuple, Module)                        \
+    F(Tuple, Assoc)                         \
     F(Tuple, String)                        \
     F(Tuple, Code)                          \
     F(Tuple, Closure)                       \
@@ -189,7 +189,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Array, Tuple)                         \
     F(Array, Array)                         \
     F(Array, Vector)                        \
-    F(Array, Module)                        \
+    F(Array, Assoc)                         \
     F(Array, String)                        \
     F(Array, Code)                          \
     F(Array, Closure)                       \
@@ -202,7 +202,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Vector, Tuple)                        \
     F(Vector, Array)                        \
     F(Vector, Vector)                       \
-    F(Vector, Module)                       \
+    F(Vector, Assoc)                        \
     F(Vector, String)                       \
     F(Vector, Code)                         \
     F(Vector, Closure)                      \
@@ -211,24 +211,24 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Vector, Type)                         \
     F(Vector, DataclassInstance)            \
     F(Vector, CallSegment)                  \
-    F(Module, Ref)                          \
-    F(Module, Tuple)                        \
-    F(Module, Array)                        \
-    F(Module, Vector)                       \
-    F(Module, Module)                       \
-    F(Module, String)                       \
-    F(Module, Code)                         \
-    F(Module, Closure)                      \
-    F(Module, Method)                       \
-    F(Module, MultiMethod)                  \
-    F(Module, Type)                         \
-    F(Module, DataclassInstance)            \
-    F(Module, CallSegment)                  \
+    F(Assoc, Ref)                           \
+    F(Assoc, Tuple)                         \
+    F(Assoc, Array)                         \
+    F(Assoc, Vector)                        \
+    F(Assoc, Assoc)                         \
+    F(Assoc, String)                        \
+    F(Assoc, Code)                          \
+    F(Assoc, Closure)                       \
+    F(Assoc, Method)                        \
+    F(Assoc, MultiMethod)                   \
+    F(Assoc, Type)                          \
+    F(Assoc, DataclassInstance)             \
+    F(Assoc, CallSegment)                   \
     F(String, Ref)                          \
     F(String, Tuple)                        \
     F(String, Array)                        \
     F(String, Vector)                       \
-    F(String, Module)                       \
+    F(String, Assoc)                        \
     F(String, String)                       \
     F(String, Code)                         \
     F(String, Closure)                      \
@@ -241,7 +241,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Code, Tuple)                          \
     F(Code, Array)                          \
     F(Code, Vector)                         \
-    F(Code, Module)                         \
+    F(Code, Assoc)                          \
     F(Code, String)                         \
     F(Code, Code)                           \
     F(Code, Closure)                        \
@@ -254,7 +254,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Closure, Tuple)                       \
     F(Closure, Array)                       \
     F(Closure, Vector)                      \
-    F(Closure, Module)                      \
+    F(Closure, Assoc)                       \
     F(Closure, String)                      \
     F(Closure, Code)                        \
     F(Closure, Closure)                     \
@@ -267,7 +267,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Method, Tuple)                        \
     F(Method, Array)                        \
     F(Method, Vector)                       \
-    F(Method, Module)                       \
+    F(Method, Assoc)                        \
     F(Method, String)                       \
     F(Method, Code)                         \
     F(Method, Closure)                      \
@@ -280,7 +280,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(MultiMethod, Tuple)                   \
     F(MultiMethod, Array)                   \
     F(MultiMethod, Vector)                  \
-    F(MultiMethod, Module)                  \
+    F(MultiMethod, Assoc)                   \
     F(MultiMethod, String)                  \
     F(MultiMethod, Code)                    \
     F(MultiMethod, Closure)                 \
@@ -293,7 +293,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(Type, Tuple)                          \
     F(Type, Array)                          \
     F(Type, Vector)                         \
-    F(Type, Module)                         \
+    F(Type, Assoc)                          \
     F(Type, String)                         \
     F(Type, Code)                           \
     F(Type, Closure)                        \
@@ -306,7 +306,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(DataclassInstance, Tuple)             \
     F(DataclassInstance, Array)             \
     F(DataclassInstance, Vector)            \
-    F(DataclassInstance, Module)            \
+    F(DataclassInstance, Assoc)             \
     F(DataclassInstance, String)            \
     F(DataclassInstance, Code)              \
     F(DataclassInstance, Closure)           \
@@ -319,7 +319,7 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(CallSegment, Tuple)                   \
     F(CallSegment, Array)                   \
     F(CallSegment, Vector)                  \
-    F(CallSegment, Module)                  \
+    F(CallSegment, Assoc)                   \
     F(CallSegment, String)                  \
     F(CallSegment, Code)                    \
     F(CallSegment, Closure)                 \
@@ -354,7 +354,7 @@ EACH_OBJECT_PAIR(OBJECT_TAG_TESTCASE)
 // TODO: test functions of Tuple
 // TODO: test functions of Array
 // TODO: test functions of Vector
-// TODO: test functions of Module
+// TODO: test functions of Assoc
 // TODO: test functions of String
 // TODO: test functions of Code
 // TODO: test functions of Closure

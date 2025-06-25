@@ -105,8 +105,8 @@ namespace Katsu
                         obj_size = v->size();
                         break;
                     }
-                    case ObjectTag::MODULE: {
-                        auto v = obj->object<Module*>();
+                    case ObjectTag::ASSOC: {
+                        auto v = obj->object<Assoc*>();
                         obj_size = v->size();
                         break;
                     }
@@ -254,9 +254,8 @@ namespace Katsu
                     obj_size = v->size();
                     break;
                 }
-                case ObjectTag::MODULE: {
-                    auto v = obj->object<Module*>();
-                    move_value(&v->v_base);
+                case ObjectTag::ASSOC: {
+                    auto v = obj->object<Assoc*>();
                     move_value(&v->v_array);
                     obj_size = v->size();
                     break;

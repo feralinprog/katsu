@@ -404,7 +404,7 @@ namespace Katsu
 
     Value& VM::module_lookup_or_fail(Value v_module, String* name)
     {
-        Value* lookup = module_lookup(v_module.obj_module(), name);
+        Value* lookup = assoc_lookup(v_module.obj_assoc(), name);
         // TODO: change message depending on caller!
         ASSERT_MSG(lookup, "didn't find invocation name in module");
         return *lookup;

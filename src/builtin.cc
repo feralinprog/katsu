@@ -12,14 +12,14 @@
 namespace Katsu
 {
     // TODO: return type
-    void _add_handler(GC& gc, Root<Module>& r_module, const std::string& name, uint32_t num_params,
+    void _add_handler(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
                       Root<Array>& r_param_matchers, NativeHandler native_handler,
                       IntrinsicHandler intrinsic_handler)
     {
         // TODO: check if name exists already in module!
         Root<String> r_name(gc, make_string(gc, name));
 
-        Value* v_existing = module_lookup(*r_module, *r_name);
+        Value* v_existing = assoc_lookup(*r_module, *r_name);
         MultiMethod* multi;
         if (v_existing) {
             if (!v_existing->is_obj_multimethod()) {
@@ -54,7 +54,7 @@ namespace Katsu
         add_method(gc, r_multi, r_method, /* require_unique */ true);
     }
 
-    void add_native(GC& gc, Root<Module>& r_module, const std::string& name, uint32_t num_params,
+    void add_native(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
                     Root<Array>& r_param_matchers, NativeHandler native_handler)
     {
         _add_handler(gc,
@@ -66,7 +66,7 @@ namespace Katsu
                      /* intrinsic_handler */ nullptr);
     }
 
-    void add_intrinsic(GC& gc, Root<Module>& r_module, const std::string& name, uint32_t num_params,
+    void add_intrinsic(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
                        Root<Array>& r_param_matchers, IntrinsicHandler intrinsic_handler)
     {
         _add_handler(gc,
@@ -579,13 +579,13 @@ namespace Katsu
                                        /* num_total_slots */ std::nullopt));
     }
 
-    void _register(VM& vm, BuiltinId id, Root<String>& r_name, Root<Module>& r_module,
+    void _register(VM& vm, BuiltinId id, Root<String>& r_name, Root<Assoc>& r_module,
                    ValueRoot& r_value)
     {
         vm.register_builtin(id, *r_value);
         append(vm.gc, r_module, r_name, r_value);
     }
-    void _register(VM& vm, BuiltinId id, const std::string& name, Root<Module>& r_module,
+    void _register(VM& vm, BuiltinId id, const std::string& name, Root<Assoc>& r_module,
                    Value value)
     {
         ValueRoot r_value(vm.gc, std::move(value));
@@ -593,7 +593,7 @@ namespace Katsu
         _register(vm, id, r_name, r_module, r_value);
     }
 
-    void register_builtins(VM& vm, Root<Module>& r_module)
+    void register_builtins(VM& vm, Root<Assoc>& r_module)
     {
         _register(vm, BuiltinId::_null, "null", r_module, Value::null());
         _register(vm, BuiltinId::_true, "t", r_module, Value::_bool(true));
@@ -614,7 +614,7 @@ namespace Katsu
         register_base_type(BuiltinId::_Tuple, "Tuple");
         register_base_type(BuiltinId::_Array, "Array");
         register_base_type(BuiltinId::_Vector, "Vector");
-        register_base_type(BuiltinId::_Module, "Module");
+        register_base_type(BuiltinId::_Assoc, "Assoc");
         register_base_type(BuiltinId::_String, "String");
         register_base_type(BuiltinId::_Code, "Code");
         register_base_type(BuiltinId::_Closure, "Closure");

@@ -48,19 +48,18 @@ TEST_CASE("vector append", "[value-utils]")
     CHECK(r_vector->v_array.obj_array()->components()[3] == Value::null());
 }
 
-TEST_CASE("module append", "[value-utils]")
+TEST_CASE("assoc append", "[value-utils]")
 {
     GC gc(1024 * 1024);
 
     Root<String> r_key(gc, make_string(gc, "key"));
     ValueRoot r_value(gc, Value::object(make_string(gc, "value")));
 
-    OptionalRoot<Module> r_base(gc, nullptr);
-    Root<Module> r_module(gc, make_module(gc, r_base, /* capacity */ 0));
-    CHECK(module_lookup(*r_module, *r_key) == nullptr);
+    Root<Assoc> r_assoc(gc, make_assoc(gc, /* capacity */ 0));
+    CHECK(assoc_lookup(*r_assoc, *r_key) == nullptr);
 
-    append(gc, r_module, r_key, r_value);
-    Value* lookup = module_lookup(*r_module, *r_key);
+    append(gc, r_assoc, r_key, r_value);
+    Value* lookup = assoc_lookup(*r_assoc, *r_key);
     REQUIRE(lookup != nullptr);
     CHECK(*lookup == *r_value);
 }

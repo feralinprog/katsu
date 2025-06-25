@@ -21,7 +21,7 @@ namespace Katsu
      *   - tuples (fixed-length) (TODO: fold into arrays..?)
      *   - arrays (fixed-length)
      *   - vectors (growable)
-     *   - modules (environments)
+     *   - assocs (vector-style maps)
      *   - strings
      *   - code templates / definitions
      *   - closures
@@ -106,7 +106,7 @@ namespace Katsu
         TUPLE,
         ARRAY,
         VECTOR,
-        MODULE,
+        ASSOC,
         STRING,
         CODE,
         CLOSURE,
@@ -124,7 +124,7 @@ namespace Katsu
             case ObjectTag::TUPLE: return "tuple";
             case ObjectTag::ARRAY: return "array";
             case ObjectTag::VECTOR: return "vector";
-            case ObjectTag::MODULE: return "module";
+            case ObjectTag::ASSOC: return "assoc";
             case ObjectTag::STRING: return "string";
             case ObjectTag::CODE: return "code";
             case ObjectTag::CLOSURE: return "closure";
@@ -143,7 +143,7 @@ namespace Katsu
             case ObjectTag::TUPLE: return "TUPLE";
             case ObjectTag::ARRAY: return "ARRAY";
             case ObjectTag::VECTOR: return "VECTOR";
-            case ObjectTag::MODULE: return "MODULE";
+            case ObjectTag::ASSOC: return "ASSOC";
             case ObjectTag::STRING: return "STRING";
             case ObjectTag::CODE: return "CODE";
             case ObjectTag::CLOSURE: return "CLOSURE";
@@ -227,7 +227,7 @@ namespace Katsu
     struct Tuple;
     struct Array;
     struct Vector;
-    struct Module;
+    struct Assoc;
     struct String;
     struct Code;
     struct Closure;
@@ -320,9 +320,9 @@ namespace Katsu
         {
             return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::VECTOR;
         }
-        bool is_obj_module() const
+        bool is_obj_assoc() const
         {
-            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::MODULE;
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::ASSOC;
         }
         bool is_obj_string() const
         {
@@ -390,9 +390,9 @@ namespace Katsu
         {
             return this->object()->object<Vector*>();
         }
-        Module* obj_module() const
+        Assoc* obj_assoc() const
         {
-            return this->object()->object<Module*>();
+            return this->object()->object<Assoc*>();
         }
         String* obj_string() const
         {
@@ -545,9 +545,9 @@ namespace Katsu
         }
     };
 
-    struct Module : public Object
+    struct Assoc : public Object
     {
-        static const ObjectTag CLASS_TAG = ObjectTag::MODULE;
+        static const ObjectTag CLASS_TAG = ObjectTag::ASSOC;
 
         // Implemented as an associative array (more specifically, as an Array of length 2n,
         // where n is the number of key/value pairs).
@@ -558,7 +558,6 @@ namespace Katsu
         };
         static_assert(sizeof(Entry) == 2 * sizeof(Value));
 
-        Value v_base; // Module or Null
         uint64_t length;
         Value v_array; // Array (of String/any pairs, stored consecutively)
 
@@ -570,7 +569,7 @@ namespace Katsu
         // Size in bytes.
         static inline uint64_t size()
         {
-            return sizeof(Module);
+            return sizeof(Assoc);
         }
     };
 
@@ -599,7 +598,7 @@ namespace Katsu
     {
         static const ObjectTag CLASS_TAG = ObjectTag::CODE;
 
-        Value v_module; // Module
+        Value v_module; // Assoc
         // Mostly for error checking -- not actually used for 'control' purposes.
         uint32_t num_params;
         uint32_t num_regs;
@@ -843,10 +842,10 @@ namespace Katsu
         ASSERT(object.tag() == ObjectTag::VECTOR);
         return reinterpret_cast<Vector*>(&object);
     }
-    template <> inline Module* static_object<Module*>(Object& object)
+    template <> inline Assoc* static_object<Assoc*>(Object& object)
     {
-        ASSERT(object.tag() == ObjectTag::MODULE);
-        return reinterpret_cast<Module*>(&object);
+        ASSERT(object.tag() == ObjectTag::ASSOC);
+        return reinterpret_cast<Assoc*>(&object);
     }
     template <> inline String* static_object<String*>(Object& object)
     {

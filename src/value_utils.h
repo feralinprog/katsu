@@ -28,14 +28,14 @@ namespace Katsu
     // Make a Vector of the given length, with a given backing array.
     Vector* make_vector(GC& gc, uint64_t length, Root<Array>& r_array);
     Vector* make_vector(GC& gc, uint64_t length, Array* array);
-    // Make a Module with the given capacity (and zero length).
-    Module* make_module(GC& gc, OptionalRoot<Module>& r_base, uint64_t capacity);
+    // Make an Assoc with the given capacity (and zero length).
+    Assoc* make_assoc(GC& gc, uint64_t capacity);
     // Make a String with contents copied from a source string.
     String* make_string(GC& gc, const std::string& src);
     // Make a String of the given length, with contents uninitialized.
     String* make_string_nofill(GC& gc, uint64_t length);
     // Make a Code with specified fields.
-    Code* make_code(GC& gc, Root<Module>& r_module, uint32_t num_params, uint32_t num_regs,
+    Code* make_code(GC& gc, Root<Assoc>& r_module, uint32_t num_params, uint32_t num_regs,
                     uint32_t num_data, OptionalRoot<Array>& r_upreg_map, Root<Array>& r_insts,
                     Root<Array>& r_args, Root<Tuple>& r_span, Root<Array>& r_inst_spans);
     // Make a Closure with specified fields.
@@ -65,16 +65,16 @@ namespace Katsu
     // For convenience, this returns a pointer to the resulting Vector (which may have been moved
     // due to reallocation).
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value);
-    // Append a key/value pair to a module, reallocating if necessary to expand the module.
-    // For convenience, this returns a pointer to the resulting Module (which may have been moved
+    // Append a key/value pair to an assoc, reallocating if necessary to expand the assoc.
+    // For convenience, this returns a pointer to the resulting Assoc (which may have been moved
     // due to reallocation).
-    Module* append(GC& gc, Root<Module>& r_module, Root<String>& r_name, ValueRoot& r_value);
+    Assoc* append(GC& gc, Root<Assoc>& r_assoc, Root<String>& r_name, ValueRoot& r_value);
 
     Array* vector_to_array(GC& gc, Root<Vector>& r_vector);
 
-    // Looks up a module entry by name, following the module's v_base until reaching null.
-    // Returns a pointer into the relevant Module::Entry value, or nullptr if not found.
-    Value* module_lookup(Module* module, String* name);
+    // Looks up an assoc entry by name. Returns a pointer into the relevant Assoc::Entry value, or
+    // nullptr if not found.
+    Value* assoc_lookup(Assoc* assoc, String* name);
 
     // Determine if two Strings are equal, i.e. have the same contents.
     bool string_eq(String* a, String* b);

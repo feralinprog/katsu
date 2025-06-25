@@ -26,7 +26,7 @@ namespace Katsu
         // This has Vector variants of all the Arrays that go into a Code object.
         // This way we can append/grow, then copy into Arrays to finalize the Code.
 
-        Root<Module>& r_module;
+        Root<Assoc>& r_module;
         // Number of parameters.
         uint32_t num_params;
         // Number of locals.
@@ -177,7 +177,7 @@ namespace Katsu
         if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
-            if (!module_lookup(*builder.r_module, *r_name)) {
+            if (!assoc_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("name is not defined in module", expr->op.span);
             }
             compile_expr(gc, builder, *expr->arg, /* tail_position */ false, /* tail_call */ false);
@@ -188,7 +188,7 @@ namespace Katsu
         } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value) + ":";
             Root<String> r_name(gc, make_string(gc, op_name));
-            if (!module_lookup(*builder.r_module, *r_name)) {
+            if (!assoc_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("name is not defined in module", expr->op.span);
             }
             compile_expr(gc,
@@ -247,7 +247,7 @@ namespace Katsu
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                     builder.emit_arg(gc, Value::fixnum(local->local_index));
                 }
-            } else if (Value* lookup = module_lookup(*builder.r_module, *r_name)) {
+            } else if (Value* lookup = assoc_lookup(*builder.r_module, *r_name)) {
                 if (lookup->is_obj_multimethod()) {
                     Value v_name = lookup->obj_multimethod()->v_name;
                     ValueRoot r_name(gc, std::move(v_name));
@@ -306,7 +306,7 @@ namespace Katsu
         } else if (UnaryMessageExpr* expr = dynamic_cast<UnaryMessageExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->message.value);
             Root<String> r_name(gc, make_string(gc, name));
-            if (!module_lookup(*builder.r_module, *r_name)) {
+            if (!assoc_lookup(*builder.r_module, *r_name)) {
                 throw compile_error("name is not defined in module", expr->message.span);
             }
             compile_expr(gc,
@@ -460,7 +460,7 @@ namespace Katsu
                              /* tail_call */ true);
                 return;
             }
-            if (!module_lookup(*builder.r_module, *r_name)) {
+            if (!assoc_lookup(*builder.r_module, *r_name)) {
                 throw compile_error(
                     "name is not defined in module (and is also not <a mutable local>:)",
                     expr->span);
@@ -741,7 +741,7 @@ namespace Katsu
 
         MultiMethod* multimethod;
         {
-            Value* existing = module_lookup(*module_builder.r_module, *r_method_name);
+            Value* existing = assoc_lookup(*module_builder.r_module, *r_method_name);
             if (existing) {
                 if (existing->is_obj_multimethod()) {
                     multimethod = existing->obj_multimethod();
@@ -899,7 +899,7 @@ namespace Katsu
     }
 
     // receiver, extends are optional
-    void compile_dataclass(GC& gc, Root<Module>& r_module, const std::string& message,
+    void compile_dataclass(GC& gc, Root<Assoc>& r_module, const std::string& message,
                            SourceSpan& span, Expr* receiver, Expr& name, Expr* extends, Expr& has)
     {
         if (receiver) {
@@ -916,7 +916,7 @@ namespace Katsu
         }
         const std::string& class_name = std::get<std::string>(name_expr->name.value);
         Root<String> r_class_name(gc, make_string(gc, class_name));
-        if (module_lookup(*r_module, *r_class_name)) {
+        if (assoc_lookup(*r_module, *r_class_name)) {
             std::stringstream ss;
             ss << message << " class name '" << class_name << "' already exists in module scope";
             throw compile_error(ss.str(), name.span);
@@ -940,7 +940,7 @@ namespace Katsu
                 }
                 const std::string& base_name = std::get<std::string>(base_name_expr->name.value);
                 Root<String> r_base_name(gc, make_string(gc, base_name));
-                Value* lookup = module_lookup(*r_module, *r_base_name);
+                Value* lookup = assoc_lookup(*r_module, *r_base_name);
                 if (!lookup) {
                     std::stringstream ss;
                     ss << "Name '" << base_name << "' is not in module scope";
@@ -1028,7 +1028,7 @@ namespace Katsu
         const auto lookup_or_create = [&gc, &r_module](Root<String>& r_name,
                                                        uint32_t num_params,
                                                        SourceSpan err_span) -> MultiMethod* {
-            Value* lookup = module_lookup(*r_module, *r_name);
+            Value* lookup = assoc_lookup(*r_module, *r_name);
             if (lookup) {
                 if (lookup->is_obj_multimethod()) {
                     return lookup->obj_multimethod();
@@ -1293,7 +1293,7 @@ namespace Katsu
         }
     }
 
-    Code* compile_into_module(GC& gc, Root<Module>& r_module, SourceSpan& span,
+    Code* compile_into_module(GC& gc, Root<Assoc>& r_module, SourceSpan& span,
                               std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
         // TODO: for future -- first find all multimethod definitions, add them to module (with zero
@@ -1436,11 +1436,11 @@ namespace Katsu
         return builder.finalize(gc, span);
     }
 
-    Code* compile_module(GC& gc, OptionalRoot<Module>& r_base, SourceSpan& span,
+    Code* compile_module(GC& gc, SourceSpan& span,
                          std::vector<std::unique_ptr<Expr>>& module_top_level_exprs,
-                         Module*& out_module)
+                         Assoc*& out_module)
     {
-        Root<Module> r_module(gc, make_module(gc, r_base, /* capacity */ 0));
+        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
         Code* code = compile_into_module(gc, r_module, span, module_top_level_exprs);
         out_module = *r_module;
         return code;

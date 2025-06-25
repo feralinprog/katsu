@@ -27,8 +27,7 @@ TEST_CASE("VM executes basic bytecode (no invocations)", "[vm]")
 
     // Perform a simple LOAD_VALUE.
 
-    OptionalRoot<Module> r_module_base(gc, nullptr);
-    Root<Module> r_module(gc, make_module(gc, /* base */ r_module_base, /* capacity */ 0));
+    Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
 
     OptionalRoot<Array> r_upreg_map(gc, nullptr);
 
@@ -115,8 +114,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
                                                      /* r_methods */ r_methods,
                                                      /* r_attributes */ r_multimethod_attributes));
 
-    OptionalRoot<Module> r_module_base(gc, nullptr);
-    Root<Module> r_module(gc, make_module(gc, /* base */ r_module_base, /* capacity */ 1));
+    Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 1));
     r_module->length = 1;
     r_module->entries()[0].v_key = r_method_name.value();
     r_module->entries()[0].v_value = r_multimethod.value();

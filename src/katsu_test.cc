@@ -88,8 +88,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         std::unique_ptr<PrattParser> parser = make_default_parser();
         // 10 KiB call stack size.
         VM vm(gc, 10 * 1024);
-        OptionalRoot<Module> r_module_base(gc, nullptr);
-        Root<Module> r_module(gc, make_module(gc, r_module_base, /* capacity */ 0));
+        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
 
         register_builtins(vm, r_module);
 
@@ -272,7 +271,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::object(make_vector(gc, 0)));
     }
 
-    // TODO: module
+    // TODO: assoc
 
     SECTION("string")
     {
