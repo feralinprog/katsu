@@ -89,41 +89,40 @@ template <> Value make<Object*>()
     return Value::object(static_cast<Object*>(nullptr));
 }
 
-#define EACH_TYPE_PAIR(F) \
-    F(int64_t, int64_t)   \
-    F(int64_t, bool)      \
-    F(int64_t, Null)      \
-    F(int64_t, Object*)   \
-    F(bool, int64_t)      \
-    F(bool, bool)         \
-    F(bool, Null)         \
-    F(bool, Object*)      \
-    F(Null, int64_t)      \
-    F(Null, bool)         \
-    F(Null, Null)         \
-    F(Null, Object*)      \
-    F(Object*, int64_t)   \
-    F(Object*, bool)      \
-    F(Object*, Null)      \
-    F(Object*, Object*)
+#define EACH_TYPE_INNER(F, LEFT) \
+    F(LEFT, int64_t)             \
+    F(LEFT, bool)                \
+    F(LEFT, Null)                \
+    F(LEFT, Object*)
 
-#define TAG_TESTCASE(T1, T2)                                                            \
-    TEST_CASE("tags keep track of underlying value type - " #T1 " and " #T2, "[value]") \
-    {                                                                                   \
-        Value v = make<T1>();                                                           \
-                                                                                        \
-        if (std::is_same<T1, T2>::value) {                                              \
-            CHECK_NOTHROW(v.value<T2>());                                               \
-        } else {                                                                        \
-            std::stringstream ss;                                                       \
-            ss << "ASSERT(value.tag() == Tag::" << TAG_STR(make<T2>().tag()) << ")";    \
-            CHECK_THROWS_MATCHES(v.value<T2>(),                                         \
-                                 std::logic_error,                                      \
-                                 MessageMatches(EndsWith(ss.str())));                   \
-        }                                                                               \
+#define EACH_TYPE_OUTER(INNER, F) \
+    INNER(F, int64_t)             \
+    INNER(F, bool)                \
+    INNER(F, Null)                \
+    INNER(F, Object*)
+
+#define EACH_TYPE_PAIR(F) EACH_TYPE_OUTER(EACH_TYPE_INNER, F)
+
+TEST_CASE("tags keep track of underlying value type", "[value]")
+{
+#define TAG_SECTION(T1, T2)                                                          \
+    SECTION(#T1 " and " #T2)                                                         \
+    {                                                                                \
+        Value v = make<T1>();                                                        \
+                                                                                     \
+        if (std::is_same<T1, T2>::value) {                                           \
+            CHECK_NOTHROW(v.value<T2>());                                            \
+        } else {                                                                     \
+            std::stringstream ss;                                                    \
+            ss << "ASSERT(value.tag() == Tag::" << TAG_STR(make<T2>().tag()) << ")"; \
+            CHECK_THROWS_MATCHES(v.value<T2>(),                                      \
+                                 std::logic_error,                                   \
+                                 MessageMatches(EndsWith(ss.str())));                \
+        }                                                                            \
     }
 
-EACH_TYPE_PAIR(TAG_TESTCASE)
+    EACH_TYPE_PAIR(TAG_SECTION);
+}
 
 TEST_CASE("inline vs. non-inline tags", "[value]")
 {
@@ -158,179 +157,42 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     free(&obj);
 }
 
-#define EACH_OBJECT_PAIR(F)                 \
-    F(Ref, Ref)                             \
-    F(Ref, Tuple)                           \
-    F(Ref, Array)                           \
-    F(Ref, Vector)                          \
-    F(Ref, Assoc)                           \
-    F(Ref, String)                          \
-    F(Ref, Code)                            \
-    F(Ref, Closure)                         \
-    F(Ref, Method)                          \
-    F(Ref, MultiMethod)                     \
-    F(Ref, Type)                            \
-    F(Ref, DataclassInstance)               \
-    F(Ref, CallSegment)                     \
-    F(Tuple, Ref)                           \
-    F(Tuple, Tuple)                         \
-    F(Tuple, Array)                         \
-    F(Tuple, Vector)                        \
-    F(Tuple, Assoc)                         \
-    F(Tuple, String)                        \
-    F(Tuple, Code)                          \
-    F(Tuple, Closure)                       \
-    F(Tuple, Method)                        \
-    F(Tuple, MultiMethod)                   \
-    F(Tuple, Type)                          \
-    F(Tuple, DataclassInstance)             \
-    F(Tuple, CallSegment)                   \
-    F(Array, Ref)                           \
-    F(Array, Tuple)                         \
-    F(Array, Array)                         \
-    F(Array, Vector)                        \
-    F(Array, Assoc)                         \
-    F(Array, String)                        \
-    F(Array, Code)                          \
-    F(Array, Closure)                       \
-    F(Array, Method)                        \
-    F(Array, MultiMethod)                   \
-    F(Array, Type)                          \
-    F(Array, DataclassInstance)             \
-    F(Array, CallSegment)                   \
-    F(Vector, Ref)                          \
-    F(Vector, Tuple)                        \
-    F(Vector, Array)                        \
-    F(Vector, Vector)                       \
-    F(Vector, Assoc)                        \
-    F(Vector, String)                       \
-    F(Vector, Code)                         \
-    F(Vector, Closure)                      \
-    F(Vector, Method)                       \
-    F(Vector, MultiMethod)                  \
-    F(Vector, Type)                         \
-    F(Vector, DataclassInstance)            \
-    F(Vector, CallSegment)                  \
-    F(Assoc, Ref)                           \
-    F(Assoc, Tuple)                         \
-    F(Assoc, Array)                         \
-    F(Assoc, Vector)                        \
-    F(Assoc, Assoc)                         \
-    F(Assoc, String)                        \
-    F(Assoc, Code)                          \
-    F(Assoc, Closure)                       \
-    F(Assoc, Method)                        \
-    F(Assoc, MultiMethod)                   \
-    F(Assoc, Type)                          \
-    F(Assoc, DataclassInstance)             \
-    F(Assoc, CallSegment)                   \
-    F(String, Ref)                          \
-    F(String, Tuple)                        \
-    F(String, Array)                        \
-    F(String, Vector)                       \
-    F(String, Assoc)                        \
-    F(String, String)                       \
-    F(String, Code)                         \
-    F(String, Closure)                      \
-    F(String, Method)                       \
-    F(String, MultiMethod)                  \
-    F(String, Type)                         \
-    F(String, DataclassInstance)            \
-    F(String, CallSegment)                  \
-    F(Code, Ref)                            \
-    F(Code, Tuple)                          \
-    F(Code, Array)                          \
-    F(Code, Vector)                         \
-    F(Code, Assoc)                          \
-    F(Code, String)                         \
-    F(Code, Code)                           \
-    F(Code, Closure)                        \
-    F(Code, Method)                         \
-    F(Code, MultiMethod)                    \
-    F(Code, Type)                           \
-    F(Code, DataclassInstance)              \
-    F(Code, CallSegment)                    \
-    F(Closure, Ref)                         \
-    F(Closure, Tuple)                       \
-    F(Closure, Array)                       \
-    F(Closure, Vector)                      \
-    F(Closure, Assoc)                       \
-    F(Closure, String)                      \
-    F(Closure, Code)                        \
-    F(Closure, Closure)                     \
-    F(Closure, Method)                      \
-    F(Closure, MultiMethod)                 \
-    F(Closure, Type)                        \
-    F(Closure, DataclassInstance)           \
-    F(Closure, CallSegment)                 \
-    F(Method, Ref)                          \
-    F(Method, Tuple)                        \
-    F(Method, Array)                        \
-    F(Method, Vector)                       \
-    F(Method, Assoc)                        \
-    F(Method, String)                       \
-    F(Method, Code)                         \
-    F(Method, Closure)                      \
-    F(Method, Method)                       \
-    F(Method, MultiMethod)                  \
-    F(Method, Type)                         \
-    F(Method, DataclassInstance)            \
-    F(Method, CallSegment)                  \
-    F(MultiMethod, Ref)                     \
-    F(MultiMethod, Tuple)                   \
-    F(MultiMethod, Array)                   \
-    F(MultiMethod, Vector)                  \
-    F(MultiMethod, Assoc)                   \
-    F(MultiMethod, String)                  \
-    F(MultiMethod, Code)                    \
-    F(MultiMethod, Closure)                 \
-    F(MultiMethod, Method)                  \
-    F(MultiMethod, MultiMethod)             \
-    F(MultiMethod, Type)                    \
-    F(MultiMethod, DataclassInstance)       \
-    F(MultiMethod, CallSegment)             \
-    F(Type, Ref)                            \
-    F(Type, Tuple)                          \
-    F(Type, Array)                          \
-    F(Type, Vector)                         \
-    F(Type, Assoc)                          \
-    F(Type, String)                         \
-    F(Type, Code)                           \
-    F(Type, Closure)                        \
-    F(Type, Method)                         \
-    F(Type, MultiMethod)                    \
-    F(Type, Type)                           \
-    F(Type, DataclassInstance)              \
-    F(Type, CallSegment)                    \
-    F(DataclassInstance, Ref)               \
-    F(DataclassInstance, Tuple)             \
-    F(DataclassInstance, Array)             \
-    F(DataclassInstance, Vector)            \
-    F(DataclassInstance, Assoc)             \
-    F(DataclassInstance, String)            \
-    F(DataclassInstance, Code)              \
-    F(DataclassInstance, Closure)           \
-    F(DataclassInstance, Method)            \
-    F(DataclassInstance, MultiMethod)       \
-    F(DataclassInstance, Type)              \
-    F(DataclassInstance, DataclassInstance) \
-    F(DataclassInstance, CallSegment)       \
-    F(CallSegment, Ref)                     \
-    F(CallSegment, Tuple)                   \
-    F(CallSegment, Array)                   \
-    F(CallSegment, Vector)                  \
-    F(CallSegment, Assoc)                   \
-    F(CallSegment, String)                  \
-    F(CallSegment, Code)                    \
-    F(CallSegment, Closure)                 \
-    F(CallSegment, Method)                  \
-    F(CallSegment, MultiMethod)             \
-    F(CallSegment, Type)                    \
-    F(CallSegment, DataclassInstance)       \
-    F(CallSegment, CallSegment)
+#define EACH_OBJECT_INNER(F, LEFT) \
+    F(LEFT, Ref)                   \
+    F(LEFT, Tuple)                 \
+    F(LEFT, Array)                 \
+    F(LEFT, Vector)                \
+    F(LEFT, Assoc)                 \
+    F(LEFT, String)                \
+    F(LEFT, Code)                  \
+    F(LEFT, Closure)               \
+    F(LEFT, Method)                \
+    F(LEFT, MultiMethod)           \
+    F(LEFT, Type)                  \
+    F(LEFT, DataclassInstance)     \
+    F(LEFT, CallSegment)
 
-#define OBJECT_TAG_TESTCASE(T1, T2)                                                             \
-    TEST_CASE("object() helper checks object tags - " #T1 " and " #T2, "[object]")              \
+#define EACH_OBJECT_OUTER(INNER, F) \
+    INNER(F, Ref)                   \
+    INNER(F, Tuple)                 \
+    INNER(F, Array)                 \
+    INNER(F, Vector)                \
+    INNER(F, Assoc)                 \
+    INNER(F, String)                \
+    INNER(F, Code)                  \
+    INNER(F, Closure)               \
+    INNER(F, Method)                \
+    INNER(F, MultiMethod)           \
+    INNER(F, Type)                  \
+    INNER(F, DataclassInstance)     \
+    INNER(F, CallSegment)
+
+#define EACH_OBJECT_PAIR(F) EACH_OBJECT_OUTER(EACH_OBJECT_INNER, F)
+
+TEST_CASE("object() helper checks object tags", "[object]")
+{
+#define OBJECT_TAG_SECTION(T1, T2)                                                              \
+    SECTION(#T1 " and " #T2)                                                                    \
     {                                                                                           \
         Object& obj = *reinterpret_cast<Object*>(malloc(sizeof(Object)));                       \
         REQUIRE_NOTHROW(obj.set_object(T1::CLASS_TAG));                                         \
@@ -348,7 +210,8 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
         free(&obj);                                                                             \
     }
 
-EACH_OBJECT_PAIR(OBJECT_TAG_TESTCASE)
+    EACH_OBJECT_PAIR(OBJECT_TAG_SECTION);
+}
 
 // TODO: test functions of Ref
 // TODO: test functions of Tuple
