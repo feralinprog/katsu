@@ -360,12 +360,13 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::fixnum(3));
     }
 
-    // TODO: handle divide by zero
-    // SECTION("fixnum /: - divide by zero")
-    // {
-    //     input("1 / 0");
-    //     check(Value::fixnum(0));
-    // }
+    SECTION("fixnum /: - divide by zero")
+    {
+        input("1 / 0");
+        CHECK_THROWS_MATCHES(run(),
+                             std::runtime_error,
+                             Message("divide-by-zero: cannot divide by integer 0"));
+    }
 
     // TODO: add id!= as an operator
     SECTION("fixnum id=: positive case")

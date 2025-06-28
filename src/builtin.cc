@@ -126,7 +126,12 @@ namespace Katsu
     {
         // a / b
         ASSERT(nargs == 2);
-        return Value::fixnum(args[0].fixnum() / args[1].fixnum());
+        int64_t a = args[0].fixnum();
+        int64_t b = args[1].fixnum();
+        if (b == 0) {
+            throw condition_error("divide-by-zero", "cannot divide by integer 0");
+        }
+        return Value::fixnum(a / b);
     }
 
     Value native__id_eq_(VM& vm, int64_t nargs, Value* args)

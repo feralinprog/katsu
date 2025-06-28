@@ -459,3 +459,8 @@ try: [
 ] except: {
     (Exception, \e [ print: "Got exception: " ~ e .message; e .stack print-trace-except-top ])
 }
+
+let: divide-by-zero do: [
+    1 / 0
+]
+divide-by-zero
