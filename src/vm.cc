@@ -594,9 +594,12 @@ namespace Katsu
                 // Note that we cannot support tail-calls here. However, it's not really an issue,
                 // since native handler shouldn't add to the Katsu call stack themselves; as soon as
                 // the handler returns the Katsu call frame should be complete as well.
-                this->current_frame->inst_spot++;
                 Value v_result = method->native_handler(*this, num_args, args);
                 this->current_frame->push(v_result);
+                // Do this after calling the native handler; in case of the handler throwing an
+                // exception, we must leave the inst spot as it was so that a condition handler can
+                // continue from there.
+                this->current_frame->inst_spot++;
             } else if (method->intrinsic_handler) {
                 // Handler takes care of updating inst_spot.
                 OpenVM open(*this);
