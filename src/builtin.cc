@@ -757,12 +757,6 @@ namespace Katsu
         }
 
         {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_module, "pr", 1, matchers1, &native__pr);
-        }
-
-        {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any

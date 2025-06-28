@@ -301,6 +301,11 @@ let: (n: Fixnum) >string do: [
 let: (_: Null) >string do: ["null"]
 let: (b: Bool) >string do: [b then: "t" else: "f"]
 
+let: v pr do: [
+    print: v >string
+    v
+]
+
 let: (span: SourceSpan) >string do: [
     "<" ~ span .file ~ ":" ~ (
         (span .start .line + 1) >string ~ ":" ~ (span .start .column + 1) >string

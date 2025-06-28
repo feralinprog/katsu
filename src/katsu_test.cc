@@ -605,14 +605,6 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK(capture.str() == "hello, world\n");
     }
 
-    SECTION("pr")
-    {
-        cout_capture capture;
-        input(R"("hello, world" pr)");
-        check(Value::object(make_string(gc, "hello, world")));
-        CHECK(capture.str() == "hello, world\n");
-    }
-
     SECTION("pretty-print:")
     {
         cout_capture capture;
