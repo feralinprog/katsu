@@ -105,7 +105,9 @@ namespace Katsu
         this->current_frame = frame;
 
         while (true) {
-            // this->print_vm_state();
+            if (this->verbose_logging) {
+                this->print_vm_state();
+            }
 
             Code* frame_code = this->current_frame->v_code.obj_code();
             Array* frame_insts = frame_code->v_insts.obj_array();

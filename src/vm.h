@@ -303,6 +303,8 @@ namespace Katsu
 
         // All loaded modules, by name.
         Value v_modules; // Assoc
+
+        bool verbose_logging = false;
     };
 
     // This should only be used by intrinsic handlers.
