@@ -1,3 +1,5 @@
+use-existing-module: "core.builtin.extra"
+
 pretty-print: 10 + 20
 
 let: (adder: (n0: Fixnum)) do: [

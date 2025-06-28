@@ -7,7 +7,7 @@
 
 void usage()
 {
-    std::cerr << "Usage: ./katsu <source.katsu>\n";
+    std::cerr << "Usage: ./katsu <module.name> <path/to/source.katsu>\n";
 }
 
 std::ostream& operator<<(std::ostream& s, const Katsu::SourceSpan& span)
@@ -25,13 +25,15 @@ std::ostream& operator<<(std::ostream& s, const Katsu::SourceSpan& span)
 
 int main(int argc, char** argv)
 {
-    if (argc != 2) {
+    if (argc != 3) {
         usage();
         return EXIT_FAILURE;
     }
-    std::string path(argv[1]);
+    // TODO: determine module_name from path.
+    std::string module_name(argv[1]);
+    std::string path(argv[2]);
     try {
-        Katsu::execute_file(path);
+        Katsu::execute_file(path, module_name);
     } catch (const std::ios_base::failure& e) {
         std::cerr << "Error: " << e.what() << "\n";
         std::cerr << "Could not execute file '" << path << "'.\n";

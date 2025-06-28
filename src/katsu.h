@@ -4,5 +4,5 @@
 
 namespace Katsu
 {
-    void execute_file(const std::string& filepath);
+    void execute_file(const std::string& filepath, const std::string& module_name);
 };

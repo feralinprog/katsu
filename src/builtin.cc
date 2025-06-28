@@ -571,6 +571,20 @@ namespace Katsu
                   /* v_marker */ Value::null());
     }
 
+    void intrinsic__use_existing_module_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ use-existing-module: "module.name"
+        ASSERT(nargs == 2);
+
+        Root<Assoc> r_modules(vm.gc, vm.vm.modules());
+        Root<Assoc> r_module(vm.gc, vm.frame()->v_module.obj_assoc());
+        Root<String> r_module_name(vm.gc, args[1].obj_string());
+        use_existing_module(vm.gc, r_modules, r_module, r_module_name);
+
+        vm.frame()->push(Value::null());
+        vm.frame()->inst_spot++;
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -598,16 +612,16 @@ namespace Katsu
         _register(vm, id, r_name, r_module, r_value);
     }
 
-    void register_builtins(VM& vm, Root<Assoc>& r_module)
+    void register_builtins(VM& vm, Root<Assoc>& r_defaults, Root<Assoc>& r_extras)
     {
-        _register(vm, BuiltinId::_null, "null", r_module, Value::null());
-        _register(vm, BuiltinId::_true, "t", r_module, Value::_bool(true));
-        _register(vm, BuiltinId::_false, "f", r_module, Value::_bool(false));
+        _register(vm, BuiltinId::_null, "null", r_defaults, Value::null());
+        _register(vm, BuiltinId::_true, "t", r_defaults, Value::_bool(true));
+        _register(vm, BuiltinId::_false, "f", r_defaults, Value::_bool(false));
 
-        auto register_base_type = [&vm, &r_module](BuiltinId id, const std::string& name) {
+        auto register_base_type = [&vm, &r_defaults](BuiltinId id, const std::string& name) {
             Root<String> r_name(vm.gc, make_string(vm.gc, name));
             ValueRoot r_type(vm.gc, make_base_type(vm.gc, r_name));
-            _register(vm, id, r_name, r_module, r_type);
+            _register(vm, id, r_name, r_defaults, r_type);
         };
 
         // TODO: Number?
@@ -632,47 +646,47 @@ namespace Katsu
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_String);
             matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_module, "~:", 2, matchers2, &native__tilde_);
+            add_native(vm.gc, r_defaults, "~:", 2, matchers2, &native__tilde_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "+:", 2, matchers2, &native__add_);
+            add_native(vm.gc, r_defaults, "+:", 2, matchers2, &native__add_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "-:", 2, matchers2, &native__sub_);
+            add_native(vm.gc, r_defaults, "-:", 2, matchers2, &native__sub_);
         }
 
         {
             Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
             matchers1->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "+", 1, matchers1, &native__plus);
+            add_native(vm.gc, r_defaults, "+", 1, matchers1, &native__plus);
         }
 
         {
             Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
             matchers1->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "-", 1, matchers1, &native__minus);
+            add_native(vm.gc, r_defaults, "-", 1, matchers1, &native__minus);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "*:", 2, matchers2, &native__mult_);
+            add_native(vm.gc, r_defaults, "*:", 2, matchers2, &native__mult_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "/:", 2, matchers2, &native__div_);
+            add_native(vm.gc, r_defaults, "/:", 2, matchers2, &native__div_);
         }
 
         {
@@ -680,92 +694,92 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
             // By default, = and id= are the same.
-            add_native(vm.gc, r_module, "id=:", 2, matchers2, &native__id_eq_);
-            add_native(vm.gc, r_module, "=:", 2, matchers2, &native__id_eq_);
+            add_native(vm.gc, r_defaults, "id=:", 2, matchers2, &native__id_eq_);
+            add_native(vm.gc, r_defaults, "=:", 2, matchers2, &native__id_eq_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
-            add_native(vm.gc, r_module, "id!=:", 2, matchers2, &native__id_ne_);
-            add_native(vm.gc, r_module, "!=:", 2, matchers2, &native__id_ne_);
+            add_native(vm.gc, r_defaults, "id!=:", 2, matchers2, &native__id_ne_);
+            add_native(vm.gc, r_defaults, "!=:", 2, matchers2, &native__id_ne_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_String);
             matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_module, "=:", 2, matchers2, &native__str_eq_);
+            add_native(vm.gc, r_defaults, "=:", 2, matchers2, &native__str_eq_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_String);
             matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_module, "!=:", 2, matchers2, &native__str_ne_);
+            add_native(vm.gc, r_defaults, "!=:", 2, matchers2, &native__str_ne_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, ">:", 2, matchers2, &native__gt_);
+            add_native(vm.gc, r_defaults, ">:", 2, matchers2, &native__gt_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, ">=:", 2, matchers2, &native__gte_);
+            add_native(vm.gc, r_defaults, ">=:", 2, matchers2, &native__gte_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "<:", 2, matchers2, &native__lt_);
+            add_native(vm.gc, r_defaults, "<:", 2, matchers2, &native__lt_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_module, "<=:", 2, matchers2, &native__lte_);
+            add_native(vm.gc, r_defaults, "<=:", 2, matchers2, &native__lte_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Bool);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_module, "and:", 2, matchers2, &native__and_);
+            add_native(vm.gc, r_defaults, "and:", 2, matchers2, &native__and_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Bool);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_module, "or:", 2, matchers2, &native__or_);
+            add_native(vm.gc, r_defaults, "or:", 2, matchers2, &native__or_);
         }
 
         {
             Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
             matchers1->components()[0] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_module, "not", 1, matchers1, &native__not);
+            add_native(vm.gc, r_defaults, "not", 1, matchers1, &native__not);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_module, "print:", 2, matchers2, &native__print_);
+            add_native(vm.gc, r_extras, "print:", 2, matchers2, &native__print_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
-            add_native(vm.gc, r_module, "pretty-print:", 2, matchers2, &native__pretty_print_);
+            add_native(vm.gc, r_extras, "pretty-print:", 2, matchers2, &native__pretty_print_);
         }
 
         {
@@ -773,47 +787,47 @@ namespace Katsu
             matchers3->components()[0] = Value::null(); // any
             matchers3->components()[1] = Value::null(); // any
             matchers3->components()[2] = Value::null(); // any
-            add_intrinsic(vm.gc, r_module, "then:else:", 3, matchers3, &intrinsic__then_else_);
+            add_intrinsic(vm.gc, r_defaults, "then:else:", 3, matchers3, &intrinsic__then_else_);
         }
 
         {
             Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
             matchers1->components()[0] = Value::null(); // any
-            add_intrinsic(vm.gc, r_module, "call", 1, matchers1, &intrinsic__call);
+            add_intrinsic(vm.gc, r_defaults, "call", 1, matchers1, &intrinsic__call);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
-            add_intrinsic(vm.gc, r_module, "call:", 2, matchers2, &intrinsic__call_);
+            add_intrinsic(vm.gc, r_defaults, "call:", 2, matchers2, &intrinsic__call_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_Tuple);
-            add_intrinsic(vm.gc, r_module, "call*:", 2, matchers2, &intrinsic__call_star_);
+            add_intrinsic(vm.gc, r_defaults, "call*:", 2, matchers2, &intrinsic__call_star_);
         }
 
         {
             Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
             matchers1->components()[0] = Value::null(); // any
-            add_native(vm.gc, r_module, "type", 1, matchers1, &native__type);
+            add_native(vm.gc, r_defaults, "type", 1, matchers1, &native__type);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = vm.builtin(BuiltinId::_Type);
             matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
-            add_native(vm.gc, r_module, "subtype?:", 2, matchers2, &native__subtype_p_);
+            add_native(vm.gc, r_defaults, "subtype?:", 2, matchers2, &native__subtype_p_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
-            add_native(vm.gc, r_module, "instance?:", 2, matchers2, &native__instance_p_);
+            add_native(vm.gc, r_defaults, "instance?:", 2, matchers2, &native__instance_p_);
         }
 
         {
@@ -823,7 +837,7 @@ namespace Katsu
             matchers4->components()[2] = vm.builtin(BuiltinId::_Code);
             matchers4->components()[3] = vm.builtin(BuiltinId::_Vector);
             add_native(vm.gc,
-                       r_module,
+                       r_defaults, // needed for method definitions
                        "make-method-with-return-type:code:attrs:",
                        4,
                        matchers4,
@@ -836,7 +850,7 @@ namespace Katsu
             matchers3->components()[1] = vm.builtin(BuiltinId::_MultiMethod);
             matchers3->components()[2] = vm.builtin(BuiltinId::_Bool);
             add_native(vm.gc,
-                       r_module,
+                       r_defaults, // needed for method definitions
                        "add-method-to:require-unique:",
                        3,
                        matchers3,
@@ -847,7 +861,7 @@ namespace Katsu
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_module, "TEST-ASSERT:", 2, matchers2, &native__TEST_ASSERT_);
+            add_native(vm.gc, r_extras, "TEST-ASSERT:", 2, matchers2, &native__TEST_ASSERT_);
         }
 
         {
@@ -855,7 +869,7 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // 'any' matcher
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
             add_native(vm.gc,
-                       r_module,
+                       r_extras,
                        "unsafe-read-u64-at-offset:",
                        2,
                        matchers2,
@@ -868,7 +882,7 @@ namespace Katsu
             matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
             matchers3->components()[2] = vm.builtin(BuiltinId::_Fixnum);
             add_native(vm.gc,
-                       r_module,
+                       r_extras,
                        "unsafe-write-u64-at-offset:value:",
                        3,
                        matchers3,
@@ -880,7 +894,7 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // 'any' matcher
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
             add_native(vm.gc,
-                       r_module,
+                       r_extras,
                        "unsafe-read-u32-at-offset:",
                        2,
                        matchers2,
@@ -893,7 +907,7 @@ namespace Katsu
             matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
             matchers3->components()[2] = vm.builtin(BuiltinId::_Fixnum);
             add_native(vm.gc,
-                       r_module,
+                       r_extras,
                        "unsafe-write-u32-at-offset:value:",
                        3,
                        matchers3,
@@ -905,7 +919,7 @@ namespace Katsu
             matchers2->components()[0] = Value::null(); // 'any' matcher
             matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
             add_native(vm.gc,
-                       r_module,
+                       r_extras,
                        "unsafe-read-value-at-offset:",
                        2,
                        matchers2,
@@ -918,7 +932,7 @@ namespace Katsu
             matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
             matchers3->components()[2] = Value::null(); // 'any' matcher
             add_native(vm.gc,
-                       r_module,
+                       r_extras,
                        "unsafe-write-value-at-offset:value:",
                        3,
                        matchers3,
@@ -929,7 +943,7 @@ namespace Katsu
             Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
             matchers1->components()[0] = Value::null(); // any
             add_intrinsic(vm.gc,
-                          r_module,
+                          r_extras,
                           "get-call-stack",
                           1,
                           matchers1,
@@ -940,14 +954,26 @@ namespace Katsu
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
-            add_intrinsic(vm.gc, r_module, "call/marked:", 2, matchers2, &intrinsic__call_marked_);
+            add_intrinsic(vm.gc, r_extras, "call/marked:", 2, matchers2, &intrinsic__call_marked_);
         }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
             matchers2->components()[0] = Value::null(); // any
             matchers2->components()[1] = Value::null(); // any
-            add_intrinsic(vm.gc, r_module, "call/dc:", 2, matchers2, &intrinsic__call_dc_);
+            add_intrinsic(vm.gc, r_extras, "call/dc:", 2, matchers2, &intrinsic__call_dc_);
+        }
+
+        {
+            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
+            matchers2->components()[0] = Value::null(); // any
+            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
+            add_intrinsic(vm.gc,
+                          r_defaults,
+                          "use-existing-module:",
+                          2,
+                          matchers2,
+                          &intrinsic__use_existing_module_);
         }
 
         /*

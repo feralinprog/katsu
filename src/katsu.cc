@@ -141,15 +141,49 @@ namespace Katsu
         }
     };
 
-    Value execute_source(const SourceFile source, GC& gc, uint64_t call_stack_size)
+    Value execute_source(const SourceFile source, const std::string& module_name, GC& gc,
+                         uint64_t call_stack_size)
     {
         Lexer lexer(source);
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
         VM vm(gc, call_stack_size);
-        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
 
-        register_builtins(vm, r_module);
+        // Establish builtins in the core.builtin module.
+        {
+            Root<Assoc> r_core_builtin_default(gc, make_assoc(gc, /* capacity */ 0));
+            Root<Assoc> r_core_builtin_extra(gc, make_assoc(gc, /* capacity */ 0));
+            register_builtins(vm, r_core_builtin_default, r_core_builtin_extra);
+
+            Root<Assoc> r_modules(vm.gc, vm.modules());
+            {
+                Root<String> r_name(vm.gc, make_string(vm.gc, "core.builtin.default"));
+                ValueRoot rv_core_builtin(gc, r_core_builtin_default.value());
+                append(vm.gc, r_modules, r_name, rv_core_builtin);
+            }
+            {
+                Root<String> r_name(vm.gc, make_string(vm.gc, "core.builtin.extra"));
+                ValueRoot rv_core_builtin(gc, r_core_builtin_extra.value());
+                append(vm.gc, r_modules, r_name, rv_core_builtin);
+            }
+            vm.set_modules(*r_modules);
+        }
+
+        // Create a separate module for the source we're executing.
+        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
+        {
+            Root<Assoc> r_modules(vm.gc, vm.modules());
+            Root<String> r_name(vm.gc, make_string(vm.gc, module_name));
+            ValueRoot rv_module(gc, r_module.value());
+            append(vm.gc, r_modules, r_name, rv_module);
+            vm.set_modules(*r_modules);
+        }
+
+        // Always use core.builtin.default.
+        {
+            Root<Assoc> r_modules(vm.gc, vm.modules());
+            use_existing_module(vm.gc, r_modules, r_module, "core.builtin.default");
+        }
 
         // std::cout << "=== INITIAL MODULE STATE ===\n";
         // pprint(r_module.value());
@@ -197,7 +231,7 @@ namespace Katsu
         return result;
     }
 
-    void execute_file(const std::string& filepath)
+    void execute_file(const std::string& filepath, const std::string& module_name)
     {
         std::ifstream file_stream;
         // Raise exceptions on logical error or read/write error.
@@ -214,6 +248,6 @@ namespace Katsu
         // 100 MiB GC-managed memory.
         GC gc(100 * 1024 * 1024);
         // 100 KiB call stack size.
-        execute_source(source, gc, 100 * 1024);
+        execute_source(source, module_name, gc, 100 * 1024);
     }
 };

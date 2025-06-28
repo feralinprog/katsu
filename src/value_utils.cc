@@ -957,6 +957,37 @@ namespace Katsu
         append(gc, r_methods, rv_method);
     }
 
+    void use_existing_module(GC& gc, Root<Assoc>& r_modules, Root<Assoc>& r_module,
+                             Root<String>& r_module_name)
+    {
+        Value* lookup = assoc_lookup(*r_modules, *r_module_name);
+        if (!lookup) {
+            throw condition_error("module-not-found", "module has not been previously loaded");
+        }
+        Value v_src_module = *lookup;
+        ASSERT(v_src_module.is_obj_assoc());
+
+        // Perform the import! (TODO: split this to a separate function.)
+        Root<Assoc> r_src(gc, v_src_module.obj_assoc());
+        for (uint64_t i = 0; i < r_src->length; i++) {
+            Assoc::Entry* entry = &r_src->entries()[i];
+            // TODO: check for conflicts with existing names.
+            // TODO: don't require string names, also.
+            Root<String> r_name(gc, entry->v_key.obj_string());
+            Value v_value = entry->v_value;
+            ValueRoot r_value(gc, std::move(v_value));
+            append(gc, r_module, r_name, r_value);
+        }
+    }
+
+    void use_existing_module(GC& gc, Root<Assoc>& r_modules, Root<Assoc>& r_module,
+                             const std::string& module_name)
+    {
+        Root<String> r_module_name(gc, make_string(gc, module_name));
+        use_existing_module(gc, r_modules, r_module, r_module_name);
+    }
+
+
     Value* begin(Array* array)
     {
         return &array->components()[0];

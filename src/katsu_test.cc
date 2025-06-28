@@ -90,7 +90,8 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         VM vm(gc, 10 * 1024);
         Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
 
-        register_builtins(vm, r_module);
+        // Just throw everything in the same module.
+        register_builtins(vm, r_module, r_module);
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
@@ -771,7 +772,8 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
 namespace Katsu
 {
-    Value execute_source(const SourceFile source, GC& gc, uint64_t call_stack_size);
+    Value execute_source(const SourceFile source, const std::string& module_name, GC& gc,
+                         uint64_t call_stack_size);
 };
 
 
@@ -793,7 +795,7 @@ TEST_CASE("integration - whole file", "[katsu]")
     uint64_t call_stack_size = 10 * 1024;
 
     auto run = [&source, &gc, &call_stack_size]() {
-        return execute_source(source, gc, call_stack_size);
+        return execute_source(source, "test.integration", gc, call_stack_size);
     };
 
     // Structural check (based on prettyprinting).
@@ -952,6 +954,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 1")
         {
             input(R"(
+use-existing-module: "core.builtin.extra" # for TEST-ASSERT
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
@@ -966,6 +969,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 2")
         {
             input(R"(
+use-existing-module: "core.builtin.extra" # for TEST-ASSERT
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
@@ -1016,6 +1020,7 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
         SECTION("multimethod downselection - case 3 (ambiguous)")
         {
             input(R"(
+use-existing-module: "core.builtin.extra" # for TEST-ASSERT
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "ambiguous-method-resolution: multimethod has multiple best methods matching the given arguments"
     12345
@@ -1063,6 +1068,7 @@ let: (a: (null give-me-Fixnum)) mm-test do: [ verify-multimethod call: "multimet
     SECTION("dataclass smoketest")
     {
         input(R"(
+use-existing-module: "core.builtin.extra" # for TEST-ASSERT:
 data: Thing has: { slot-a; slot-b; slot-c }
 
 TEST-ASSERT: not ("abc" Thing?)
@@ -1114,6 +1120,7 @@ unary
     {
         cout_capture capture;
         input(R"CODE(
+use-existing-module: "core.builtin.extra" # for delimited continuations
 print: "aaaaa"
 [
     print: "  bbbbb"
@@ -1145,6 +1152,7 @@ zzzzz
     SECTION("delimited continuation - wrong marker")
     {
         input(R"CODE(
+use-existing-module: "core.builtin.extra" # for delimited continuations and TEST-ASSERT:
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "marker-not-found: did not find marker in call stack"
     12345
@@ -1162,6 +1170,7 @@ let: (c handle-raw-condition-with-message: m) do: [
         {
             cout_capture capture;
             input(R"CODE(
+use-existing-module: "core.builtin.extra" # for delimited continuations
 let: m1 = "marker 1"
 let: m2 = "marker 2"
 [
@@ -1185,6 +1194,7 @@ after call/marked: m1
         {
             cout_capture capture;
             input(R"CODE(
+use-existing-module: "core.builtin.extra" # for delimited continuations
 let: m1 = "marker 1"
 let: m2 = "marker 2"
 [

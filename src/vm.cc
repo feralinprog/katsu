@@ -30,7 +30,13 @@ namespace Katsu
             this->builtin_values[i] = Value::null();
         }
 
+        // Don't use GC yet.
+        this->v_modules = Value::null();
+
         this->gc.root_providers.push_back(this);
+
+        // Now we can use the GC.
+        this->v_modules = Value::object(make_assoc(this->gc, 0));
     }
 
     VM::~VM()
@@ -48,6 +54,8 @@ namespace Katsu
         for (Value& builtin : this->builtin_values) {
             visitor(&builtin);
         }
+
+        visitor(&this->v_modules);
 
         Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
         while (frame <= this->current_frame) {
