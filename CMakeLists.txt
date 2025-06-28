@@ -12,19 +12,19 @@ project(Katsu
 # Single library (libkatsudon.a) available for static linking
 # for both a main executable and tests.
 add_library(katsudon STATIC
-  src/span.cc
-  src/token.cc
-  src/lexer.cc
-  src/ast.cc
-  src/parser.cc
-  src/gc.cc
-  src/value_utils.cc
-  src/compile.cc
-  src/vm.cc
-  src/builtin.cc
-  src/katsu.cc
+  vm/span.cc
+  vm/token.cc
+  vm/lexer.cc
+  vm/ast.cc
+  vm/parser.cc
+  vm/gc.cc
+  vm/value_utils.cc
+  vm/compile.cc
+  vm/vm.cc
+  vm/builtin.cc
+  vm/katsu.cc
 )
-target_include_directories(katsudon PUBLIC src/)
+target_include_directories(katsudon PUBLIC vm/)
 # TODO: hook this up to ./run somehow... need to able to run tests both with and without DEBUG_GC_COLLECT_EVERY_ALLOC.
 target_compile_options(katsudon PUBLIC
   # -DDEBUG_ASSERTIONS=0
@@ -36,7 +36,7 @@ target_compile_options(katsudon PUBLIC
 )
 
 # Main katsu executable.
-add_executable(katsu src/main.cc)
+add_executable(katsu vm/main.cc)
 target_link_libraries(katsu PUBLIC katsudon)
 
 # Unit tests, using the Catch2 framework.
@@ -52,12 +52,12 @@ FetchContent_MakeAvailable(Catch2)
 
 # Unit tests.
 add_executable(test
-  src/lexer_test.cc
-  src/value_test.cc
-  src/gc_test.cc
-  src/value_utils_test.cc
-  src/vm_test.cc
-  src/katsu_test.cc
+  vm/lexer_test.cc
+  vm/value_test.cc
+  vm/gc_test.cc
+  vm/value_utils_test.cc
+  vm/vm_test.cc
+  vm/katsu_test.cc
 )
 target_link_libraries(test PRIVATE
   Catch2::Catch2WithMain

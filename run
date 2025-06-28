@@ -9,7 +9,7 @@ CMAKE_BUILD_FLAGS=""
 format ()
 {
     echo "================== FORMATTING =================="
-    clang-format -i $(find src/ -name "*.cc" -or -name "*.h")
+    clang-format -i $(find vm/ -name "*.cc" -or -name "*.h")
 }
 
 build ()
