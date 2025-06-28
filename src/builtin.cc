@@ -955,19 +955,12 @@ namespace Katsu
          * - cleanup: (or maybe this is just delimited continuations...)
          * - panic!: (or maybe this is just delimited continuations...)
          * - mix-in:to:
-         * - >string
          * - at:
          * - at:=:
          * - append:
          * - pop
          * - length (String / Vector)
          * - anything for FFI!
-         * - anything for delimited continuations
-         *
-         * also:
-         * - tail calls
-         * - source spans in bytecode
-         * - module imports/exports (actually start a standard library)
          *
          * also move / add some things to compile-time builtins:
          * - let:do:
@@ -982,8 +975,8 @@ namespace Katsu
          * - Fixnum? (etc. for other builtin types)
          *   (v Fixnum? === v instance-of?: Fixnum)
          * - print:
-         * - pr
          * - pretty-print:
+         * - >string
          */
     }
 };
