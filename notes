@@ -8,6 +8,7 @@ TODO:
 * save to image and load from image
 * allow mut:s at module level
 * handle more errors in C++ and raise as conditions
+* split multimethod declaration and method addition? or leave effectively global multimethods?
 
 more TODO:
 * literal data structure syntax?
