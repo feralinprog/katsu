@@ -614,15 +614,40 @@ namespace Katsu
 
     void register_builtins(VM& vm, Root<Assoc>& r_defaults, Root<Assoc>& r_extras)
     {
-        _register(vm, BuiltinId::_null, "null", r_defaults, Value::null());
-        _register(vm, BuiltinId::_true, "t", r_defaults, Value::_bool(true));
-        _register(vm, BuiltinId::_false, "f", r_defaults, Value::_bool(false));
-
-        auto register_base_type = [&vm, &r_defaults](BuiltinId id, const std::string& name) {
+        const auto register_base_type = [&vm, &r_defaults](BuiltinId id, const std::string& name) {
             Root<String> r_name(vm.gc, make_string(vm.gc, name));
             ValueRoot r_type(vm.gc, make_base_type(vm.gc, r_name));
             _register(vm, id, r_name, r_defaults, r_type);
         };
+
+        const std::function<Value()> matches_any = []() { return Value::null(); };
+        const auto matches_type = [&vm](BuiltinId id) -> std::function<Value()> {
+            return [&vm, id]() { return vm.builtin(id); };
+        };
+        const auto register_native = [&vm](const std::string& name,
+                                           Root<Assoc>& r_module,
+                                           const std::vector<std::function<Value()>>& matchers,
+                                           NativeHandler handler) -> void {
+            Root<Array> r_matchers(vm.gc, make_array(vm.gc, matchers.size()));
+            for (size_t i = 0; i < matchers.size(); i++) {
+                r_matchers->components()[i] = matchers[i]();
+            }
+            add_native(vm.gc, r_module, name, matchers.size(), r_matchers, handler);
+        };
+        const auto register_intrinsic = [&vm](const std::string& name,
+                                              Root<Assoc>& r_module,
+                                              const std::vector<std::function<Value()>>& matchers,
+                                              IntrinsicHandler handler) -> void {
+            Root<Array> r_matchers(vm.gc, make_array(vm.gc, matchers.size()));
+            for (size_t i = 0; i < matchers.size(); i++) {
+                r_matchers->components()[i] = matchers[i]();
+            }
+            add_intrinsic(vm.gc, r_module, name, matchers.size(), r_matchers, handler);
+        };
+
+        _register(vm, BuiltinId::_null, "null", r_defaults, Value::null());
+        _register(vm, BuiltinId::_true, "t", r_defaults, Value::_bool(true));
+        _register(vm, BuiltinId::_false, "f", r_defaults, Value::_bool(false));
 
         // TODO: Number?
         register_base_type(BuiltinId::_Fixnum, "Fixnum");
@@ -642,339 +667,155 @@ namespace Katsu
         register_base_type(BuiltinId::_Type, "Type");
         register_base_type(BuiltinId::_CallSegment, "CallSegment");
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_defaults, "~:", 2, matchers2, &native__tilde_);
-        }
+        // Use shorthand for builtin IDs just to reduce noise and make it easier to read.
+        register_native("~:",
+                        r_defaults,
+                        {matches_type(_String), matches_type(_String)},
+                        &native__tilde_);
+        register_native("+:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__add_);
+        register_native("-:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__sub_);
+        register_native("+", r_defaults, {matches_type(_Fixnum)}, &native__plus);
+        register_native("-", r_defaults, {matches_type(_Fixnum)}, &native__minus);
+        register_native("*:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__mult_);
+        register_native("/:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__div_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "+:", 2, matchers2, &native__add_);
-        }
+        // By default, = and id= are the same.
+        register_native("id=:", r_defaults, {matches_any, matches_any}, &native__id_eq_);
+        register_native("=:", r_defaults, {matches_any, matches_any}, &native__id_eq_);
+        // Likewise with != and id!= are the same.
+        register_native("id!=:", r_defaults, {matches_any, matches_any}, &native__id_ne_);
+        register_native("!=:", r_defaults, {matches_any, matches_any}, &native__id_ne_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "-:", 2, matchers2, &native__sub_);
-        }
+        register_native("=:",
+                        r_defaults,
+                        {matches_type(_String), matches_type(_String)},
+                        &native__str_eq_);
+        register_native("!=:",
+                        r_defaults,
+                        {matches_type(_String), matches_type(_String)},
+                        &native__str_ne_);
 
-        {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "+", 1, matchers1, &native__plus);
-        }
+        register_native(">:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__gt_);
+        register_native(">=:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__gte_);
+        register_native("<:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__lt_);
+        register_native("<=:",
+                        r_defaults,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__lte_);
 
-        {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "-", 1, matchers1, &native__minus);
-        }
+        register_native("and:",
+                        r_defaults,
+                        {matches_type(_Bool), matches_type(_Bool)},
+                        &native__and_);
+        register_native("or:",
+                        r_defaults,
+                        {matches_type(_Bool), matches_type(_Bool)},
+                        &native__or_);
+        register_native("not", r_defaults, {matches_type(_Bool)}, &native__not);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "*:", 2, matchers2, &native__mult_);
-        }
+        register_native("print:", r_extras, {matches_any, matches_type(_String)}, &native__print_);
+        register_native("pretty-print:",
+                        r_extras,
+                        {matches_any, matches_any},
+                        &native__pretty_print_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "/:", 2, matchers2, &native__div_);
-        }
+        register_intrinsic("then:else:",
+                           r_defaults,
+                           {matches_any, matches_any, matches_any},
+                           &intrinsic__then_else_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = Value::null(); // any
-            // By default, = and id= are the same.
-            add_native(vm.gc, r_defaults, "id=:", 2, matchers2, &native__id_eq_);
-            add_native(vm.gc, r_defaults, "=:", 2, matchers2, &native__id_eq_);
-        }
+        register_intrinsic("call", r_defaults, {matches_any}, &intrinsic__call);
+        register_intrinsic("call:", r_defaults, {matches_any, matches_any}, &intrinsic__call_);
+        register_intrinsic("call*:",
+                           r_defaults,
+                           {matches_any, matches_type(_Tuple)},
+                           &intrinsic__call_star_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = Value::null(); // any
-            add_native(vm.gc, r_defaults, "id!=:", 2, matchers2, &native__id_ne_);
-            add_native(vm.gc, r_defaults, "!=:", 2, matchers2, &native__id_ne_);
-        }
+        register_native("type", r_defaults, {matches_any}, &native__type);
+        register_native("subtype?:",
+                        r_defaults,
+                        {matches_type(_Type), matches_type(_Type)},
+                        &native__subtype_p_);
+        register_native("instance?:",
+                        r_defaults,
+                        {matches_any, matches_type(_Type)},
+                        &native__instance_p_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_defaults, "=:", 2, matchers2, &native__str_eq_);
-        }
+        register_native("make-method-with-return-type:code:attrs:",
+                        r_defaults, // needed for method definitions
+                        {matches_type(_Array),
+                         matches_any, // TODO: Type or Null
+                         matches_type(_Code),
+                         matches_type(_Vector)},
+                        &native__make_method_with_return_type_code_attrs_);
+        register_native("add-method-to:require-unique:",
+                        r_defaults, // needed for method definitions
+                        {matches_type(_Method), matches_type(_MultiMethod), matches_type(_Bool)},
+                        &native__add_method_to_require_unique_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_String);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_defaults, "!=:", 2, matchers2, &native__str_ne_);
-        }
+        register_native("TEST-ASSERT:",
+                        r_extras,
+                        {matches_any, matches_type(_Bool)},
+                        &native__TEST_ASSERT_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, ">:", 2, matchers2, &native__gt_);
-        }
+        register_native("unsafe-read-u64-at-offset:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum)},
+                        &native__unsafe_read_u64_at_offset_);
+        register_native("unsafe-write-u64-at-offset:value:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__unsafe_write_u64_at_offset_value_);
+        register_native("unsafe-read-u32-at-offset:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum)},
+                        &native__unsafe_read_u32_at_offset_);
+        register_native("unsafe-write-u32-at-offset:value:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__unsafe_write_u32_at_offset_value_);
+        register_native("unsafe-read-value-at-offset:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum)},
+                        &native__unsafe_read_value_at_offset_);
+        register_native("unsafe-write-value-at-offset:value:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum), matches_any},
+                        &native__unsafe_write_value_at_offset_value_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, ">=:", 2, matchers2, &native__gte_);
-        }
+        register_intrinsic("get-call-stack", r_extras, {matches_any}, &intrinsic__get_call_stack);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "<:", 2, matchers2, &native__lt_);
-        }
+        register_intrinsic("call/marked:",
+                           r_extras,
+                           {matches_any, matches_any},
+                           &intrinsic__call_marked_);
+        register_intrinsic("call/dc:", r_extras, {matches_any, matches_any}, &intrinsic__call_dc_);
 
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Fixnum);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc, r_defaults, "<=:", 2, matchers2, &native__lte_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Bool);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_defaults, "and:", 2, matchers2, &native__and_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Bool);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_defaults, "or:", 2, matchers2, &native__or_);
-        }
-
-        {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_defaults, "not", 1, matchers1, &native__not);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_native(vm.gc, r_extras, "print:", 2, matchers2, &native__print_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = Value::null(); // any
-            add_native(vm.gc, r_extras, "pretty-print:", 2, matchers2, &native__pretty_print_);
-        }
-
-        {
-            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
-            matchers3->components()[0] = Value::null(); // any
-            matchers3->components()[1] = Value::null(); // any
-            matchers3->components()[2] = Value::null(); // any
-            add_intrinsic(vm.gc, r_defaults, "then:else:", 3, matchers3, &intrinsic__then_else_);
-        }
-
-        {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = Value::null(); // any
-            add_intrinsic(vm.gc, r_defaults, "call", 1, matchers1, &intrinsic__call);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = Value::null(); // any
-            add_intrinsic(vm.gc, r_defaults, "call:", 2, matchers2, &intrinsic__call_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Tuple);
-            add_intrinsic(vm.gc, r_defaults, "call*:", 2, matchers2, &intrinsic__call_star_);
-        }
-
-        {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = Value::null(); // any
-            add_native(vm.gc, r_defaults, "type", 1, matchers1, &native__type);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = vm.builtin(BuiltinId::_Type);
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
-            add_native(vm.gc, r_defaults, "subtype?:", 2, matchers2, &native__subtype_p_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Type);
-            add_native(vm.gc, r_defaults, "instance?:", 2, matchers2, &native__instance_p_);
-        }
-
-        {
-            Root<Array> matchers4(vm.gc, make_array(vm.gc, 4));
-            matchers4->components()[0] = vm.builtin(BuiltinId::_Array);
-            matchers4->components()[1] = Value::null(); // TODO: Type or Null
-            matchers4->components()[2] = vm.builtin(BuiltinId::_Code);
-            matchers4->components()[3] = vm.builtin(BuiltinId::_Vector);
-            add_native(vm.gc,
-                       r_defaults, // needed for method definitions
-                       "make-method-with-return-type:code:attrs:",
-                       4,
-                       matchers4,
-                       &native__make_method_with_return_type_code_attrs_);
-        }
-
-        {
-            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
-            matchers3->components()[0] = vm.builtin(BuiltinId::_Method);
-            matchers3->components()[1] = vm.builtin(BuiltinId::_MultiMethod);
-            matchers3->components()[2] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc,
-                       r_defaults, // needed for method definitions
-                       "add-method-to:require-unique:",
-                       3,
-                       matchers3,
-                       &native__add_method_to_require_unique_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Bool);
-            add_native(vm.gc, r_extras, "TEST-ASSERT:", 2, matchers2, &native__TEST_ASSERT_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // 'any' matcher
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc,
-                       r_extras,
-                       "unsafe-read-u64-at-offset:",
-                       2,
-                       matchers2,
-                       &native__unsafe_read_u64_at_offset_);
-        }
-
-        {
-            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
-            matchers3->components()[0] = Value::null(); // 'any' matcher
-            matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            matchers3->components()[2] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc,
-                       r_extras,
-                       "unsafe-write-u64-at-offset:value:",
-                       3,
-                       matchers3,
-                       &native__unsafe_write_u64_at_offset_value_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // 'any' matcher
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc,
-                       r_extras,
-                       "unsafe-read-u32-at-offset:",
-                       2,
-                       matchers2,
-                       &native__unsafe_read_u32_at_offset_);
-        }
-
-        {
-            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
-            matchers3->components()[0] = Value::null(); // 'any' matcher
-            matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            matchers3->components()[2] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc,
-                       r_extras,
-                       "unsafe-write-u32-at-offset:value:",
-                       3,
-                       matchers3,
-                       &native__unsafe_write_u32_at_offset_value_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // 'any' matcher
-            matchers2->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            add_native(vm.gc,
-                       r_extras,
-                       "unsafe-read-value-at-offset:",
-                       2,
-                       matchers2,
-                       &native__unsafe_read_value_at_offset_);
-        }
-
-        {
-            Root<Array> matchers3(vm.gc, make_array(vm.gc, 3));
-            matchers3->components()[0] = Value::null(); // 'any' matcher
-            matchers3->components()[1] = vm.builtin(BuiltinId::_Fixnum);
-            matchers3->components()[2] = Value::null(); // 'any' matcher
-            add_native(vm.gc,
-                       r_extras,
-                       "unsafe-write-value-at-offset:value:",
-                       3,
-                       matchers3,
-                       &native__unsafe_write_value_at_offset_value_);
-        }
-
-        {
-            Root<Array> matchers1(vm.gc, make_array(vm.gc, 1));
-            matchers1->components()[0] = Value::null(); // any
-            add_intrinsic(vm.gc,
-                          r_extras,
-                          "get-call-stack",
-                          1,
-                          matchers1,
-                          &intrinsic__get_call_stack);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = Value::null(); // any
-            add_intrinsic(vm.gc, r_extras, "call/marked:", 2, matchers2, &intrinsic__call_marked_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = Value::null(); // any
-            add_intrinsic(vm.gc, r_extras, "call/dc:", 2, matchers2, &intrinsic__call_dc_);
-        }
-
-        {
-            Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));
-            matchers2->components()[0] = Value::null(); // any
-            matchers2->components()[1] = vm.builtin(BuiltinId::_String);
-            add_intrinsic(vm.gc,
-                          r_defaults,
-                          "use-existing-module:",
-                          2,
-                          matchers2,
-                          &intrinsic__use_existing_module_);
-        }
+        register_intrinsic("use-existing-module:",
+                           r_defaults,
+                           {matches_any, matches_type(_String)},
+                           &intrinsic__use_existing_module_);
 
         /*
          * TODO:
