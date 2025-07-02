@@ -215,7 +215,9 @@ namespace Katsu
                 // and loading vector.
                 if (var_depth > 0) {
                     // TODO: handle upvar depth more than 1.
-                    ASSERT(var_depth == 1);
+                    if (var_depth > 1) {
+                        throw compile_error("can't handle upvar depth more than 1", _expr.span);
+                    }
 
                     // Add it for tracking!
 
@@ -345,22 +347,20 @@ namespace Katsu
             // * `<name>:` where <name> is a local mutable variable (in which case expr.target
             //   must be nullopt),
             // * or else in the module under construction.
-            if (expr->messages.size() == 1) {
+            if (expr->messages.size() == 1 && !expr->target) {
                 // Check for local mutable variables.
                 const std::string& name = std::get<std::string>(expr->messages[0].value);
                 size_t var_depth;
                 const Binding* maybe_local = builder.lookup(name, &var_depth);
                 if (maybe_local) {
                     // TODO: implement upvar assignment before access
-                    ASSERT_MSG(var_depth == 0,
-                               "assignment of upvar (before _reading_ upvar) not implemented yet");
+                    if (var_depth > 0) {
+                        throw compile_error(
+                            "assignment of upvar (before _reading_ upvar) not implemented yet",
+                            _expr.span);
+                    }
                     const Binding& local = *maybe_local;
                     if (local._mutable) {
-                        // Ensure there's no target provided.
-                        if (expr->target) {
-                            throw compile_error("setting mutable variable requires no target",
-                                                expr->span);
-                        }
                         compile_expr(gc,
                                      builder,
                                      *expr->args[0],
