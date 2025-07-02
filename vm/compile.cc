@@ -1439,14 +1439,4 @@ namespace Katsu
 
         return builder.finalize(gc, span);
     }
-
-    Code* compile_module(GC& gc, SourceSpan& span,
-                         std::vector<std::unique_ptr<Expr>>& module_top_level_exprs,
-                         Assoc*& out_module)
-    {
-        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
-        Code* code = compile_into_module(gc, r_module, span, module_top_level_exprs);
-        out_module = *r_module;
-        return code;
-    }
 };
