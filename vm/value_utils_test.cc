@@ -58,7 +58,8 @@ TEST_CASE("assoc append", "[value-utils]")
     Root<Assoc> r_assoc(gc, make_assoc(gc, /* capacity */ 0));
     CHECK(assoc_lookup(*r_assoc, *r_key) == nullptr);
 
-    append(gc, r_assoc, r_key, r_value);
+    ValueRoot rv_key(gc, r_key.value());
+    append(gc, r_assoc, rv_key, r_value);
     Value* lookup = assoc_lookup(*r_assoc, *r_key);
     REQUIRE(lookup != nullptr);
     CHECK(*lookup == *r_value);

@@ -282,7 +282,7 @@ namespace Katsu
         return vector;
     }
 
-    Assoc* append(GC& gc, Root<Assoc>& r_assoc, Root<String>& r_name, ValueRoot& r_value)
+    Assoc* append(GC& gc, Root<Assoc>& r_assoc, ValueRoot& r_key, ValueRoot& r_value)
     {
         Assoc* assoc = *r_assoc;
 
@@ -311,7 +311,7 @@ namespace Katsu
         }
 
         Assoc::Entry& entry = assoc->entries()[assoc->length++];
-        entry.v_key = r_name.value();
+        entry.v_key = *r_key;
         entry.v_value = *r_value;
         return assoc;
     }
@@ -971,12 +971,12 @@ namespace Katsu
         Root<Assoc> r_src(gc, v_src_module.obj_assoc());
         for (uint64_t i = 0; i < r_src->length; i++) {
             Assoc::Entry* entry = &r_src->entries()[i];
-            // TODO: check for conflicts with existing names.
-            // TODO: don't require string names, also.
-            Root<String> r_name(gc, entry->v_key.obj_string());
+            // TODO: check for conflicts with existing keys.
+            Value v_key = entry->v_key;
+            ValueRoot r_key(gc, std::move(v_key));
             Value v_value = entry->v_value;
             ValueRoot r_value(gc, std::move(v_value));
-            append(gc, r_module, r_name, r_value);
+            append(gc, r_module, r_key, r_value);
         }
     }
 

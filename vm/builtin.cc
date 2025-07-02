@@ -32,7 +32,8 @@ namespace Katsu
             Root<Vector> r_attributes(gc, make_vector(gc, 0));
             multi = make_multimethod(gc, r_name, num_params, r_methods, r_attributes);
             ValueRoot r_multimethod(gc, Value::object(multi));
-            append(gc, r_module, r_name, r_multimethod);
+            ValueRoot r_key(gc, r_name.value());
+            append(gc, r_module, r_key, r_multimethod);
             multi = r_multimethod->obj_multimethod();
         }
 
@@ -602,7 +603,8 @@ namespace Katsu
                    ValueRoot& r_value)
     {
         vm.register_builtin(id, *r_value);
-        append(vm.gc, r_module, r_name, r_value);
+        ValueRoot r_key(vm.gc, r_name.value());
+        append(vm.gc, r_module, r_key, r_value);
     }
     void _register(VM& vm, BuiltinId id, const std::string& name, Root<Assoc>& r_module,
                    Value value)

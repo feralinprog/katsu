@@ -760,7 +760,8 @@ namespace Katsu
                                                r_methods,
                                                r_attributes);
                 ValueRoot r_multimethod(gc, Value::object(multimethod));
-                append(gc, module_builder.r_module, r_method_name, r_multimethod);
+                ValueRoot r_key(gc, r_method_name.value());
+                append(gc, module_builder.r_module, r_key, r_multimethod);
                 multimethod = r_multimethod->obj_multimethod();
             }
         }
@@ -1023,7 +1024,8 @@ namespace Katsu
                                     r_slots,
                                     /* num_total_slots */ r_all_slots->length));
         ValueRoot rv_type(gc, r_type.value());
-        append(gc, r_module, r_class_name, rv_type);
+        ValueRoot r_key(gc, r_class_name.value());
+        append(gc, r_module, r_key, rv_type);
 
         const auto lookup_or_create = [&gc, &r_module](Root<String>& r_name,
                                                        uint32_t num_params,
@@ -1045,7 +1047,8 @@ namespace Katsu
                     gc,
                     Value::object(
                         make_multimethod(gc, r_name, num_params, r_methods, r_attributes)));
-                append(gc, r_module, r_name, r_multimethod);
+                ValueRoot r_key(gc, r_name.value());
+                append(gc, r_module, r_key, r_multimethod);
                 return r_multimethod->obj_multimethod();
             }
         };
@@ -1374,7 +1377,8 @@ namespace Katsu
                                 // TODO: this is weird. what value do we put in the module initially
                                 // (during compile time)?
                                 ValueRoot r_init(gc, Value::null());
-                                append(gc, r_module, r_name, r_init);
+                                ValueRoot r_key(gc, r_name.value());
+                                append(gc, r_module, r_key, r_init);
                                 // STORE_MODULE: <name>
                                 builder.emit_op(gc,
                                                 OpCode::STORE_MODULE,

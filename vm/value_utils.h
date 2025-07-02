@@ -68,7 +68,7 @@ namespace Katsu
     // Append a key/value pair to an assoc, reallocating if necessary to expand the assoc.
     // For convenience, this returns a pointer to the resulting Assoc (which may have been moved
     // due to reallocation).
-    Assoc* append(GC& gc, Root<Assoc>& r_assoc, Root<String>& r_name, ValueRoot& r_value);
+    Assoc* append(GC& gc, Root<Assoc>& r_assoc, ValueRoot& r_key, ValueRoot& r_value);
 
     Array* vector_to_array(GC& gc, Root<Vector>& r_vector);
 

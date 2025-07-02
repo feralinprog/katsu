@@ -157,12 +157,12 @@ namespace Katsu
 
             Root<Assoc> r_modules(vm.gc, vm.modules());
             {
-                Root<String> r_name(vm.gc, make_string(vm.gc, "core.builtin.default"));
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.default")));
                 ValueRoot rv_core_builtin(gc, r_core_builtin_default.value());
                 append(vm.gc, r_modules, r_name, rv_core_builtin);
             }
             {
-                Root<String> r_name(vm.gc, make_string(vm.gc, "core.builtin.extra"));
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.extra")));
                 ValueRoot rv_core_builtin(gc, r_core_builtin_extra.value());
                 append(vm.gc, r_modules, r_name, rv_core_builtin);
             }
@@ -173,7 +173,7 @@ namespace Katsu
         Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
         {
             Root<Assoc> r_modules(vm.gc, vm.modules());
-            Root<String> r_name(vm.gc, make_string(vm.gc, module_name));
+            ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, module_name)));
             ValueRoot rv_module(gc, r_module.value());
             append(vm.gc, r_modules, r_name, rv_module);
             vm.set_modules(*r_modules);
