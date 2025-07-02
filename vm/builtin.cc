@@ -1,13 +1,17 @@
 #include "builtin.h"
 
 #include "assert.h"
+#include "compile.h"
 #include "condition.h"
+#include "parser.h"
 #include "value_utils.h"
 #include "vm.h"
 
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
 
 namespace Katsu
 {
@@ -337,6 +341,48 @@ namespace Katsu
             Frame* new_top = prev;
             vm.set_frame(new_top);
             new_top->push(args[0]);
+        } else if (v_callable.is_obj_code()) {
+            Code* code = v_callable.obj_code();
+            if (!code->v_upreg_map.is_null()) {
+                throw condition_error(
+                    "raw-closure-call",
+                    "cannot call a raw Code object which requires upregs (a closure)");
+            }
+
+            if (code->num_params != nargs) {
+                throw condition_error("argument-count-mismatch",
+                                      "called a raw Code object with wrong number of arguments");
+            }
+
+            Frame* next = vm.alloc_frame(code->num_regs,
+                                         code->num_data,
+                                         Value::object(code),
+                                         code->v_module,
+                                         v_marker);
+
+            // In the closure's frame:
+            // - local 0...n are the call arguments (which may just be <null>, in the special case
+            // of 0 args and 1 param)
+            // - there are no upregs to deal with!
+            // - all other regs null-initialized
+            ASSERT(next->num_regs > 0);
+            // Copy arguments:
+            if (nargs == 0) {
+                next->regs()[0] = Value::null();
+            }
+            for (uint32_t i = 0; i < nargs; i++) {
+                next->regs()[i] = args[i];
+            }
+            // Null-initialize the rest:
+            for (uint32_t i = nargs; i < next->num_regs; i++) {
+                next->regs()[i] = Value::null();
+            }
+
+            if (!tail_call) {
+                Frame* frame = vm.frame();
+                frame->inst_spot++;
+            }
+            vm.set_frame(next);
         } else {
             // Just push the callable; it returns itself.
             // TODO: what if multimethod or method? should actually be callable
@@ -586,6 +632,160 @@ namespace Katsu
         vm.frame()->inst_spot++;
     }
 
+    void intrinsic__loaded_modules(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ loaded-modules
+        ASSERT(nargs == 1);
+        vm.frame()->push(Value::object(vm.vm.modules()));
+        vm.frame()->inst_spot++;
+    }
+
+    Value native__read_file_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ read-file: path
+        ASSERT(nargs == 2);
+        std::string filepath = native_str(args[1].obj_string());
+
+        std::ifstream file_stream;
+        // Raise exceptions on logical error or read/write error.
+        file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        file_stream.open(filepath.c_str());
+
+        std::stringstream str_stream;
+        str_stream << file_stream.rdbuf();
+        std::string file_contents = str_stream.str();
+
+        return Value::object(make_string(vm.gc, file_contents));
+    }
+
+    Value native__make_empty_assoc(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ make-empty-assoc
+        ASSERT(nargs == 1);
+        return Value::object(make_assoc(vm.gc, 0));
+    }
+
+    Value native__append_(VM& vm, int64_t nargs, Value* args)
+    {
+        // vector append: value
+        ASSERT(nargs == 2);
+        Root<Vector> r_vector(vm.gc, args[0].obj_vector());
+        Value v_value = args[1];
+        ValueRoot r_value(vm.gc, std::move(v_value));
+        return Value::object(append(vm.gc, r_vector, r_value));
+    }
+
+    Value native__add_value_(VM& vm, int64_t nargs, Value* args)
+    {
+        // assoc add: key value: value
+        ASSERT(nargs == 3);
+        Root<Assoc> r_assoc(vm.gc, args[0].obj_assoc());
+        Value v_key = args[1];
+        ValueRoot r_key(vm.gc, std::move(v_key));
+        Value value = args[2];
+        ValueRoot r_value(vm.gc, std::move(value));
+        return Value::object(append(vm.gc, r_assoc, r_key, r_value));
+    }
+
+    struct RunContext
+    {
+        Lexer lexer;
+        TokenStream stream;
+        std::unique_ptr<PrattParser> parser;
+
+        RunContext(const SourceFile& source)
+            : lexer(source)
+            , stream(lexer)
+            , parser(make_default_parser())
+        {}
+
+        Value to_value(GC& gc)
+        {
+            // TODO: make this less hacky
+            RunContext* c = this;
+            std::string pc(reinterpret_cast<char*>(&c), sizeof(c));
+            return Value::object(make_string(gc, pc));
+        }
+        static RunContext* from_value(Value v)
+        {
+            // TODO: make this less hacky
+            ASSERT(v.is_obj_string());
+            String* s = v.obj_string();
+            ASSERT(s->length == sizeof(RunContext*));
+            RunContext** pc = reinterpret_cast<RunContext**>(s->contents());
+            return *pc;
+        }
+    };
+    Value native__make_run_context_for_path_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ make-run-context-for-path: path contents: contents
+        ASSERT(nargs == 3);
+        Root<String> r_path(vm.gc, args[1].obj_string());
+        Root<String> r_contents(vm.gc, args[2].obj_string());
+
+        SourceFile source = {
+            .path = std::make_shared<std::string>(native_str(args[1].obj_string())),
+            .source = std::make_shared<std::string>(native_str(args[2].obj_string()))};
+        RunContext* context = new RunContext(source);
+
+        // Skip any leading semicolons / newlines to get to the meat.
+        while (context->stream.current_has_type(TokenType::SEMICOLON) ||
+               context->stream.current_has_type(TokenType::NEWLINE)) {
+            context->stream.consume();
+        }
+
+        return context->to_value(vm.gc);
+    }
+    Value native__use_default_modules(VM& vm, int64_t nargs, Value* args)
+    {
+        Root<Assoc> r_module(vm.gc, args[0].obj_assoc());
+
+        // Always use core.builtin.default.
+        {
+            Root<Assoc> r_modules(vm.gc, vm.modules());
+            use_existing_module(vm.gc, r_modules, r_module, "core.builtin.default");
+        }
+
+        return Value::null();
+    }
+    Value native__parse_and_compile_in_module_(VM& vm, int64_t nargs, Value* args)
+    {
+        // run-context parse-and-compile-in-module: module
+        ASSERT(nargs == 2);
+
+        RunContext* context = RunContext::from_value(args[0]);
+        Root<Assoc> r_module(vm.gc, args[1].obj_assoc());
+
+        if (context->stream.current_has_type(TokenType::END)) {
+            return Value::null();
+        }
+
+        std::unique_ptr<Expr> top_level_expr =
+            context->parser->parse(context->stream, 0 /* precedence */, true /* is_toplevel */);
+
+        std::vector<std::unique_ptr<Expr>> top_level_exprs;
+        top_level_exprs.emplace_back(std::move(top_level_expr));
+        Code* code =
+            compile_into_module(vm.gc, r_module, top_level_exprs[0]->span, top_level_exprs);
+
+        // Ratchet past any semicolons and newlines, since the parser explicitly stops
+        // when it sees either of these at the top level.
+        while (context->stream.current_has_type(TokenType::SEMICOLON) ||
+               context->stream.current_has_type(TokenType::NEWLINE)) {
+            context->stream.consume();
+        }
+
+        return Value::object(code);
+    }
+    Value native__free(VM& vm, int64_t nargs, Value* args)
+    {
+        // run-context free
+        ASSERT(nargs == 1);
+        RunContext* context = RunContext::from_value(args[0]);
+        delete context;
+        return Value::null();
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -818,6 +1018,40 @@ namespace Katsu
                            r_defaults,
                            {matches_any, matches_type(_String)},
                            &intrinsic__use_existing_module_);
+
+        register_intrinsic("loaded-modules", r_extras, {matches_any}, &intrinsic__loaded_modules);
+
+        register_native("read-file:",
+                        r_extras,
+                        {matches_any, matches_type(_String)},
+                        &native__read_file_);
+
+        register_native("make-empty-assoc", r_extras, {matches_any}, &native__make_empty_assoc);
+
+        register_native("append:",
+                        r_extras,
+                        {matches_type(_Vector), matches_any},
+                        &native__append_);
+        register_native("add:value:",
+                        r_extras,
+                        {matches_type(_Assoc), matches_any, matches_any},
+                        &native__add_value_);
+
+
+        // TODO: this is super hacky. figure out a different way to do this.
+        register_native("make-run-context-for-path:contents:",
+                        r_extras,
+                        {matches_any, matches_type(_String), matches_type(_String)},
+                        &native__make_run_context_for_path_);
+        register_native("use-default-modules",
+                        r_extras,
+                        {matches_type(_Assoc)},
+                        &native__use_default_modules);
+        register_native("parse-and-compile-in-module:",
+                        r_extras,
+                        {matches_any, matches_type(_Assoc)},
+                        &native__parse_and_compile_in_module_);
+        register_native("free", r_extras, {matches_any}, &native__free);
 
         /*
          * TODO:

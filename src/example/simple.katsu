@@ -395,12 +395,21 @@ let: (segment: CallSegment) print-trace-except-top do: [
     ]
 ]
 
-let: (condition handle-raw-condition-with-message: message) do: [
-    print: "Error: " ~ condition ~ ": " ~ message
+data: Condition has: { condition; message }
+data: NotImplemented extends: { Condition } has: {}
+data: AssertionFailed extends: { Condition } has: {}
+# TODO: subtypes instead of condition field
+
+let: (signal: (c: Condition)) do: [
+    # TODO: implement handlers / restarts
+    print: "Error: " ~ c .condition ~ ": " ~ c .message
     let: stack = get-call-stack
     # Skip the top frame; it's pointing to within this method (to the get-call-stack invocation).
     stack print-trace-except-top
-    # 1 / 0
+]
+
+let: (condition handle-raw-condition-with-message: message) do: [
+    signal: (Condition condition: condition message: message)
 ]
 
 let: n do-test do: [
@@ -466,3 +475,160 @@ let: divide-by-zero do: [
     1 / 0
 ]
 divide-by-zero
+
+let: (assert: (b: Bool)) do: [
+    if: not b then: [
+        signal: (AssertionFailed condition: "assertion-failure" message: "an assertion failed")
+    ]
+]
+
+let: (ensure: p? by: a) do: [
+    if: not (p? call) then: [
+        a call
+        assert: (p? call)
+    ]
+]
+
+let: ((v: Vector) contains?: x) do: [
+    v each: [ (it = x) then: [ StopIteration value: t ] else: f ]
+]
+
+pretty-print: ({ 1; 2; 3 } contains?: 1)
+pretty-print: ({ 1; 2; 3 } contains?: 2)
+pretty-print: ({ 1; 2; 3 } contains?: 3)
+pretty-print: ({ 1; 2; 3 } contains?: 4)
+
+let: (it do: f) do: [f call: it]
+
+let: (find-module-file-path: (module-name: String)) do: [
+    # TODO: do something more reasonable than this
+    "src/" ~ module-name
+]
+
+let: ((a: Assoc) length) do: [
+    a unsafe-read-u64-at-offset: 1
+]
+let: ((a: Assoc) backing-array) do: [
+    a unsafe-read-value-at-offset: 2
+]
+
+do: [
+    let: a = make-empty-assoc
+    pretty-print: a
+    pretty-print: a length
+    pretty-print: a backing-array
+    a add: "key" value: "value"
+    pretty-print: a
+]
+
+let: ((v: Vector) push: x) do: [ v append: x ]
+let: (v: Vector) pop do: [
+    assert: v length > 0
+    let: new-length = v length - 1
+    let: end = (v unsafe-at: new-length)
+    v unsafe-write-u64-at-offset: 1 value: new-length
+    end
+]
+
+do: [
+    let: v = { 1; 2; 3 }
+    pretty-print: v
+    v append: 4
+    pretty-print: v
+    pretty-print: v pop
+    pretty-print: v
+    v append: 4
+    pretty-print: v
+    pretty-print: v pop
+    pretty-print: v
+]
+
+let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
+    a unsafe-read-value-at-offset: 2 + i
+]
+do: [
+    let: v = { 1; 2; 3 }
+    let: a = v backing-array
+    pretty-print: v
+    pretty-print: a
+    pretty-print: (a unsafe-at: 0)
+    pretty-print: (a unsafe-at: 1)
+    pretty-print: (a unsafe-at: 2)
+]
+let: ((a: Assoc) each-key: f) do: [
+    mut: i = 0
+    mut: last = null
+    while: [i < a length and not (last instance?: StopIteration)] do: [
+        last
+        last: (f call: (a backing-array unsafe-at: i * 2))
+        i: i + 1
+    ]
+    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+]
+let: ((a: Assoc) contains?: k) do: [
+    a each-key: [ (it = k) then: [ StopIteration value: t ] else: f ]
+]
+
+do: [
+    let: a = make-empty-assoc
+    a add: "key1" value: "value1"
+    a add: "key2" value: "value2"
+    a each-key: [print: it]
+]
+
+let: not-implemented do: [
+    signal: (NotImplemented condition: "not-implemented" message: "not implemented")
+]
+
+let: ((module: Assoc) run-file: (path: String) contents: (contents: String)) do: [
+    let: run-context = (make-run-context-for-path: path contents: contents)
+    [
+        run-context; module;
+        mut: code = null
+        while: [code; code: (run-context parse-and-compile-in-module: module); code != null] do: [
+            code call
+        ]
+    ] cleanup: [ run-context free ]
+]
+
+let: use-stack = {}
+data: RecursiveUse has: { module-name }
+let: (use: (module-name: String)) do: [
+    # 1. find the right file path
+    # 2. read the file contents
+    # 3. create an empty module
+    # 4. somehow use a cursor in order to:
+    #     * ask C++ to parse and convert to Code (eventually should be in-language instead!)
+    #     * then call the Code from here to add to that new module
+    #     * and move to next spot in source
+    # 5. add the new module to VM modules assoc
+    # 6. use-existing-module
+    #
+    # maybe also add a stack of in-progress use: invocations to detect recursive imports
+
+    (use-stack contains?: module-name) then: [
+        signal: (RecursiveUse module-name: module-name)
+    ] else: [
+        module-name;
+        ensure: [loaded-modules contains?: module-name] by: [
+            let: path = (find-module-file-path: module-name)
+            let: contents = (read-file: path)
+            let: new-module = make-empty-assoc
+            new-module use-default-modules
+            loaded-modules add: module-name value: new-module
+            [
+                use-stack push: module-name
+                new-module run-file: path contents: contents
+            ] cleanup: [ use-stack pop ]
+        ]
+        use-existing-module: module-name
+    ]
+]
+
+print: "just before using core.katsu"
+use: "core/core.katsu"
+print: "just after using core.katsu"
+
+print: "just before using core.katsu x2"
+use: "core/core.katsu"
+print: "just after using core.katsu x2"
