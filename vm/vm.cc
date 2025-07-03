@@ -33,6 +33,8 @@ namespace Katsu
         // Don't use GC yet.
         this->v_modules = Value::null();
 
+        this->v_condition_handler = Value::null();
+
         this->gc.root_providers.push_back(this);
 
         // Now we can use the GC.
@@ -56,6 +58,7 @@ namespace Katsu
         }
 
         visitor(&this->v_modules);
+        visitor(&this->v_condition_handler);
 
         Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);
         while (frame <= this->current_frame) {
@@ -221,15 +224,12 @@ namespace Katsu
                 break;
             }
             case OpCode::LOAD_MODULE: {
-                this->current_frame->push(
-                    module_lookup_or_fail(this->current_frame->v_module, arg().obj_string()));
+                this->current_frame->push(arg().obj_ref()->v_ref);
                 shift_inst();
                 break;
             }
             case OpCode::STORE_MODULE: {
-                Value& slot =
-                    module_lookup_or_fail(this->current_frame->v_module, arg().obj_string());
-                slot = this->current_frame->pop();
+                arg().obj_ref()->v_ref = this->current_frame->pop();
                 shift_inst();
                 break;
             }
@@ -247,10 +247,7 @@ namespace Katsu
                     this->invoke(v_method, tail_call, num_args, args);
                 } catch (const condition_error& e) {
                     // Don't need args any more; we can do GC operations.
-                    String* handler_name =
-                        make_string(this->gc, "handle-raw-condition-with-message:");
-                    Value v_method =
-                        module_lookup_or_fail(this->current_frame->v_module, handler_name);
+                    Value v_method = this->v_condition_handler;
                     ValueRoot r_method(this->gc, std::move(v_method));
                     Root<String> r_condition_name(this->gc, make_string(this->gc, e.condition));
                     Root<String> r_message(this->gc, make_string(this->gc, e.what()));

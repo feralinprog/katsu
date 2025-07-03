@@ -141,49 +141,39 @@ namespace Katsu
         }
     };
 
-    Value execute_source(const SourceFile source, const std::string& module_name, GC& gc,
-                         uint64_t call_stack_size)
+    SourceFile load_file(const std::string& filepath)
+    {
+        std::ifstream file_stream;
+        // Raise exceptions on logical error or read/write error.
+        file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        file_stream.open(filepath.c_str());
+
+        std::stringstream str_stream;
+        str_stream << file_stream.rdbuf();
+        std::string file_contents = str_stream.str();
+
+        return SourceFile{.path = std::make_shared<std::string>(filepath),
+                          .source = std::make_shared<std::string>(std::move(file_contents))};
+    }
+
+    Value run_source(const SourceFile source, const std::string& module_name, VM& vm)
     {
         Lexer lexer(source);
         TokenStream stream(lexer);
         std::unique_ptr<PrattParser> parser = make_default_parser();
-        VM vm(gc, call_stack_size);
-
-        // Establish builtins in the core.builtin module.
-        {
-            Root<Assoc> r_core_builtin_default(gc, make_assoc(gc, /* capacity */ 0));
-            Root<Assoc> r_core_builtin_extra(gc, make_assoc(gc, /* capacity */ 0));
-            register_builtins(vm, r_core_builtin_default, r_core_builtin_extra);
-
-            Root<Assoc> r_modules(vm.gc, vm.modules());
-            {
-                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.default")));
-                ValueRoot rv_core_builtin(gc, r_core_builtin_default.value());
-                append(vm.gc, r_modules, r_name, rv_core_builtin);
-            }
-            {
-                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.extra")));
-                ValueRoot rv_core_builtin(gc, r_core_builtin_extra.value());
-                append(vm.gc, r_modules, r_name, rv_core_builtin);
-            }
-            vm.set_modules(*r_modules);
-        }
 
         // Create a separate module for the source we're executing.
-        Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
+        Root<Assoc> r_module(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
         {
             Root<Assoc> r_modules(vm.gc, vm.modules());
             ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, module_name)));
-            ValueRoot rv_module(gc, r_module.value());
+            ValueRoot rv_module(vm.gc, r_module.value());
             append(vm.gc, r_modules, r_name, rv_module);
             vm.set_modules(*r_modules);
         }
 
-        // Always use core.builtin.default.
-        {
-            Root<Assoc> r_modules(vm.gc, vm.modules());
-            use_existing_module(vm.gc, r_modules, r_module, "core.builtin.default");
-        }
+        Root<Vector> r_imports(vm.gc, make_vector(vm.gc, /* capacity */ 0));
+        use_default_imports(vm, r_imports);
 
         // std::cout << "=== INITIAL MODULE STATE ===\n";
         // pprint(r_module.value());
@@ -208,9 +198,12 @@ namespace Katsu
             std::vector<std::unique_ptr<Expr>> top_level_exprs;
             top_level_exprs.emplace_back(std::move(top_level_expr));
             // std::cout << "=== COMPILING INTO MODULE ===\n";
-            Root<Code> code(
-                gc,
-                compile_into_module(gc, r_module, top_level_exprs[0]->span, top_level_exprs));
+            Root<Code> code(vm.gc,
+                            compile_into_module(vm,
+                                                r_module,
+                                                r_imports,
+                                                top_level_exprs[0]->span,
+                                                top_level_exprs));
             // std::cout << "=== GENERATED CODE ===\n";
             // pprint(code.value());
             // std::cout << "=== EVALUATING ===\n";
@@ -231,23 +224,45 @@ namespace Katsu
         return result;
     }
 
-    void execute_file(const std::string& filepath, const std::string& module_name)
+    Value bootstrap_and_run_source(const SourceFile source, const std::string& module_name, GC& gc,
+                                   uint64_t call_stack_size)
     {
-        std::ifstream file_stream;
-        // Raise exceptions on logical error or read/write error.
-        file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        file_stream.open(filepath.c_str());
+        VM vm(gc, call_stack_size);
 
-        std::stringstream str_stream;
-        str_stream << file_stream.rdbuf();
-        std::string file_contents = str_stream.str();
+        // Establish builtins in the core.builtin module.
+        {
+            Root<Assoc> r_core_builtin_default(gc, make_assoc(gc, /* capacity */ 0));
+            Root<Assoc> r_core_builtin_extra(gc, make_assoc(gc, /* capacity */ 0));
+            register_builtins(vm, r_core_builtin_default, r_core_builtin_extra);
 
-        SourceFile source{.path = std::make_shared<std::string>(filepath),
-                          .source = std::make_shared<std::string>(std::move(file_contents))};
+            Root<Assoc> r_modules(vm.gc, vm.modules());
+            {
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.default")));
+                ValueRoot rv_core_builtin(gc, r_core_builtin_default.value());
+                append(vm.gc, r_modules, r_name, rv_core_builtin);
+            }
+            {
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.extra")));
+                ValueRoot rv_core_builtin(gc, r_core_builtin_extra.value());
+                append(vm.gc, r_modules, r_name, rv_core_builtin);
+            }
+            vm.set_modules(*r_modules);
+        }
+
+        // Run some bootstrap files:
+        run_source(load_file("src/core/core.katsu"), "core", vm);
+
+        // Run the requested "user" source:
+        return run_source(source, module_name, vm);
+    }
+
+    void bootstrap_and_run_file(const std::string& filepath, const std::string& module_name)
+    {
+        SourceFile source = load_file(filepath);
 
         // 100 MiB GC-managed memory.
         GC gc(100 * 1024 * 1024);
         // 100 KiB call stack size.
-        execute_source(source, module_name, gc, 100 * 1024);
+        bootstrap_and_run_source(source, module_name, gc, 100 * 1024);
     }
 };

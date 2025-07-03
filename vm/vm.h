@@ -261,6 +261,9 @@ namespace Katsu
         // GC for values tracked by this VM.
         GC& gc;
 
+        // Value to call in order to signal a condition in-langauge from e.g. a C++ condition_error.
+        Value v_condition_handler;
+
     private:
         friend class OpenVM;
 

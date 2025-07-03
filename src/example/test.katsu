@@ -1,0 +1,2 @@
+IMPORT-EXISTING-MODULE: "core.builtin.extra"
+print: "using a core.builtin.extra method!"

@@ -27,6 +27,7 @@ namespace Katsu
         // This way we can append/grow, then copy into Arrays to finalize the Code.
 
         Root<Assoc>& r_module;
+        Root<Vector>& r_imports;
         // Number of parameters.
         uint32_t num_params;
         // Number of locals.
@@ -170,18 +171,73 @@ namespace Katsu
         }
     };
 
+    enum LookupResult
+    {
+        SUCCESS,
+        NOT_FOUND,
+        AMBIGUOUS,
+    };
+    // The out-var `result` is only populated on SUCCESS, and can be nullptr if the actual looked-up
+    // Value is not needed.
+    LookupResult lookup_name(Assoc* module, Vector* imports, String* name, Value* result = nullptr)
+    {
+        Value* lookup = assoc_lookup(module, name);
+        for (Value import : imports) {
+            // Silently ignore non-Assoc imports.
+            if (!import.is_obj_assoc()) {
+                continue;
+            }
+            Assoc* import_module = import.obj_assoc();
+            Value* import_lookup = assoc_lookup(import_module, name);
+            if (!import_lookup) {
+                continue;
+            }
+
+            if (lookup) {
+                return AMBIGUOUS;
+            } else {
+                lookup = import_lookup;
+            }
+        }
+        if (lookup) {
+            if (result) {
+                *result = *lookup;
+            }
+            return SUCCESS;
+        } else {
+            return NOT_FOUND;
+        }
+    }
+    LookupResult lookup_name(CodeBuilder& builder, String* name, Value* result = nullptr)
+    {
+        return lookup_name(*builder.r_module, *builder.r_imports, name, result);
+    }
+    // Variants which just throw an appropriate compile_error and return the result value.
+    Value lookup_name(Assoc* module, Vector* imports, String* name, const SourceSpan& span)
+    {
+        Value lookup;
+        LookupResult result = lookup_name(module, imports, name, &lookup);
+        switch (result) {
+            case SUCCESS: return lookup;
+            case NOT_FOUND:
+                throw compile_error("name not found in module or its current imports", span);
+            case AMBIGUOUS:
+                throw compile_error("ambiguous lookup for name in module and its current imports",
+                                    span);
+        }
+    }
+    Value lookup_name(CodeBuilder& builder, String* name, const SourceSpan& span)
+    {
+        return lookup_name(*builder.r_module, *builder.r_imports, name, span);
+    }
+
     void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr, bool tail_position, bool tail_call)
     {
         OpCode invoke_op = tail_call ? OpCode::INVOKE_TAIL : OpCode::INVOKE;
         if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
-            Value* existing = assoc_lookup(*builder.r_module, *r_name);
-            if (!existing) {
-                throw compile_error("name is not defined in module", expr->op.span);
-            }
-            Value v_existing = *existing;
-            ValueRoot r_existing(gc, std::move(v_existing));
+            ValueRoot r_existing(gc, lookup_name(builder, *r_name, expr->op.span));
             compile_expr(gc, builder, *expr->arg, /* tail_position */ false, /* tail_call */ false);
             // INVOKE: <multimethod>, <num args>
             builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
@@ -190,12 +246,7 @@ namespace Katsu
         } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value) + ":";
             Root<String> r_name(gc, make_string(gc, op_name));
-            Value* existing = assoc_lookup(*builder.r_module, *r_name);
-            if (!existing) {
-                throw compile_error("name is not defined in module", expr->op.span);
-            }
-            Value v_existing = *existing;
-            ValueRoot r_existing(gc, std::move(v_existing));
+            ValueRoot r_existing(gc, lookup_name(builder, *r_name, expr->op.span));
             compile_expr(gc,
                          builder,
                          *expr->left,
@@ -215,6 +266,7 @@ namespace Katsu
             Root<String> r_name(gc, make_string(gc, name));
             size_t var_depth;
             const Binding* local = builder.lookup(*r_name, &var_depth);
+            Value lookup;
             if (local) {
                 // If this is an upvar access, we need to make sure it's tracked in the upreg map
                 // and loading vector.
@@ -254,10 +306,11 @@ namespace Katsu
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                     builder.emit_arg(gc, Value::fixnum(local->local_index));
                 }
-            } else if (Value* lookup = assoc_lookup(*builder.r_module, *r_name)) {
-                if (lookup->is_obj_multimethod()) {
-                    Value v_lookup = *lookup;
-                    ValueRoot r_lookup(gc, std::move(v_lookup));
+            } else if (lookup_name(builder, *r_name, &lookup) == SUCCESS) {
+                if (lookup.is_obj_multimethod()) {
+                    Value v_name = lookup.obj_multimethod()->v_name;
+                    ValueRoot r_name(gc, std::move(v_name));
+                    ValueRoot r_lookup(gc, std::move(lookup));
                     // Load the default receiver, which is always register 0.
                     // LOAD_REG: <local index>
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
@@ -266,13 +319,20 @@ namespace Katsu
                     builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
                     builder.emit_arg(gc, *r_lookup);
                     builder.emit_arg(gc, Value::fixnum(1));
-                } else {
-                    // LOAD_MODULE: <name>
+                } else if (lookup.is_obj_ref()) {
+                    // LOAD_MODULE: <ref value>
                     builder.emit_op(gc,
                                     OpCode::LOAD_MODULE,
                                     /* stack_height_delta */ +1,
                                     _expr.span);
-                    builder.emit_arg(gc, r_name.value());
+                    builder.emit_arg(gc, lookup);
+                } else {
+                    // LOAD_VALUE: <value>
+                    builder.emit_op(gc,
+                                    OpCode::LOAD_VALUE,
+                                    /* stack_height_delta */ +1,
+                                    _expr.span);
+                    builder.emit_arg(gc, lookup);
                 }
             } else {
                 throw compile_error("name is not defined in module or in local scope",
@@ -313,12 +373,7 @@ namespace Katsu
         } else if (UnaryMessageExpr* expr = dynamic_cast<UnaryMessageExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->message.value);
             Root<String> r_name(gc, make_string(gc, name));
-            Value* existing = assoc_lookup(*builder.r_module, *r_name);
-            if (!existing) {
-                throw compile_error("name is not defined in module", expr->message.span);
-            }
-            Value v_existing = *existing;
-            ValueRoot r_existing(gc, std::move(v_existing));
+            ValueRoot r_existing(gc, lookup_name(builder, *r_name, expr->message.span));
             compile_expr(gc,
                          builder,
                          *expr->target,
@@ -468,13 +523,12 @@ namespace Katsu
                              /* tail_call */ true);
                 return;
             }
-            Value* existing = assoc_lookup(*builder.r_module, *r_name);
-            if (!existing) {
-                throw compile_error(
-                    "name is not defined in module (and is also not <a mutable local>:)",
-                    expr->span);
+            Value v_existing;
+            if (lookup_name(builder, *r_name, &v_existing) != SUCCESS) {
+                throw compile_error("name is not defined in module (and is also not <a mutable "
+                                    "local>:), or is ambiguous in the current module and imports",
+                                    expr->span);
             }
-            Value v_existing = *existing;
             ValueRoot r_existing(gc, std::move(v_existing));
 
             if (expr->target) {
@@ -511,6 +565,7 @@ namespace Katsu
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder closure_builder{
                 .r_module = builder.r_module,
+                .r_imports = builder.r_imports,
                 .num_params = expr->parameters.empty()
                                   ? 1
                                   : (uint32_t)expr->parameters.size(), // TODO: check size_t?
@@ -752,16 +807,17 @@ namespace Katsu
 
         MultiMethod* multimethod;
         {
-            Value* existing = assoc_lookup(*module_builder.r_module, *r_method_name);
-            if (existing) {
-                if (existing->is_obj_multimethod()) {
-                    multimethod = existing->obj_multimethod();
+            Value existing;
+            LookupResult lookup = lookup_name(module_builder, *r_method_name, &existing);
+            if (lookup == SUCCESS) {
+                if (existing.is_obj_multimethod()) {
+                    multimethod = existing.obj_multimethod();
                 } else {
                     throw compile_error("method name is already defined in the current context, "
                                         "but not as a multimethod",
                                         span);
                 }
-            } else {
+            } else if (lookup == NOT_FOUND) {
                 // We know we're about to add at least one method!
                 Root<Vector> r_methods(gc, make_vector(gc, 1));
                 Root<Vector> r_attributes(gc, make_vector(gc, 0));
@@ -774,6 +830,10 @@ namespace Katsu
                 ValueRoot r_key(gc, r_method_name.value());
                 append(gc, module_builder.r_module, r_key, r_multimethod);
                 multimethod = r_multimethod->obj_multimethod();
+            } else {
+                throw compile_error(
+                    "ambiguous lookup for multimethod name in module and its current imports",
+                    span);
             }
         }
         Root<MultiMethod> r_multimethod(gc, std::move(multimethod));
@@ -786,6 +846,7 @@ namespace Katsu
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = module_builder.r_module,
+            .r_imports = module_builder.r_imports,
             .num_params = (uint32_t)param_names.size(), // TODO: check size_t?
             .num_regs = (uint32_t)param_names.size(),   // TODO: check size_t?
             .num_data = 0,
@@ -862,9 +923,7 @@ namespace Katsu
         module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -4 + 1, span);
         {
             Root<String> r_name(gc, make_string(gc, "make-method-with-return-type:code:attrs:"));
-            Value* make_method = assoc_lookup(*module_builder.r_module, *r_name);
-            ASSERT(make_method);
-            module_builder.emit_arg(gc, *make_method);
+            module_builder.emit_arg(gc, lookup_name(module_builder, *r_name, span));
         }
         module_builder.emit_arg(gc, Value::fixnum(4));
 
@@ -884,9 +943,7 @@ namespace Katsu
         module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -3 + 1, span);
         {
             Root<String> r_name(gc, make_string(gc, "add-method-to:require-unique:"));
-            Value* add_method = assoc_lookup(*module_builder.r_module, *r_name);
-            ASSERT(add_method);
-            module_builder.emit_arg(gc, *add_method);
+            module_builder.emit_arg(gc, lookup_name(module_builder, *r_name, span));
         }
         module_builder.emit_arg(gc, Value::fixnum(3));
     }
@@ -918,8 +975,9 @@ namespace Katsu
     }
 
     // receiver, extends are optional
-    void compile_dataclass(GC& gc, Root<Assoc>& r_module, const std::string& message,
-                           SourceSpan& span, Expr* receiver, Expr& name, Expr* extends, Expr& has)
+    void compile_dataclass(GC& gc, Root<Assoc>& r_module, Root<Vector>& r_imports,
+                           const std::string& message, SourceSpan& span, Expr* receiver, Expr& name,
+                           Expr* extends, Expr& has)
     {
         if (receiver) {
             std::stringstream ss;
@@ -935,9 +993,11 @@ namespace Katsu
         }
         const std::string& class_name = std::get<std::string>(name_expr->name.value);
         Root<String> r_class_name(gc, make_string(gc, class_name));
-        if (assoc_lookup(*r_module, *r_class_name)) {
+        LookupResult lookup = lookup_name(*r_module, *r_imports, *r_class_name);
+        if (lookup == SUCCESS || lookup == AMBIGUOUS) {
             std::stringstream ss;
-            ss << message << " class name '" << class_name << "' already exists in module scope";
+            ss << message << " class name '" << class_name
+               << "' already exists in module scope or in imports";
             throw compile_error(ss.str(), name.span);
         }
 
@@ -959,19 +1019,14 @@ namespace Katsu
                 }
                 const std::string& base_name = std::get<std::string>(base_name_expr->name.value);
                 Root<String> r_base_name(gc, make_string(gc, base_name));
-                Value* lookup = assoc_lookup(*r_module, *r_base_name);
-                if (!lookup) {
-                    std::stringstream ss;
-                    ss << "Name '" << base_name << "' is not in module scope";
-                    throw compile_error(ss.str(), base_expr->span);
-                }
-                if (!lookup->is_obj_type()) {
+                Value lookup = lookup_name(*r_module, *r_imports, *r_base_name, base_expr->span);
+                if (!lookup.is_obj_type()) {
                     std::stringstream ss;
                     ss << "Value '" << base_name << "' must be a Type";
                     throw compile_error(ss.str(), base_expr->span);
                 }
 
-                Type* base = lookup->obj_type();
+                Type* base = lookup.obj_type();
                 if (base->sealed) {
                     std::stringstream ss;
                     ss << "Cannot extend from sealed type '" << base_name << "'";
@@ -1045,20 +1100,22 @@ namespace Katsu
         ValueRoot r_key(gc, r_class_name.value());
         append(gc, r_module, r_key, rv_type);
 
-        const auto lookup_or_create = [&gc, &r_module](Root<String>& r_name,
-                                                       uint32_t num_params,
-                                                       SourceSpan err_span) -> MultiMethod* {
-            Value* lookup = assoc_lookup(*r_module, *r_name);
-            if (lookup) {
-                if (lookup->is_obj_multimethod()) {
-                    return lookup->obj_multimethod();
+        const auto lookup_or_create =
+            [&gc, &r_module, &r_imports](Root<String>& r_name,
+                                         uint32_t num_params,
+                                         SourceSpan err_span) -> MultiMethod* {
+            Value existing;
+            LookupResult lookup = lookup_name(*r_module, *r_imports, *r_name, &existing);
+            if (lookup == SUCCESS) {
+                if (existing.is_obj_multimethod()) {
+                    return existing.obj_multimethod();
                 } else {
                     std::stringstream ss;
                     ss << "'" << native_str(*r_name)
                        << "' is already defined in module, but is not a multimethod";
                     throw compile_error(ss.str(), err_span);
                 }
-            } else {
+            } else if (lookup == NOT_FOUND) {
                 Root<Vector> r_methods(gc, make_vector(gc, 1));
                 Root<Vector> r_attributes(gc, make_vector(gc, 0));
                 ValueRoot r_multimethod(
@@ -1068,6 +1125,10 @@ namespace Katsu
                 ValueRoot r_key(gc, r_name.value());
                 append(gc, r_module, r_key, r_multimethod);
                 return r_multimethod->obj_multimethod();
+            } else {
+                std::stringstream ss;
+                ss << "'" << native_str(*r_name) << "' is ambiguous in module and its imports";
+                throw compile_error(ss.str(), err_span);
             }
         };
 
@@ -1089,6 +1150,7 @@ namespace Katsu
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder builder{
                 .r_module = r_module,
+                .r_imports = r_imports,
                 // Just the default receiver.
                 .num_params = 1,
                 .num_regs = 1,
@@ -1111,9 +1173,7 @@ namespace Katsu
             builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1, name.span);
             {
                 Root<String> r_name(gc, make_string(gc, "instance?:"));
-                Value* instance_p = assoc_lookup(*r_module, *r_name);
-                ASSERT(instance_p);
-                builder.emit_arg(gc, *instance_p);
+                builder.emit_arg(gc, lookup_name(builder, *r_name, span));
             }
             builder.emit_arg(gc, Value::fixnum(2));
 
@@ -1149,13 +1209,15 @@ namespace Katsu
                 gc,
                 lookup_or_create(r_method_name, /* num_params */ 1 + num_slots, name.span));
 
-            OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+            Root<Vector> r_imports(gc, make_vector(gc, 0)); // not actually used in this case
+            OptionalRoot<Vector> r_upreg_map(gc, nullptr);  // not a closure!
             Root<Vector> r_insts(gc, make_vector(gc, 0));
             Root<Vector> r_args(gc, make_vector(gc, 0));
             Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
             Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
             CodeBuilder builder{
                 .r_module = r_module,
+                .r_imports = r_imports,
                 .num_params = 1 + num_slots,
                 .num_regs = 1 + num_slots,
                 .num_data = 0,
@@ -1214,13 +1276,15 @@ namespace Katsu
                     gc,
                     lookup_or_create(r_method_name, /* num_params */ 1, name.span));
 
-                OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+                Root<Vector> r_imports(gc, make_vector(gc, 0)); // not actually used in this case
+                OptionalRoot<Vector> r_upreg_map(gc, nullptr);  // not a closure!
                 Root<Vector> r_insts(gc, make_vector(gc, 0));
                 Root<Vector> r_args(gc, make_vector(gc, 0));
                 Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
                 Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
                 CodeBuilder builder{
                     .r_module = r_module,
+                    .r_imports = r_imports,
                     .num_params = 1,
                     .num_regs = 1,
                     .num_data = 0,
@@ -1268,13 +1332,15 @@ namespace Katsu
                     gc,
                     lookup_or_create(r_method_name, /* num_params */ 2, name.span));
 
-                OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
+                Root<Vector> r_imports(gc, make_vector(gc, 0)); // not actually used in this case
+                OptionalRoot<Vector> r_upreg_map(gc, nullptr);  // not a closure!
                 Root<Vector> r_insts(gc, make_vector(gc, 0));
                 Root<Vector> r_args(gc, make_vector(gc, 0));
                 Root<Vector> r_inst_spans(gc, make_vector(gc, 0));
                 Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
                 CodeBuilder builder{
                     .r_module = r_module,
+                    .r_imports = r_imports,
                     .num_params = 2,
                     .num_regs = 2,
                     .num_data = 0,
@@ -1319,11 +1385,13 @@ namespace Katsu
         }
     }
 
-    Code* compile_into_module(GC& gc, Root<Assoc>& r_module, SourceSpan& span,
+    Code* compile_into_module(VM& vm, Root<Assoc>& r_module, Root<Vector>& r_imports,
+                              SourceSpan& span,
                               std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
     {
         // TODO: for future -- first find all multimethod definitions, add them to module (with zero
         // methods defined), and then go and compile everything.
+        GC& gc = vm.gc;
 
         OptionalRoot<Vector> r_upreg_map(gc, nullptr); // not a closure!
         Root<Vector> r_insts(gc, make_vector(gc, 0));
@@ -1332,6 +1400,7 @@ namespace Katsu
         Root<Vector> r_upreg_loading(gc, make_vector(gc, 0));
         CodeBuilder builder{
             .r_module = r_module,
+            .r_imports = r_imports,
             .num_params = 0,
             .num_regs = 0,
             .num_data = 0,
@@ -1397,17 +1466,19 @@ namespace Katsu
                                              /* tail_position */ false,
                                              /* tail_call */ false);
                                 // Then add the (module) binding.
-                                // TODO: this is weird. what value do we put in the module initially
-                                // (during compile time)?
-                                ValueRoot r_init(gc, Value::null());
+                                // TODO: the module append should be done by the compiled code.
+                                // also don't make it a Ref, this is more like a module level
+                                // `mut:`.
+                                ValueRoot r_ref(gc, Value::null());
+                                ValueRoot r_init(gc, Value::object(make_ref(gc, r_ref)));
                                 ValueRoot r_key(gc, r_name.value());
                                 append(gc, r_module, r_key, r_init);
-                                // STORE_MODULE: <name>
+                                // STORE_MODULE: <ref value>
                                 builder.emit_op(gc,
                                                 OpCode::STORE_MODULE,
                                                 /* stack_height_delta */ -1,
                                                 n->name.span);
-                                builder.emit_arg(gc, r_name.value());
+                                builder.emit_arg(gc, r_init);
                                 // LOAD:VALUE: null
                                 builder.emit_op(gc,
                                                 OpCode::LOAD_VALUE,
@@ -1423,6 +1494,7 @@ namespace Katsu
                            std::get<std::string>(expr->messages[1].value) == "has") {
                     compile_dataclass(gc,
                                       r_module,
+                                      r_imports,
                                       "data:extends:has:",
                                       expr->span,
                                       expr->target ? expr->target->get() : nullptr,
@@ -1436,6 +1508,7 @@ namespace Katsu
                            std::get<std::string>(expr->messages[2].value) == "has") {
                     compile_dataclass(gc,
                                       r_module,
+                                      r_imports,
                                       "data:extends:has:",
                                       expr->span,
                                       expr->target ? expr->target->get() : nullptr,
@@ -1443,6 +1516,37 @@ namespace Katsu
                                       expr->args[1].get(),
                                       *expr->args[2]);
                     continue;
+                } else if (expr->messages.size() == 1 &&
+                           std::get<std::string>(expr->messages[0].value) ==
+                               "IMPORT-EXISTING-MODULE") {
+                    if (expr->target) {
+                        throw compile_error("IMPORT-EXISTING-MODULE: requires no target",
+                                            expr->span);
+                    }
+                    if (LiteralExpr* l = dynamic_cast<LiteralExpr*>(expr->args[0].get())) {
+                        const std::string* maybe_module_name =
+                            std::get_if<std::string>(&l->literal.value);
+                        if (maybe_module_name) {
+                            const std::string& module_name = *maybe_module_name;
+                            String* name = make_string(gc, module_name);
+                            Value* maybe_module = assoc_lookup(vm.modules(), name);
+                            if (!maybe_module) {
+                                throw compile_error(
+                                    "IMPORT-EXISTING-MODULE: could not find existing module",
+                                    expr->span);
+                            }
+                            Value module = *maybe_module;
+                            ValueRoot r_module(vm.gc, std::move(module));
+                            append(vm.gc, r_imports, r_module);
+                            continue;
+                        } else {
+                            throw compile_error("IMPORT-EXISTING-MODULE: requires a literal string",
+                                                expr->span);
+                        }
+                    } else {
+                        throw compile_error("IMPORT-EXISTING-MODULE: requires a literal string",
+                                            expr->span);
+                    }
                 }
             }
             compile_expr(gc,

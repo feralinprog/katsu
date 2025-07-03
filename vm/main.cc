@@ -33,7 +33,7 @@ int main(int argc, char** argv)
     std::string module_name(argv[1]);
     std::string path(argv[2]);
     try {
-        Katsu::execute_file(path, module_name);
+        Katsu::bootstrap_and_run_file(path, module_name);
     } catch (const std::ios_base::failure& e) {
         std::cerr << "Error: " << e.what() << "\n";
         std::cerr << "Could not execute file '" << path << "'.\n";

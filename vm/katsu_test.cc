@@ -89,6 +89,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         // 10 KiB call stack size.
         VM vm(gc, 10 * 1024);
         Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
+        Root<Vector> r_imports(gc, make_vector(gc, /* capacity */ 0));
 
         // Just throw everything in the same module.
         register_builtins(vm, r_module, r_module);
@@ -103,6 +104,11 @@ TEST_CASE("integration - single top level expression", "[katsu]")
                        2,
                        matchers2,
                        &testonly_handle_condition);
+
+            String* name = make_string(vm.gc, "handle-raw-condition-with-message:");
+            Value* handler = assoc_lookup(*r_module, name);
+            ASSERT(handler);
+            vm.v_condition_handler = *handler;
         }
 
         std::unique_ptr<Expr> top_level_expr =
@@ -110,9 +116,12 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
         std::vector<std::unique_ptr<Expr>> top_level_exprs;
         top_level_exprs.emplace_back(std::move(top_level_expr));
-        Root<Code> code(
-            gc,
-            compile_into_module(gc, r_module, top_level_exprs[0]->span, top_level_exprs));
+        Root<Code> code(gc,
+                        compile_into_module(vm,
+                                            r_module,
+                                            r_imports,
+                                            top_level_exprs[0]->span,
+                                            top_level_exprs));
         return vm.eval_toplevel(code);
     };
 
@@ -770,17 +779,10 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     }
 }
 
-namespace Katsu
-{
-    Value execute_source(const SourceFile source, const std::string& module_name, GC& gc,
-                         uint64_t call_stack_size);
-};
-
-
 TEST_CASE("integration - whole file", "[katsu]")
 {
-    // 100 KiB GC-managed memory.
-    GC gc(100 * 1024);
+    // 1 MiB GC-managed memory.
+    GC gc(1024 * 1024);
 
     SourceFile source;
 
@@ -795,7 +797,7 @@ TEST_CASE("integration - whole file", "[katsu]")
     uint64_t call_stack_size = 10 * 1024;
 
     auto run = [&source, &gc, &call_stack_size]() {
-        return execute_source(source, "test.integration", gc, call_stack_size);
+        return bootstrap_and_run_source(source, "test.integration", gc, call_stack_size);
     };
 
     // Structural check (based on prettyprinting).
@@ -822,6 +824,12 @@ TEST_CASE("integration - whole file", "[katsu]")
     // };
 
     // ========================================================================
+
+    SECTION("core smoketest")
+    {
+        input("1 + 2");
+        check(Value::fixnum(3));
+    }
 
     SECTION("newlines")
     {
@@ -954,11 +962,12 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 1")
         {
             input(R"(
-use-existing-module: "core.builtin.extra" # for TEST-ASSERT
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
 ]
+set-condition-handler-from-module
 let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
 
 "abc" mm-test: 10
@@ -969,11 +978,12 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 2")
         {
             input(R"(
-use-existing-module: "core.builtin.extra" # for TEST-ASSERT
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
 ]
+set-condition-handler-from-module
 let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
 
 5 mm-test: "def"
@@ -1020,11 +1030,12 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
         SECTION("multimethod downselection - case 3 (ambiguous)")
         {
             input(R"(
-use-existing-module: "core.builtin.extra" # for TEST-ASSERT
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "ambiguous-method-resolution: multimethod has multiple best methods matching the given arguments"
     12345
 ]
+set-condition-handler-from-module
 let: ((a: Fixnum) mm-test:  b         ) do: [ "Fixnum - any" ]
 let: ( a          mm-test: (b: Fixnum)) do: [ "any - Fixnum" ]
 let: ( a          mm-test:  b         ) do: [ "any - any"    ]
@@ -1068,7 +1079,7 @@ let: (a: (null give-me-Fixnum)) mm-test do: [ verify-multimethod call: "multimet
     SECTION("dataclass smoketest")
     {
         input(R"(
-use-existing-module: "core.builtin.extra" # for TEST-ASSERT:
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT:
 data: Thing has: { slot-a; slot-b; slot-c }
 
 TEST-ASSERT: not ("abc" Thing?)
@@ -1120,7 +1131,7 @@ unary
     {
         cout_capture capture;
         input(R"CODE(
-use-existing-module: "core.builtin.extra" # for delimited continuations
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations
 print: "aaaaa"
 [
     print: "  bbbbb"
@@ -1152,11 +1163,12 @@ zzzzz
     SECTION("delimited continuation - wrong marker")
     {
         input(R"CODE(
-use-existing-module: "core.builtin.extra" # for delimited continuations and TEST-ASSERT:
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations, TEST-ASSERT:, and set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "marker-not-found: did not find marker in call stack"
     12345
 ]
+set-condition-handler-from-module
 [
     [null] call/dc: f
 ] call/marked: t
@@ -1170,7 +1182,7 @@ let: (c handle-raw-condition-with-message: m) do: [
         {
             cout_capture capture;
             input(R"CODE(
-use-existing-module: "core.builtin.extra" # for delimited continuations
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations
 let: m1 = "marker 1"
 let: m2 = "marker 2"
 [
@@ -1194,7 +1206,7 @@ after call/marked: m1
         {
             cout_capture capture;
             input(R"CODE(
-use-existing-module: "core.builtin.extra" # for delimited continuations
+IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations
 let: m1 = "marker 1"
 let: m2 = "marker 2"
 [

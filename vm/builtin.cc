@@ -618,20 +618,6 @@ namespace Katsu
                   /* v_marker */ Value::null());
     }
 
-    void intrinsic__use_existing_module_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
-    {
-        // _ use-existing-module: "module.name"
-        ASSERT(nargs == 2);
-
-        Root<Assoc> r_modules(vm.gc, vm.vm.modules());
-        Root<Assoc> r_module(vm.gc, vm.frame()->v_module.obj_assoc());
-        Root<String> r_module_name(vm.gc, args[1].obj_string());
-        use_existing_module(vm.gc, r_modules, r_module, r_module_name);
-
-        vm.frame()->push(Value::null());
-        vm.frame()->inst_spot++;
-    }
-
     void intrinsic__loaded_modules(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
         // _ loaded-modules
@@ -738,23 +724,18 @@ namespace Katsu
     }
     Value native__use_default_modules(VM& vm, int64_t nargs, Value* args)
     {
-        Root<Assoc> r_module(vm.gc, args[0].obj_assoc());
-
-        // Always use core.builtin.default.
-        {
-            Root<Assoc> r_modules(vm.gc, vm.modules());
-            use_existing_module(vm.gc, r_modules, r_module, "core.builtin.default");
-        }
-
+        Root<Vector> r_imports(vm.gc, args[0].obj_vector());
+        use_default_imports(vm, r_imports);
         return Value::null();
     }
-    Value native__parse_and_compile_in_module_(VM& vm, int64_t nargs, Value* args)
+    Value native__parse_and_compile_in_module_imports_(VM& vm, int64_t nargs, Value* args)
     {
-        // run-context parse-and-compile-in-module: module
-        ASSERT(nargs == 2);
+        // run-context parse-and-compile-in-module: module imports: import-vec
+        ASSERT(nargs == 3);
 
         RunContext* context = RunContext::from_value(args[0]);
         Root<Assoc> r_module(vm.gc, args[1].obj_assoc());
+        Root<Vector> r_imports(vm.gc, args[2].obj_vector());
 
         if (context->stream.current_has_type(TokenType::END)) {
             return Value::null();
@@ -766,7 +747,7 @@ namespace Katsu
         std::vector<std::unique_ptr<Expr>> top_level_exprs;
         top_level_exprs.emplace_back(std::move(top_level_expr));
         Code* code =
-            compile_into_module(vm.gc, r_module, top_level_exprs[0]->span, top_level_exprs);
+            compile_into_module(vm, r_module, r_imports, top_level_exprs[0]->span, top_level_exprs);
 
         // Ratchet past any semicolons and newlines, since the parser explicitly stops
         // when it sees either of these at the top level.
@@ -784,6 +765,20 @@ namespace Katsu
         RunContext* context = RunContext::from_value(args[0]);
         delete context;
         return Value::null();
+    }
+
+    void intrinsic__set_condition_handler_from_module(OpenVM& vm, bool tail_call, int64_t nargs,
+                                                      Value* args)
+    {
+        // _ set-condition-handler-from-module
+        ASSERT(nargs == 1);
+        String* name = make_string(vm.gc, "handle-raw-condition-with-message:");
+        Assoc* module = vm.frame()->v_module.obj_assoc();
+        Value* handler = assoc_lookup(module, name);
+        ASSERT(handler);
+        vm.vm.v_condition_handler = *handler;
+        vm.frame()->push(Value::null());
+        vm.frame()->inst_spot++;
     }
 
     Value make_base_type(GC& gc, Root<String>& r_name)
@@ -1014,11 +1009,6 @@ namespace Katsu
                            &intrinsic__call_marked_);
         register_intrinsic("call/dc:", r_extras, {matches_any, matches_any}, &intrinsic__call_dc_);
 
-        register_intrinsic("use-existing-module:",
-                           r_defaults,
-                           {matches_any, matches_type(_String)},
-                           &intrinsic__use_existing_module_);
-
         register_intrinsic("loaded-modules", r_extras, {matches_any}, &intrinsic__loaded_modules);
 
         register_native("read-file:",
@@ -1045,13 +1035,18 @@ namespace Katsu
                         &native__make_run_context_for_path_);
         register_native("use-default-modules",
                         r_extras,
-                        {matches_type(_Assoc)},
+                        {matches_type(_Vector)},
                         &native__use_default_modules);
-        register_native("parse-and-compile-in-module:",
+        register_native("parse-and-compile-in-module:imports:",
                         r_extras,
-                        {matches_any, matches_type(_Assoc)},
-                        &native__parse_and_compile_in_module_);
+                        {matches_any, matches_type(_Assoc), matches_type(_Vector)},
+                        &native__parse_and_compile_in_module_imports_);
         register_native("free", r_extras, {matches_any}, &native__free);
+
+        register_intrinsic("set-condition-handler-from-module",
+                           r_extras,
+                           {matches_any},
+                           &intrinsic__set_condition_handler_from_module);
 
         /*
          * TODO:

@@ -133,13 +133,6 @@ namespace Katsu
     void add_method(GC& gc, Root<MultiMethod>& r_multimethod, Root<Method>& r_method,
                     bool require_unique);
 
-    // Load an existing module by name and add its definitions to the given r_module.
-    void use_existing_module(GC& gc, Root<Assoc>& r_modules, Root<Assoc>& r_module,
-                             Root<String>& r_module_name);
-    // Load an existing module by name and add its definitions to the given r_module.
-    void use_existing_module(GC& gc, Root<Assoc>& r_modules, Root<Assoc>& r_module,
-                             const std::string& module_name);
-
     // Iterators for arrays / vectors. These are invalidated by any GC collection!
     // ===========================================================================
     Value* begin(Array* array);
@@ -161,4 +154,6 @@ namespace Katsu
     bool is_subtype(Type* a, Type* b);
     // Doesn't allocate!
     bool is_instance(VM& vm, Value value, Type* type);
+
+    void use_default_imports(VM& vm, Root<Vector>& r_imports);
 };

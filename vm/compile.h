@@ -17,6 +17,10 @@ namespace Katsu
         const SourceSpan span;
     };
 
-    Code* compile_into_module(GC& gc, Root<Assoc>& r_module, SourceSpan& span,
+    // The imports are a vector of (expected to be) assocs. Any non-assocs are ignored,
+    // and assocs are used as extra names / values that are usable by the expression under
+    // compilation.
+    Code* compile_into_module(VM& vm, Root<Assoc>& r_module, Root<Vector>& r_imports,
+                              SourceSpan& span,
                               std::vector<std::unique_ptr<Expr>>& module_top_level_exprs);
 };

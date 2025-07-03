@@ -957,37 +957,6 @@ namespace Katsu
         append(gc, r_methods, rv_method);
     }
 
-    void use_existing_module(GC& gc, Root<Assoc>& r_modules, Root<Assoc>& r_module,
-                             Root<String>& r_module_name)
-    {
-        Value* lookup = assoc_lookup(*r_modules, *r_module_name);
-        if (!lookup) {
-            throw condition_error("module-not-found", "module has not been previously loaded");
-        }
-        Value v_src_module = *lookup;
-        ASSERT(v_src_module.is_obj_assoc());
-
-        // Perform the import! (TODO: split this to a separate function.)
-        Root<Assoc> r_src(gc, v_src_module.obj_assoc());
-        for (uint64_t i = 0; i < r_src->length; i++) {
-            Assoc::Entry* entry = &r_src->entries()[i];
-            // TODO: check for conflicts with existing keys.
-            Value v_key = entry->v_key;
-            ValueRoot r_key(gc, std::move(v_key));
-            Value v_value = entry->v_value;
-            ValueRoot r_value(gc, std::move(v_value));
-            append(gc, r_module, r_key, r_value);
-        }
-    }
-
-    void use_existing_module(GC& gc, Root<Assoc>& r_modules, Root<Assoc>& r_module,
-                             const std::string& module_name)
-    {
-        Root<String> r_module_name(gc, make_string(gc, module_name));
-        use_existing_module(gc, r_modules, r_module, r_module_name);
-    }
-
-
     Value* begin(Array* array)
     {
         return &array->components()[0];
@@ -1068,5 +1037,18 @@ namespace Katsu
     bool is_instance(VM& vm, Value value, Type* type)
     {
         return is_subtype(type_of(vm, value).obj_type(), type);
+    }
+
+    void use_default_imports(VM& vm, Root<Vector>& r_imports)
+    {
+        // Always use core.builtin.default.
+        {
+            String* name = make_string(vm.gc, "core.builtin.default");
+            Value* maybe_module = assoc_lookup(vm.modules(), name);
+            ASSERT(maybe_module);
+            Value module = *maybe_module;
+            ValueRoot r_module_default(vm.gc, std::move(module));
+            append(vm.gc, r_imports, r_module_default);
+        }
     }
 };
