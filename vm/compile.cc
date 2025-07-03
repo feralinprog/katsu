@@ -170,7 +170,6 @@ namespace Katsu
         }
     };
 
-    // TODO: track tail-position and emit INVOKE_TAIL when requested
     void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr, bool tail_position, bool tail_call)
     {
         OpCode invoke_op = tail_call ? OpCode::INVOKE_TAIL : OpCode::INVOKE;
