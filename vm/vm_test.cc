@@ -133,7 +133,7 @@ TEST_CASE("VM executes a native invocation", "[vm]")
     // LOAD_VALUE: 10
     args->components()[1] = Value::fixnum(10);
     // INVOKE: +: with two args
-    args->components()[2] = r_method_name.value();
+    args->components()[2] = r_multimethod.value();
     args->components()[3] = Value::fixnum(2);
     Root<Array> r_args(gc, std::move(args));
     Root<Tuple> r_span(gc, make_span(gc));

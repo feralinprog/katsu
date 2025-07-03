@@ -236,8 +236,7 @@ namespace Katsu
             case OpCode::INVOKE:
             case OpCode::INVOKE_TAIL: {
                 try {
-                    Value v_method =
-                        module_lookup_or_fail(this->current_frame->v_module, arg(+0).obj_string());
+                    Value v_method = arg(+0);
                     int64_t num_args = arg(+1).fixnum();
                     // TODO: check uint32_t
                     Value* args = this->current_frame->pop_many(num_args);
@@ -416,7 +415,7 @@ namespace Katsu
     {
         Value* lookup = assoc_lookup(v_module.obj_assoc(), name);
         // TODO: change message depending on caller!
-        ASSERT_MSG(lookup, "didn't find invocation name in module");
+        ASSERT_MSG(lookup, "didn't find name in module");
         return *lookup;
     }
 

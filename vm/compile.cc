@@ -176,20 +176,26 @@ namespace Katsu
         if (UnaryOpExpr* expr = dynamic_cast<UnaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value);
             Root<String> r_name(gc, make_string(gc, op_name));
-            if (!assoc_lookup(*builder.r_module, *r_name)) {
+            Value* existing = assoc_lookup(*builder.r_module, *r_name);
+            if (!existing) {
                 throw compile_error("name is not defined in module", expr->op.span);
             }
+            Value v_existing = *existing;
+            ValueRoot r_existing(gc, std::move(v_existing));
             compile_expr(gc, builder, *expr->arg, /* tail_position */ false, /* tail_call */ false);
-            // INVOKE: <name>, <num args>
+            // INVOKE: <multimethod>, <num args>
             builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
-            builder.emit_arg(gc, r_name.value());
+            builder.emit_arg(gc, *r_existing);
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (BinaryOpExpr* expr = dynamic_cast<BinaryOpExpr*>(&_expr)) {
             const std::string& op_name = std::get<std::string>(expr->op.value) + ":";
             Root<String> r_name(gc, make_string(gc, op_name));
-            if (!assoc_lookup(*builder.r_module, *r_name)) {
+            Value* existing = assoc_lookup(*builder.r_module, *r_name);
+            if (!existing) {
                 throw compile_error("name is not defined in module", expr->op.span);
             }
+            Value v_existing = *existing;
+            ValueRoot r_existing(gc, std::move(v_existing));
             compile_expr(gc,
                          builder,
                          *expr->left,
@@ -200,9 +206,9 @@ namespace Katsu
                          *expr->right,
                          /* tail_position */ false,
                          /* tail_call */ false);
-            // INVOKE: <name>, <num args>
+            // INVOKE: <multimethod>, <num args>
             builder.emit_op(gc, invoke_op, /* stack_height_delta */ -2 + 1, _expr.span);
-            builder.emit_arg(gc, r_name.value());
+            builder.emit_arg(gc, *r_existing);
             builder.emit_arg(gc, Value::fixnum(2));
         } else if (NameExpr* expr = dynamic_cast<NameExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->name.value);
@@ -250,15 +256,15 @@ namespace Katsu
                 }
             } else if (Value* lookup = assoc_lookup(*builder.r_module, *r_name)) {
                 if (lookup->is_obj_multimethod()) {
-                    Value v_name = lookup->obj_multimethod()->v_name;
-                    ValueRoot r_name(gc, std::move(v_name));
+                    Value v_lookup = *lookup;
+                    ValueRoot r_lookup(gc, std::move(v_lookup));
                     // Load the default receiver, which is always register 0.
                     // LOAD_REG: <local index>
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
                     builder.emit_arg(gc, Value::fixnum(0));
-                    // INVOKE: <name>, <num args>
+                    // INVOKE: <multimethod>, <num args>
                     builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
-                    builder.emit_arg(gc, *r_name);
+                    builder.emit_arg(gc, *r_lookup);
                     builder.emit_arg(gc, Value::fixnum(1));
                 } else {
                     // LOAD_MODULE: <name>
@@ -307,17 +313,20 @@ namespace Katsu
         } else if (UnaryMessageExpr* expr = dynamic_cast<UnaryMessageExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->message.value);
             Root<String> r_name(gc, make_string(gc, name));
-            if (!assoc_lookup(*builder.r_module, *r_name)) {
+            Value* existing = assoc_lookup(*builder.r_module, *r_name);
+            if (!existing) {
                 throw compile_error("name is not defined in module", expr->message.span);
             }
+            Value v_existing = *existing;
+            ValueRoot r_existing(gc, std::move(v_existing));
             compile_expr(gc,
                          builder,
                          *expr->target,
                          /* tail_position */ false,
                          /* tail_call */ false);
-            // INVOKE: <name>, <num args>
+            // INVOKE: <multimethod>, <num args>
             builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
-            builder.emit_arg(gc, r_name.value());
+            builder.emit_arg(gc, r_existing);
             builder.emit_arg(gc, Value::fixnum(1));
         } else if (NAryMessageExpr* expr = dynamic_cast<NAryMessageExpr*>(&_expr)) {
             String* combined_name;
@@ -459,11 +468,14 @@ namespace Katsu
                              /* tail_call */ true);
                 return;
             }
-            if (!assoc_lookup(*builder.r_module, *r_name)) {
+            Value* existing = assoc_lookup(*builder.r_module, *r_name);
+            if (!existing) {
                 throw compile_error(
                     "name is not defined in module (and is also not <a mutable local>:)",
                     expr->span);
             }
+            Value v_existing = *existing;
+            ValueRoot r_existing(gc, std::move(v_existing));
 
             if (expr->target) {
                 compile_expr(gc,
@@ -480,12 +492,12 @@ namespace Katsu
             for (const std::unique_ptr<Expr>& arg : expr->args) {
                 compile_expr(gc, builder, *arg, /* tail_position */ false, /* tail_call */ false);
             }
-            // INVOKE: <name>, <num args>
+            // INVOKE: <multimethod>, <num args>
             builder.emit_op(gc,
                             invoke_op,
                             /* stack_height_delta */ -(int64_t)expr->args.size(),
                             _expr.span);
-            builder.emit_arg(gc, r_name.value());
+            builder.emit_arg(gc, *r_existing);
             builder.emit_arg(gc, Value::fixnum(1 + expr->args.size()));
         } else if (ParenExpr* expr = dynamic_cast<ParenExpr*>(&_expr)) {
             compile_expr(gc, builder, *expr->inner, tail_position, tail_call);
@@ -846,11 +858,14 @@ namespace Katsu
         }
 
         // Create the method.
-        // INVOKE: <name>, <num args>
+        // INVOKE: <multimethod>, <num args>
         module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -4 + 1, span);
-        module_builder.emit_arg(
-            gc,
-            Value::object(make_string(gc, "make-method-with-return-type:code:attrs:")));
+        {
+            Root<String> r_name(gc, make_string(gc, "make-method-with-return-type:code:attrs:"));
+            Value* make_method = assoc_lookup(*module_builder.r_module, *r_name);
+            ASSERT(make_method);
+            module_builder.emit_arg(gc, *make_method);
+        }
         module_builder.emit_arg(gc, Value::fixnum(4));
 
         // Multimethod:
@@ -865,10 +880,14 @@ namespace Katsu
         module_builder.emit_arg(gc, Value::_bool(true));
 
         // Add the method.
-        // INVOKE: <name>, <num args>
+        // INVOKE: <multimethod>, <num args>
         module_builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -3 + 1, span);
-        module_builder.emit_arg(gc,
-                                Value::object(make_string(gc, "add-method-to:require-unique:")));
+        {
+            Root<String> r_name(gc, make_string(gc, "add-method-to:require-unique:"));
+            Value* add_method = assoc_lookup(*module_builder.r_module, *r_name);
+            ASSERT(add_method);
+            module_builder.emit_arg(gc, *add_method);
+        }
         module_builder.emit_arg(gc, Value::fixnum(3));
     }
 
@@ -1088,9 +1107,14 @@ namespace Katsu
             // LOAD_VALUE: <value>
             builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, name.span);
             builder.emit_arg(gc, rv_type);
-            // INVOKE: <name>, <num args>
+            // INVOKE: <multimethod>, <num args>
             builder.emit_op(gc, OpCode::INVOKE, /* stack_height_delta */ -2 + 1, name.span);
-            builder.emit_arg(gc, Value::object(make_string(gc, "instance?:")));
+            {
+                Root<String> r_name(gc, make_string(gc, "instance?:"));
+                Value* instance_p = assoc_lookup(*r_module, *r_name);
+                ASSERT(instance_p);
+                builder.emit_arg(gc, *instance_p);
+            }
             builder.emit_arg(gc, Value::fixnum(2));
 
             Root<Array> r_param_matchers(gc, make_array(gc, 1));

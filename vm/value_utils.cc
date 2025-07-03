@@ -611,7 +611,7 @@ namespace Katsu
                         case INVOKE_TAIL: {
                             std::cout << "invoke" << (op == INVOKE ? "" : "-tail") << " #"
                                       << args->components()[arg_spot + 1].fixnum() << " ";
-                            pchild(args->components()[arg_spot],
+                            pchild(args->components()[arg_spot].obj_multimethod()->v_name,
                                    "",
                                    /* initial_indent */ false,
                                    /* extra_depth */ +1);
