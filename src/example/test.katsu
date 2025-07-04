@@ -1,2 +1,3 @@
 IMPORT-EXISTING-MODULE: "core.builtin.extra"
 print: "using a core.builtin.extra method!"
+let: exported-value = 5

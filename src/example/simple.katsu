@@ -244,8 +244,11 @@ do: [
 
 print: "just before using test.katsu"
 use: "example/test.katsu"
+IMPORT-EXISTING-MODULE: "example/test.katsu"
 print: "just after using test.katsu"
+pretty-print: exported-value
 
 print: "just before using test.katsu x2"
 use: "example/test.katsu"
 print: "just after using test.katsu x2"
+pretty-print: exported-value
