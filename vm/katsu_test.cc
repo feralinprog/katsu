@@ -1053,11 +1053,9 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
 let: init hacky-make-mut do: [
     mut: boxed = init
     \new-value [
-        boxed # TODO: delete this required workaround
         new-value = null then: [
             boxed
         ] else: [
-            boxed # TODO: delete this required workaround
             boxed: new-value
         ]
     ]

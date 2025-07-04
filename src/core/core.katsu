@@ -239,7 +239,6 @@ let: ((v: Vector) each: f) do: [
     mut: i = 0
     mut: last = null
     while: [i < v length and not (last instance?: StopIteration)] do: [
-        last
         last: (f call: (v unsafe-at: i))
         i: i + 1
     ]
@@ -263,11 +262,9 @@ let: (try: body except: handlers) do: [
         # Search through handlers for a handler matching this exception.
         mut: handled = f
         let: handler-result = (handlers each: \h [
-            handled
             let: handler-type = (h unsafe-at: 0)
             let: handler-fn = (h unsafe-at: 1)
             if: (e instance?: handler-type) then: [
-                e; handled
                 handled: t
                 StopIteration value: (handler-fn call: e)
             ]
@@ -325,7 +322,6 @@ let: ((a: Assoc) each-key: f) do: [
     mut: i = 0
     mut: last = null
     while: [i < a length and not (last instance?: StopIteration)] do: [
-        last
         last: (f call: (a backing-array unsafe-at: i * 2))
         i: i + 1
     ]
@@ -342,9 +338,9 @@ let: not-implemented do: [
 let: ((module: Assoc) run-file: (path: String) contents: (contents: String) imports: (imports: Vector)) do: [
     let: run-context = (make-run-context-for-path: path contents: contents)
     [
-        run-context; module; imports;
         mut: code = null
-        while: [code; code: (run-context parse-and-compile-in-module: module imports: imports); code != null] do: [
+        while: [code: (run-context parse-and-compile-in-module: module imports: imports); code != null] do: [
+            # Ignore the result.
             code call
         ]
     ] cleanup: [ run-context free ]
@@ -368,7 +364,6 @@ let: (use: (module-name: String)) do: [
     (use-stack contains?: module-name) then: [
         signal: (RecursiveUse module-name: module-name)
     ] else: [
-        module-name;
         ensure: [loaded-modules contains?: module-name] by: [
             let: path = (find-module-file-path: module-name)
             let: contents = (read-file: path)

@@ -231,6 +231,57 @@ namespace Katsu
         return lookup_name(*builder.r_module, *builder.r_imports, name, span);
     }
 
+    // Ensures that a name is either a local or in module scope, but is not a positive-depth upvar.
+    // If local/upvar, returns the new binding; else returns nullptr.
+    const Binding* raise_upvar(GC& gc, CodeBuilder& builder, const std::string& name)
+    {
+        Root<String> r_name(gc, make_string(gc, name));
+        size_t var_depth;
+        const Binding* local_or_upvar = builder.lookup(*r_name, &var_depth);
+        Value lookup;
+        if (local_or_upvar) {
+            if (var_depth > 1) {
+                raise_upvar(gc, *builder.base, name);
+                local_or_upvar = builder.lookup(*r_name, &var_depth);
+                ASSERT(var_depth == 1);
+            }
+
+            ASSERT(var_depth <= 1);
+
+            // If this is an upvar access, we need to make sure it's tracked in the upreg map
+            // and loading vector.
+            if (var_depth == 0) {
+                const Binding* local = local_or_upvar;
+                return local;
+            } else {
+                // Add it for tracking!
+                const Binding* upvar = local_or_upvar;
+
+                ValueRoot r_upvar_index(gc, Value::fixnum(upvar->local_index));
+                append(gc, builder.r_upreg_loading, r_upvar_index);
+
+                builder.bindings.emplace(name,
+                                         Binding{
+                                             .name = name,
+                                             ._mutable = upvar->_mutable,
+                                             .local_index = builder.num_regs++,
+                                         });
+                const Binding* local = &builder.bindings[name];
+
+                // If var_depth > 0, we should be compiling a closure, so the builder should
+                // have r_upreg_map populated.
+                ASSERT(builder.r_upreg_map);
+                Root<Vector> r_upreg_map(gc, *builder.r_upreg_map);
+                ValueRoot r_local_index(gc, Value::fixnum(local->local_index));
+                append(gc, r_upreg_map, r_local_index);
+
+                return local;
+            }
+        } else {
+            return nullptr;
+        }
+    }
+
     void compile_expr(GC& gc, CodeBuilder& builder, Expr& _expr, bool tail_position, bool tail_call)
     {
         OpCode invoke_op = tail_call ? OpCode::INVOKE_TAIL : OpCode::INVOKE;
@@ -264,39 +315,9 @@ namespace Katsu
         } else if (NameExpr* expr = dynamic_cast<NameExpr*>(&_expr)) {
             const std::string& name = std::get<std::string>(expr->name.value);
             Root<String> r_name(gc, make_string(gc, name));
-            size_t var_depth;
-            const Binding* local = builder.lookup(*r_name, &var_depth);
+            const Binding* local = raise_upvar(gc, builder, name);
             Value lookup;
             if (local) {
-                // If this is an upvar access, we need to make sure it's tracked in the upreg map
-                // and loading vector.
-                if (var_depth > 0) {
-                    // TODO: handle upvar depth more than 1.
-                    if (var_depth > 1) {
-                        throw compile_error("can't handle upvar depth more than 1", _expr.span);
-                    }
-
-                    // Add it for tracking!
-
-                    ValueRoot r_upvar_index(gc, Value::fixnum(local->local_index));
-                    append(gc, builder.r_upreg_loading, r_upvar_index);
-
-                    builder.bindings.emplace(name,
-                                             Binding{
-                                                 .name = name,
-                                                 ._mutable = local->_mutable,
-                                                 .local_index = builder.num_regs++,
-                                             });
-                    local = &builder.bindings[name];
-
-                    // If var_depth > 0, we should be compiling a closure, so the builder should
-                    // have r_upreg_map populated.
-                    ASSERT(builder.r_upreg_map);
-                    Root<Vector> r_upreg_map(gc, *builder.r_upreg_map);
-                    ValueRoot r_local_index(gc, Value::fixnum(local->local_index));
-                    append(gc, r_upreg_map, r_local_index);
-                }
-
                 if (local->_mutable) {
                     // LOAD_REF: <local index>
                     builder.emit_op(gc, OpCode::LOAD_REF, /* stack_height_delta */ +1, _expr.span);
@@ -413,15 +434,8 @@ namespace Katsu
             if (expr->messages.size() == 1 && !expr->target) {
                 // Check for local mutable variables.
                 const std::string& name = std::get<std::string>(expr->messages[0].value);
-                size_t var_depth;
-                const Binding* maybe_local = builder.lookup(name, &var_depth);
+                const Binding* maybe_local = raise_upvar(gc, builder, name);
                 if (maybe_local) {
-                    // TODO: implement upvar assignment before access
-                    if (var_depth > 0) {
-                        throw compile_error(
-                            "assignment of upvar (before _reading_ upvar) not implemented yet",
-                            _expr.span);
-                    }
                     const Binding& local = *maybe_local;
                     if (local._mutable) {
                         compile_expr(gc,
