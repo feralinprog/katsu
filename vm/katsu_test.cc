@@ -1088,18 +1088,17 @@ let: thing = (Thing slot-a: t slot-b: 5 slot-c: "c")
 TEST-ASSERT: thing Thing?
 TEST-ASSERT: (thing .slot-a = t)
 TEST-ASSERT: (thing .slot-b = 5)
-# TODO: add string deep equality so this can be a real check...
-# TEST-ASSERT: (thing .slot-c = "c")
+TEST-ASSERT: (thing .slot-c = "c")
 
 thing slot-a: 10
 TEST-ASSERT: (thing .slot-a = 10)
 TEST-ASSERT: (thing .slot-b = 5)
-# TEST-ASSERT: (thing .slot-c = "c")
+TEST-ASSERT: (thing .slot-c = "c")
 
 thing slot-b: 20
 TEST-ASSERT: (thing .slot-a = 10)
 TEST-ASSERT: (thing .slot-b = 20)
-# TEST-ASSERT: (thing .slot-c = "c")
+TEST-ASSERT: (thing .slot-c = "c")
 
 thing slot-c: 30
 TEST-ASSERT: (thing .slot-a = 10)
