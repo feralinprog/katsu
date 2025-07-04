@@ -307,10 +307,10 @@ namespace Katsu
                     builder.emit_arg(gc, Value::fixnum(local->local_index));
                 }
             } else if (lookup_name(builder, *r_name, &lookup) == SUCCESS) {
-                if (lookup.is_obj_multimethod()) {
-                    Value v_name = lookup.obj_multimethod()->v_name;
+                ValueRoot r_lookup(gc, std::move(lookup));
+                if (r_lookup->is_obj_multimethod()) {
+                    Value v_name = r_lookup->obj_multimethod()->v_name;
                     ValueRoot r_name(gc, std::move(v_name));
-                    ValueRoot r_lookup(gc, std::move(lookup));
                     // Load the default receiver, which is always register 0.
                     // LOAD_REG: <local index>
                     builder.emit_op(gc, OpCode::LOAD_REG, /* stack_height_delta */ +1, _expr.span);
@@ -319,20 +319,20 @@ namespace Katsu
                     builder.emit_op(gc, invoke_op, /* stack_height_delta */ -1 + 1, _expr.span);
                     builder.emit_arg(gc, *r_lookup);
                     builder.emit_arg(gc, Value::fixnum(1));
-                } else if (lookup.is_obj_ref()) {
+                } else if (r_lookup->is_obj_ref()) {
                     // LOAD_MODULE: <ref value>
                     builder.emit_op(gc,
                                     OpCode::LOAD_MODULE,
                                     /* stack_height_delta */ +1,
                                     _expr.span);
-                    builder.emit_arg(gc, lookup);
+                    builder.emit_arg(gc, *r_lookup);
                 } else {
                     // LOAD_VALUE: <value>
                     builder.emit_op(gc,
                                     OpCode::LOAD_VALUE,
                                     /* stack_height_delta */ +1,
                                     _expr.span);
-                    builder.emit_arg(gc, lookup);
+                    builder.emit_arg(gc, *r_lookup);
                 }
             } else {
                 throw compile_error("name is not defined in module or in local scope",
