@@ -29,7 +29,7 @@ int main(int argc, char** argv)
         usage();
         return EXIT_FAILURE;
     }
-    // TODO: determine module_name from path.
+    // TODO: determine path from module_name.
     std::string module_name(argv[1]);
     std::string path(argv[2]);
     try {
