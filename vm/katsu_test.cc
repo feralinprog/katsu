@@ -966,7 +966,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 1")
         {
             input(R"(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
+use: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
@@ -982,7 +982,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 2")
         {
             input(R"(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
+use: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
@@ -1034,7 +1034,7 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
         SECTION("multimethod downselection - case 3 (ambiguous)")
         {
             input(R"(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
+use: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "ambiguous-method-resolution: multimethod has multiple best methods matching the given arguments"
     12345
@@ -1081,7 +1081,7 @@ let: (a: (null give-me-Fixnum)) mm-test do: [ verify-multimethod call: "multimet
     SECTION("dataclass smoketest")
     {
         input(R"(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for TEST-ASSERT:
+use: "core.builtin.extra" # for TEST-ASSERT:
 data: Thing has: { slot-a; slot-b; slot-c }
 
 TEST-ASSERT: not ("abc" Thing?)
