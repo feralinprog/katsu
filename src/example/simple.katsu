@@ -1,6 +1,4 @@
-# TODO: avoid needing this... should be able to swap to just plain old `use:`!
-IMPORT-EXISTING-MODULE: "core.builtin.extra"
-IMPORT-EXISTING-MODULE: "core"
+use: "core.builtin.extra"
 
 pretty-print: 10 + 20
 
@@ -244,7 +242,6 @@ do: [
 
 print: "just before using test.katsu"
 use: "example/test.katsu"
-IMPORT-EXISTING-MODULE: "example/test.katsu"
 print: "just after using test.katsu"
 pretty-print: exported-value
 

@@ -1,0 +1,5 @@
+IMPORT-EXISTING-MODULE: "core.builtin.extra"
+let: (condition handle-raw-condition-with-message: message) do: [
+    signal: (Condition condition: condition message: message)
+]
+set-condition-handler-from-module

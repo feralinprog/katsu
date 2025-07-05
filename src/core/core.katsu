@@ -231,11 +231,6 @@ let: (signal: (c: Condition)) do: [
     stack print-trace-except-top
 ]
 
-let: (condition handle-raw-condition-with-message: message) do: [
-    signal: (Condition condition: condition message: message)
-]
-set-condition-handler-from-module
-
 data: StopIteration has: { value }
 let: ((v: Vector) each: f) do: [
     mut: i = 0
@@ -283,13 +278,16 @@ let: (assert: (b: Bool)) do: [
     ]
 ]
 
-let: (ensure: p? by: a) do: [
-    if: not (p? call) then: [
+let: (ensure: p? by: a else: default) do: [
+    (p? call) then: [
+        default call
+    ] else: [
         let: result = a call
         assert: (p? call)
         result
     ]
 ]
+let: (ensure: p? by: a) do: [ ensure: p? by: a else: [null] ]
 
 let: ((v: Vector) contains?: x) do: [
     v each: [ (it = x) then: [ StopIteration value: t ] else: f ]
@@ -317,6 +315,13 @@ let: (v: Vector) pop do: [
     v unsafe-write-u64-at-offset: 1 value: new-length
     end
 ]
+let: (v: Vector) peek do: [
+    assert: v length > 0
+    v unsafe-at: (v length - 1)
+]
+let: (v: Vector) empty? do: [
+    v length = 0
+]
 
 let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
     a unsafe-read-value-at-offset: 2 + i
@@ -332,6 +337,19 @@ let: ((a: Assoc) each-key: f) do: [
 ]
 let: ((a: Assoc) contains?: k) do: [
     a each-key: [ (it = k) then: [ StopIteration value: t ] else: f ]
+]
+
+let: ((a: Assoc) each-entry: f) do: [
+    mut: i = 0
+    mut: last = null
+    while: [i < a length and not (last instance?: StopIteration)] do: [
+        last: (f call*: (a backing-array unsafe-at: i * 2), (a backing-array unsafe-at: i * 2 + 1))
+        i: i + 1
+    ]
+    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+]
+let: ((a: Assoc) at*: key) do: [
+    a each-entry: \k v [ (k = key) then: [ StopIteration value: v ] else: null ]
 ]
 
 let: not-implemented do: [
@@ -362,25 +380,40 @@ let: ((module: Assoc) run-file: (path: String) contents: (contents: String) impo
 #
 # Also add a stack of in-progress use: invocations to detect recursive imports.
 let: use-stack = {}
+let: imports-stack = {}
 data: RecursiveUse has: { module-name }
 let: (use: (module-name: String) path-loader: get-path contents-loader: get-contents) do: [
     (use-stack contains?: module-name) then: [
         signal: (RecursiveUse module-name: module-name)
     ] else: [
-        ensure: [loaded-modules contains?: module-name] by: [
+        let: module-result = (ensure: [loaded-modules contains?: module-name] by: [
             let: path = get-path call
             let: contents = (get-contents call: path)
             let: new-module = make-empty-assoc
             let: imports = {}
+            # Add default imports along with core.
             imports use-default-modules
+            imports append: (loaded-modules at*: "core")
             loaded-modules add: module-name value: new-module
             [
                 use-stack push: module-name
+                imports-stack push: imports
                 new-module run-file: path contents: contents imports: imports
-            ] cleanup: [ use-stack pop ]
+            ] cleanup: [
+                use-stack pop
+                imports-stack pop
+            ]
+        ])
+        # If the imports-stack is empty, the current module is loaded using the C++ loader,
+        # and it will need to use IMPORT-EXISTING-MODULE instead.
+        if: not imports-stack empty? then: [
+            let: new-module = (loaded-modules at*: module-name)
+            let: imports = imports-stack peek
+            if: not (imports contains?: new-module) then: [
+                imports append: new-module
+            ]
         ]
-        # TODO: this needs update the imports vector of caller
-        # use-existing-module: module-name
+        module-result
     ]
 ]
 
@@ -391,6 +424,12 @@ let: (use: (module-name: String)) do: [
         read-file: path
     ]
 ]
+let: (use: (module-names: Vector)) do: [
+    module-names each: [use: it]
+]
+
+# TODO: ideally this would just be a private module under core
+use: "core/condition-handler.katsu"
 
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"
 use: user-module-name path-loader: [user-source-path] contents-loader: [user-source-contents]

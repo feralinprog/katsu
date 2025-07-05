@@ -249,6 +249,8 @@ namespace Katsu
                     // TODO: pass extra info, e.g. compile_error has a span that would be good to
                     // provide. Don't need args any more; we can do GC operations.
                     Value v_method = this->v_condition_handler;
+                    ASSERT_MSG(v_method.is_obj_multimethod(),
+                               "cannot raise conditions until v_condition_handler is set");
                     ValueRoot r_method(this->gc, std::move(v_method));
                     Root<String> r_condition_name(this->gc, make_string(this->gc, e.condition));
                     Root<String> r_message(this->gc, make_string(this->gc, e.what()));
