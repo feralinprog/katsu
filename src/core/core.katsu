@@ -368,6 +368,12 @@ let: ((module: Assoc) run-file: (path: String) contents: (contents: String) impo
     ] cleanup: [ run-context free ]
 ]
 
+# Note: keep this in sync with C++ `use_default_imports`.
+let: *default-imports* = {
+    "core.builtin.default"
+    "core"
+}
+
 # 1. find the right file path
 # 2. read the file contents
 # 3. create an empty module
@@ -389,11 +395,14 @@ let: (use: (module-name: String) path-loader: get-path contents-loader: get-cont
         let: module-result = (ensure: [loaded-modules contains?: module-name] by: [
             let: path = get-path call
             let: contents = (get-contents call: path)
+
             let: new-module = make-empty-assoc
+            # TODO: just use a `map` instead on *default-imports*. Need to define standard collections methods...
             let: imports = {}
-            # Add default imports along with core.
-            imports use-default-modules
-            imports append: (loaded-modules at*: "core")
+            *default-imports* each: [
+                imports append: (loaded-modules at*: it)
+            ]
+
             loaded-modules add: module-name value: new-module
             [
                 use-stack push: module-name
@@ -404,6 +413,7 @@ let: (use: (module-name: String) path-loader: get-path contents-loader: get-cont
                 imports-stack pop
             ]
         ])
+
         # If the imports-stack is empty, the current module is loaded using the C++ loader,
         # and it will need to use IMPORT-EXISTING-MODULE instead.
         if: not imports-stack empty? then: [
@@ -413,6 +423,7 @@ let: (use: (module-name: String) path-loader: get-path contents-loader: get-cont
                 imports append: new-module
             ]
         ]
+
         module-result
     ]
 ]
@@ -428,7 +439,9 @@ let: (use: (module-names: Vector)) do: [
     module-names each: [use: it]
 ]
 
-# TODO: ideally this would just be a private module under core
+# Define the native->in-language condition handler in a separate module, as otherwise test code
+# runs into issues trying to define their own handlers (since 'core' is always imported).
+# TODO: ideally this would just be a private module under core.
 use: "core/condition-handler.katsu"
 
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"

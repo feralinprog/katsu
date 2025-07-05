@@ -722,12 +722,6 @@ namespace Katsu
 
         return context->to_value(vm.gc);
     }
-    Value native__use_default_modules(VM& vm, int64_t nargs, Value* args)
-    {
-        Root<Vector> r_imports(vm.gc, args[0].obj_vector());
-        use_default_imports(vm, r_imports);
-        return Value::null();
-    }
     Value native__parse_and_compile_in_module_imports_(VM& vm, int64_t nargs, Value* args)
     {
         // run-context parse-and-compile-in-module: module imports: import-vec
@@ -1033,10 +1027,6 @@ namespace Katsu
                         r_extras,
                         {matches_any, matches_type(_String), matches_type(_String)},
                         &native__make_run_context_for_path_);
-        register_native("use-default-modules",
-                        r_extras,
-                        {matches_type(_Vector)},
-                        &native__use_default_modules);
         register_native("parse-and-compile-in-module:imports:",
                         r_extras,
                         {matches_any, matches_type(_Assoc), matches_type(_Vector)},

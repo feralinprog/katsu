@@ -1041,6 +1041,8 @@ namespace Katsu
 
     void use_default_imports(VM& vm, Root<Vector>& r_imports)
     {
+        // Keep this in sync with *default-imports* in core.
+
         // Always use core.builtin.default.
         {
             String* name = make_string(vm.gc, "core.builtin.default");
