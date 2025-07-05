@@ -1,676 +1,251 @@
-# TODO: try the Y combinator with quotes... does this break the compiler?
+use: "core.builtin.extra"
 
-# TODO: need to fix the inlining argument re-binding.
-# phi nodes need to know which basic block argument comes from, not just which argument it is...
-let: (a swap: b) do: [
-    print: a
-    TAIL-CALL: (b swap: a)
-] :: { +inline; +tail-recursive }
-"a" swap: "b"
+pretty-print: 10 + 20
 
-let: ((n: Number) recurse) do: [
-    if: n > 0 then: [
-        print: n
-        TAIL-CALL: (n - 1) recurse
-    ] else: [
-        print: "done!"
-    ]
-]
-2 recurse
-
-let: (if: (cond: Bool) then: body) do: [
-    TAIL-CALL: (if: cond then: body else: null)
-] :: { +inline }
-let: ((n: Number) recurse) do: [
-    if: n > 0 then: [
-        print: n
-        TAIL-CALL: (n - 1) recurse
-    ]
-]
-2 recurse
-
-let: (sum: a and: b and: c) do: [
-    let: x = a + b
-    let: y = x + c
-    y
-] :: { +inline }
-print: (sum: 1 and: 2 and: 3)
-
-let: ((a: Number) plus: (b: Number)) do: [
-    a + b
-]
-print: (1 plus: 2)
-
-let: (a str~: b) do: [
-    a >string ~ b >string
-]
-print: ("abc" str~: 2)
-
-# TODO: precompute <null> and use this, so it's not looked up at runtime.
-# (really, figure out how this can work. maybe something like:
-# >> let: (if: cond then: body) do: (bake: [ if: cond then: body else: $null ])
-# where :bake: replaces any instances of a `$ expr` unary operator with `expr call`)
-let: (if: (cond: Bool) then: body) do: [ TAIL-CALL: (if: cond then: body else: [ null ]) ] :: { +inline }
-let: (if: cond then: body) do: [ "blah" ]
-if: 2 > 1 then: [ print: "good: 2 > 1" ]
-if: t == f then: [ print: "bad! t == f" ] else: [ print: "good: t != f" ]
-
-mut: a = 5
-print: a
-set-a: 10
-print: a
-
-# +inline tells the compiler that this should be strictly inlined at every call site
-# +tail-recursive is more of an optimization hint; it tells the compiler to expect this method body
-#   to be called recursively in tail position, so it can be converted from recursion into iteration.
-#   Without this annotation, tail call optimization will still apply (so call stack size is bounded),
-#   but this would _not_ be directly compiled into a while loop.
-#   NOTE: this hint is pessimistic if the body is not actually tail-recursive, and prohibits various
-#       other optimizations.
-let: (while: (cond: Quote) do: (body: Quote)) do: [
-    if: cond call then: [
-        body call
-        TAIL-CALL: (while: cond do: body)
-    ]
-] :: { +inline }
-
-let: (test-while) do: [
-    mut: i = 10
-    while: [i > 0] do: [
-        print: i
-        set-i: i - 1
-        print: i
-    ]
-]
-test-while
-
-let: (from: low to<: high do: (body: Quote)) do: [
-    mut: i = low
-    while: [i < high] do: [
-        body call: i
-        set-i: i + 1
-    ]
-]
-from: 0 to<: 10 do: \i [
-    print: i
-]
-
-print: ((1, 2, 3), 4,)
-print: t and f
-print: not t
-print: - 5
-print: (1 + 3 * 6 / 2 * 3) == 4
-
-let: (vec each: action) do: [
-    mut: i = 0
-    while: [i < vec length] do: [
-        action call: (vec at: i)
-        set-i: i + 1
+let: (adder: (n0: Fixnum)) do: [
+    mut: n = n0
+    let: delta = n0 + 30
+    \x [
+        let: new-n = n + delta + x
+        n: new-n
+        n
     ]
 ]
 
-let: (vec each-reversed: action) do: [
-    mut: i = vec length - 1
-    while: [i >= 0] do: [
-        action call: (vec at: i)
-        set-i: i - 1
+let: a = (adder: 3)
+pretty-print: a
+pretty-print: (a call: 0) # 3 + 33 + 0 = 36
+pretty-print: (a call: 2) # 36 + 33 + 2 = 71
+
+pretty-print: 5 type
+pretty-print: a type
+a instance?: Fixnum
+a instance?: Closure
+
+print: "this is " ~ "a test"
+
+let: run-test do: [
+    mut: n = 10000
+    while: [n > 0] do: [
+        if: (n / 10000) * 10000 = n then: [
+            pretty-print: n
+        ]
+        n: n - 1
     ]
 ]
+run-test
 
-let: data = {
-    { 1; 2; 3 }
-    { 4; 5; }
-    { 6; }
-    { 7; }
-}
-print: data
-data each: \v [print: v]
-data each: \v [v each: \w [print: w]]
-(data at: 0) at: 1 =: "a"
-data at: 2 =: "b"
-print: data
+data: Point has: { x; y }
+data: Point3D extends: { Point } has: { z }
+let: p = (Point3D x: 1 y: 2 z: 3)
+p .x
+p .y
+p .z
+(p x: 5; null)
+(p y: 6; null)
+(p z: 7; null)
+p .x
+p .y
+p .z
 
-data append: "last elem"
-print: data
-
-let: other = { "more"; "data" }
-let: (prefix extend: suffix) do: [
-    suffix each: \v [prefix append: v]
-]
-print: other
-data extend: other
-print: data
-
-#let: (length) do: [
-#    mut: count = 0
-#    self each: [ set-count: count + 1 ]
-#    count
-#]
-print: data length
-
-let: (vec map: f) do: [
-    let: new-vec = {}
-    vec each: \v [new-vec append: (f call: v)]
-    new-vec
-]
-print: data
-data each: [print]
-print: (data map: [length])
-
-let: (vec from: initial-value accumulate: f) do: [
-    mut: cur = initial-value
-    vec each: \v [set-cur: (f call*: (cur, v))]
-    cur
-]
-print: ((data map: [length]) from: 0 accumulate: \sum-so-far current-value [
-    sum-so-far + current-value
-])
-
-let: (vec map2: f) do: [
-    vec from: {} accumulate: \new-vec x [
-        new-vec append: (f call: x)
-    ]
-]
-print: (data map2: [length])
-
-let: (vec strsum) do: [
-    vec from: "" accumulate: \a b [a ~ b >string]
-]
-({{"a";"b"};{"c";"d"}} map2: [strsum]) each: [print]
-
-let: (vec select: filter) do: [
-    vec from: {} accumulate: \new-vec x [
-        if: (filter call: x) then: [ new-vec append: x ] else: new-vec
-    ]
-]
-print: (data select: [it length < 2])
-print: (data select: [it length >= 2])
-
-let: (v print-with-wrapper: s) do: [
-    print: s ~ v >string ~ s
-]
-data each: [print-with-wrapper: "!"]
-
-# example of runtime error
-#data each: [strsum]
-
-let: (nonlocal-return-test: f) do: [
-    print: "should get here"
-    f call: 5
-    print: "should not get here!"
-]
-print: \cc [nonlocal-return-test: cc] call/cc + 10
-
-# If running this in a method, it will infinite loop on the first `cc call: ...`
-# since in that case, the current continuation includes the `cc call:`, whereas
-# when evaluating at the top level, the current continuation only goes to the end
-# of the top-level sequence component, i.e. the `print: ...`.
-mut: cc = null
-print: "result is: " ~ [set-cc: it; null] call/cc >string
-cc call: 5
-cc call: 10
-
-data: :Point has: { :x; :y }
-let: p = (Point x: 5 y: 10)
-print: p
-print: p .x
-print: p .y
-p set-x: 6
-print: p
-p set-x: 5
-
-p type
-p type == Point
 p Point?
-p Number?
-p String? Bool?
+p Point3D?
 
-t type == Bool
+(Point x: 1 y: 2) Point3D?
 
-data: :Point3D extends: { Point } has: { :z }
+(some: 5) then: [pretty-print: it] else: [print: "none"]
+none then: [pretty-print: it] else: [print: "none"]
 
-let: ((p: Point) +: (q: Point)) do: [
-    Point x: (p .x + q .x) y: (p .y + q .y)
+pretty-print: {1; 2; 3}
+
+5 times: [pretty-print: it]
+
+let: v = {1;2;3;4}
+v length
+pretty-print: v
+v unsafe-write-value-at-offset: 2 value: "I swappa the arrey"
+pretty-print: v
+
+let: (f: n) do: [
+    get-call-stack
 ]
-
-let: p3 = (Point3D x: 5 y: 10 z: 15)
-let: q = (Point x: 3 y: 2)
-let: q3 = (Point3D x: 3 y: 2 z: 1)
-p + q
-p + q3
-p3 + q
-p3 + q3
-
-let: ((p: Point3D) +: (q: Point3D)) do: [
-    Point3D x: (p .x + q .x) y: (p .y + q .y) z: (p .z + q .z)
+let: (g: n) do: [
+    f: n
 ]
-p + q
-p + q3
-p3 + q
-p3 + q3
-
-let: (while-with-break: cond do: body) do: [
-    \cc [
-        while: cond do: [body call: cc]
-    ] call/cc
+let: (h: n) do: [
+    g: n
 ]
+let: s = (h: 0)
 
-mut: i = 0
-while-with-break: [t] do: \break [
-    print: i
-    if: i == 5 then: [break call: "result of break"]
-    set-i: i + 1
-]
+pretty-print: s length
+let: fm = (Frame segment: s offset: 0)
+print: "MODULE FRAME:"
+pretty-print: fm .code
+pretty-print: fm .inst-spot
+pretty-print: fm .#regs
+pretty-print: fm .#data
+pretty-print: fm .data-depth
+#pretty-print: fm .module
 
-let: (while-with-break-and-continue: cond do: body) do: [
-    \break-cc [
-        while: cond do: [
-            \cont-cc [
-                body call*: break-cc, cont-cc
-            ] call/cc
-        ]
-    ] call/cc
-]
+let: fh = fm next
+print: "'h' FRAME:"
+pretty-print: fh .code
+pretty-print: fh .inst-spot
+pretty-print: fh .#regs
+pretty-print: fh .#data
+pretty-print: fh .data-depth
+#pretty-print: fm .module
 
-set-i: 0
-while-with-break-and-continue: [t] do: \break continue [
-    set-i: i + 1
-    print: i
-    if: i == 3 then: [continue call: "result of continue"]
-    if: i == 5 then: [break call: "result of break"]
-    print: "end of while loop body"
-]
+let: fg = fh next
+print: "'g' FRAME:"
+pretty-print: fg .code
+pretty-print: fg .inst-spot
+pretty-print: fg .#regs
+pretty-print: fg .#data
+pretty-print: fg .data-depth
+#pretty-print: fm .module
 
-# Need to define these early.
-data: :Condition has: { :message }
-data: :InternalError extends: { Condition } has: {}
-data: :UndefinedSlot extends: { Condition } has: {}
-data: :AssertionFailure extends: { Condition } has: { :condition }
-data: :SwitchFallThrough extends: { Condition } has: {}
-data: :NoneValue extends: { Condition } has: {}
-data: :OutOfRange extends: { Condition } has: { :collection; :index }
-data: :NoSuchRestart extends: { Condition } has: { :restart }
+let: ff = fg next
+print: "'f' FRAME:"
+pretty-print: ff .code
+pretty-print: ff .inst-spot
+pretty-print: ff .#regs
+pretty-print: ff .#data
+pretty-print: ff .data-depth
+#pretty-print: fm .module
 
-# TODO: remove these. May need to add proper modules which have lookups resolved at the end.
-defer-method: :signal:
+let: c = ff .code
+print: "'f' CODE:"
+pretty-print: c .module type
+pretty-print: c .#params
+pretty-print: c .#regs
+pretty-print: c .#data
+pretty-print: c .upreg-map
+pretty-print: c .insts
+pretty-print: c .args
+pretty-print: c .span
+pretty-print: c .inst-spans
 
-let: (assert: condition) do: [
-    if: not condition call then: [
-        signal: (AssertionFailure message: "Assertion failed: " ~ condition >string condition: condition)
+let: tup = (1, 2, 3)
+pretty-print: tup length
+pretty-print: (tup unsafe-at: 0)
+pretty-print: (tup unsafe-at: 1)
+pretty-print: (tup unsafe-at: 2)
+
+print: "-----------------"
+
+let: i = 12
+print: ((Frame segment: (null) get-call-stack offset: 0) .code .inst-spans unsafe-at: i) >SourceSpan >string
+
+print: "----------------------------------"
+
+print: "aaaaa"
+[
+    print: "  bbbbb"
+    let: input = (\k [
+        print: "    ccccc"
+        print: "    result of k('abcdef'): " ~ (k call: "abcdef")
+        print: "    result of k('123456'): " ~ (k call: "123456")
+        print: "    ddddd"
+    ] call/dc: t)
+    print: "  eeeee"
+    # Pretend to do some calculations, and return the result:
+    "calcs(" ~ input ~ ")"
+] call/marked: t
+print: "zzzzz"
+
+print: "----------------------------------"
+
+print: (\return [
+    print: "doing some things"
+    return call: "early return"
+    print: "oops, after return!"
+] with-return)
+
+print: "----------------------------------"
+
+\r [
+    print: "doing some setup"
+    [
+        print: "doing some calcs"
+        r call
+        print: "after early return - shouldn't see this at all"
+    ] cleanup: [
+        print: "cleaning up!"
     ]
-]
+    print: "after cleanup - also shouldn't see this, since early return should still be active"
+] with-return
 
-let: (receiver switch: (options: Vector)) do: [
-    \ret [
-        options each: \option [
-            assert: [option length == 2]
-            let: condition = (option at: 0)
-            let: response = (option at: 1)
-            if: (condition call: receiver) then: [ret call: (response call: receiver)]
-        ]
-        signal: (SwitchFallThrough message: "no switch conditions matched; fell through")
-    ] call/rc
+let: n do-test do: [
+    TAIL-CALL: (n = 0 then: [ () >string ] else: [
+        (n - 1) do-test
+    ])
 ]
+5 do-test
 
-set-i: = 5
-switch: {
-    #{ [test]; [response]; :blah }
-    { [(i / 2) * 2 == i]; [print: "i is even"] }
-    { [i == 5]; [print: "i is 5"] }
-    { t; [print: "i is odd and not 5"] }
+try: [
+    print: "before throw"
+    (Exception message: "I'm an exception!" stack: null) throw
+    print: "after throw"
+] except: {
+    (Exception, \e [ print: "Got exception: " ~ e .message; e .stack print-trace-except-top ])
 }
 
-[ print: "in body" ] cleanup: [ print: "in cleanup" ]
-#[ print: "in body 2" ] cleanup: "shouldn't see this string!"
-1234 cleanup: [ print: "cleaning up from 1234" ]
-
-[
-    let: result = \ret [
-        print: "before return"
-        1 + (ret call: "<the result>")
-        print: "after return"
-    ] call/rc
-    print: "result: " ~ result >string
-] call
-
-let: (top: return) do: [
-    print: "top, before return"
-    1 + (return call: "<the result from top>")
-    print: "top, after return (BAD)"
+let: divide-by-zero do: [
+    1 / 0
 ]
-let: (middle: return) do: [
-    print: "middle, before calling top"
-    [top: return] cleanup: [
-        print: "middle, doing cleanup"
-    ]
-    print: "middle, after calling top (BAD)"
-]
-let: (bottom: return) do: [
-    print: "bottom, before calling middle"
-    [middle: return] cleanup: [
-        print: "bottom, doing cleanup"
-    ]
-    print: "bottom, after calling middle (BAD)"
-]
-print: \ret [bottom: ret] call/rc
+divide-by-zero
 
-[
-    mut: rc-handle = null
-    \rc [set-rc-handle: rc] call/rc
-    print: rc-handle
-    # This raises an error now.
-    #print: (rc-handle call: 5)
-    # TODO: hm, need to fix some syntax here. shouldn't need to put an expr at the end after a comment...
-    1
-] call
+pretty-print: ({ 1; 2; 3 } contains?: 1)
+pretty-print: ({ 1; 2; 3 } contains?: 2)
+pretty-print: ({ 1; 2; 3 } contains?: 3)
+pretty-print: ({ 1; 2; 3 } contains?: 4)
 
-#\cc [cc call*: 1,2] call/cc
-
-[
-    \ret [
-        [
-            ret call: 1234
-        ] cleanup: [ print: "first cleanup" ]
-    ] call/rc
-] cleanup: [
-    print: "second cleanup"
+do: [
+    let: a = make-empty-assoc
+    pretty-print: a
+    pretty-print: a length
+    pretty-print: a backing-array
+    a add: "key" value: "value"
+    pretty-print: a
 ]
 
-let: (do-a-tail-cleanup) do: [ [ [ 1234 ] call ] cleanup: [ print: "other cleanup" ] ]
-[ do-a-tail-cleanup ] cleanup: [ print: "some cleanup" ]
-
-###################################################################
-
-data: :Optional has: {
-    :has-value?
-    :value
-}
-
-let: (some: value) do: [ Optional has-value?: t value: value ]
-let: [none]        do: [ Optional has-value?: f value: null ]
-
-let: ((opt: Optional) then: some-body else: none-body) do: [
-    if: opt .has-value? then: [
-        some-body call: opt .value
-    ] else: [
-        none-body call
-    ]
+do: [
+    let: v = { 1; 2; 3 }
+    pretty-print: v
+    v append: 4
+    pretty-print: v
+    pretty-print: v pop
+    pretty-print: v
+    v append: 4
+    pretty-print: v
+    pretty-print: v pop
+    pretty-print: v
 ]
 
-let: ((opt: Optional) value!) do: [
-    opt then: [it] else: [signal: (NoneValue message: "none has no value")]
+do: [
+    let: v = { 1; 2; 3 }
+    let: a = v backing-array
+    pretty-print: v
+    pretty-print: a
+    pretty-print: (a unsafe-at: 0)
+    pretty-print: (a unsafe-at: 1)
+    pretty-print: (a unsafe-at: 2)
 ]
 
-(some: 5) then: [print] else: [print: "none"]
-none then: [print] else: [print: "none"]
-
-# Sequences must have:
-#   length
-#   at:
-mixin: :Sequence
-let: ((seq: Sequence) each: (action: Quote)) do: [
-    mut: i = 0
-    while: [i < seq length] do: [
-        action call: (seq at: i)
-        set-i: i + 1
-    ]
+do: [
+    let: a = make-empty-assoc
+    a add: "key1" value: "value1"
+    a add: "key2" value: "value2"
+    a each-key: [print: it]
 ]
 
-mix-in: Sequence to: Vector
+print: "just before using imports-test.katsu"
+use: "example/imports-test.katsu"
+print: "just after using imports-test.katsu"
+pretty-print: exported-value
 
-let: ((opt: Optional) length) do: [ opt then: 1 else: 0 ]
-let: ((opt: Optional) at: (i: Number)) do: [
-    if: i == 0 then: [
-        opt value!
-    ] else: [
-        signal: (OutOfRange message: ("index " ~ i >string ~ " out of range for optional") collection: opt index: i)
-    ]
-]
-mix-in: Sequence to: Optional
-
-{ 1; 2; 3 } each: [print]
-(some: 123) each: [print]
-none each: [print]
-
-
-###################################################################
-
-
-# Define assocs. (For now, these are just vectors of key/value pairs.)
-
-data: :AssocEntry has: { :key; :value }
-
-data: :Assoc has: { :entries }
-let: (assoc: vector-entries) do: [
-    Assoc entries: (vector-entries map: \entry [ AssocEntry key: (entry at: 0) value: (entry at: 1) ])
-]
-
-let: ((assoc: Assoc) each-entry: (action: Quote)) do: [ assoc .entries each: action ]
-
-let: ((a: Assoc) if-has: key then*: then-fn else: else-fn) do: [
-    \ret [
-        a each-entry: [
-            if: it .key == key then: [ret call: (then-fn call: it)]
-        ]
-        else-fn call
-    ] call/rc
-]
-
-let: ((a: Assoc) if-has: key then: then-fn else: else-fn) do: [
-    a if-has: key then*: [then-fn call: it .value] else: else-fn
-]
-
-let: ((a: Assoc) at*: key) do: [
-    a if-has: key then: [some: it] else: [none]
-]
-
-let: ((a: Assoc) at: key) do: [ (a at*: key) value! ]
-
-let: ((a: Assoc) has: key) do: [ (a at*: key) .has-value?  ]
-
-let: ((a: Assoc) put-entry: (entry: AssocEntry)) do: [
-    a if-has: entry .key then*: [ it set-value: entry .value ] else: [
-        a .entries append: entry
-    ]
-]
-let: ((a: Assoc) at: key put: value) do: [
-    a put-entry: (AssocEntry key: key value: value)
-]
-
-# Add all pairs from :b into :a, keeping the value from :a if there is a conflict.
-let: ((a: Assoc) extend: (b: Assoc)) do: [
-    b each-entry: \entry [
-        a if-has: entry .key then: null else: [a put-entry: entry]
-    ]
-]
-
-let: ((a: Assoc) keys) do: [
-    let: keys-vec = {}
-    a each-entry: \entry [ keys-vec append: entry .key ]
-    keys-vec
-]
-
-let: m = (assoc: { { 1; "one" }; { 2; "two" } })
-m
-m has: 1
-m has: 2
-m has: 3
-m at*: 1
-m at*: 3
-m at: 1
-m at: 2 put: "duo"
-m at: 2
-m at: 3 put: "three"
-m
-
-
-###################################################################
-
-# TODO: remove these. May need to add proper modules which have lookups resolved at the end.
-defer-method: :get:
-
-let: namestack = { assoc: {} }
-let: (push-scope: (vars: Assoc)) do: [namestack append: vars]
-let: (pop-scope) do: [namestack pop]
-let: (scope has-var: (var: Symbol)) do: [ scope has: var ]
-let: (scope get-var: (var: Symbol)) do: [ scope get: var ]
-let: (scope set: (var: Symbol) value: value) do: [ scope at: var put: value ]
-let: ((name: Symbol) get) do: [
-    \ret [
-        namestack each-reversed: \scope [
-            scope if-has: name then: [ret call: it] else: none
-        ]
-    ] call/rc
-]
-let: ((name: Symbol) set: value) do: [(namestack at: (namestack length - 1)) at: name put: value ]
-let: (with-scope: (body: Quote)) do: [
-    push-scope: (assoc: {})
-    body cleanup: [pop-scope]
-]
-
-###################################################################
-
-:x set: 1
-print: :x get
-with-scope: [
-    print: :x get
-    :x set: 2
-    print: :x get
-]
-print: :x get
-
-###################################################################
-
-# Stack of list-of-pairs, where each pair holds a predicate quote
-# and a handler quote.
-let: handler-stack = {}
-let: ((body: Quote) with-handlers: (handlers: Vector)) do: [
-    handler-stack append: handlers
-    body cleanup: [handler-stack pop]
-]
-
-let: ((predicate: Quote) matches-condition?: condition) do: [ predicate call: condition ]
-let: ((type: Type) matches-condition?: condition) do: [ condition is-instance: type ]
-let: (value matches-condition?: condition) do: [ condition == value ]
-
-# Call a handler if one matches; else return null.
-let: ((handlers: Vector) call-handler*: condition) do: [
-    \ret [
-        handlers each: [
-            let: predicate = (it at: 0)
-            let: handler = (it at: 1)
-            if: (predicate matches-condition?: condition) then: [ret call: (handler call: condition)]
-        ]
-        null
-    ] call/rc
-]
-
-# Stack of assocs (from symbol to restart quote).
-let: restart-stack = {}
-let: ((body: Quote) with-restarts: (restarts: Assoc)) do: [
-    restart-stack append: restarts
-    body cleanup: [restart-stack pop]
-]
-
-let: ((restart: Symbol) get-restart) do: [
-    \ret [
-        restart-stack each-reversed: [
-            it if-has: restart then: \quote [ret call: quote] else: null
-        ]
-        signal: (NoSuchRestart message: ("restart " ~ restart >string ~ " not found") restart: restart)
-    ] call/rc
-]
-
-let: ((restart: Symbol) invoke-restart) do: [
-    restart get-restart call
-]
-
-let: (all-active-restarts) do: [
-    let: restarts = (assoc: {})
-    restart-stack each-reversed: [restarts extend: it]
-    restarts
-]
-
-let: (signal: condition) do: [
-    \ret [
-        handler-stack each-reversed: [
-            if: not (let: handler-result = (it call-handler*: condition)) Null? then: [
-                ret call: handler-result
-            ]
-        ]
-        # No handlers resolved the condition. Ask the user if they want to select a restart instead.
-        let: restarts = all-active-restarts
-        let: restart-keys = restarts keys
-        let: idx = (query-user-for-restart: restart-keys condition: condition)
-        if: idx Number? then: [
-            let: selected-restart = (restart-keys at: idx)
-            ret call: (selected-restart invoke-restart)
-        ]
-        # User didn't select any of the restarts; fall back to a panic.
-        panic!: condition
-    ] call/rc
-]
-
-# Handle a signal from the VM.
-# TODO: have VM just produce actual Condition (or subtype thereof) objects.
-let: (tup condition-tuple>object) do: [
-    \condition message [
-        condition switch: {
-            { [it == :internal-error]; [InternalError message: message] }
-            { [it == :undefined-slot]; [UndefinedSlot message: message] }
-            { t;                       [Condition message: message] }
-        }
-    ] call*: tup
-]
-let: (handle-signal: condition-tuple) do: [ signal: condition-tuple condition-tuple>object ]
-
-# Catches eval_toplevel issue with exit condition.
-#print: ("a" plus: "b")
-
-# Same, but with restarts so we can continue.
-[ ("a" plus: "b") + 3 ] with-restarts: (assoc: {
-    { :use-5; [ 5 ] }
-})
-
-#[
-#    [ blah ] with-restarts: (assoc: {
-#        { :use-10; [ 10 ] }
-#    })
-#] with-handlers: {
-#    {
-#        UndefinedSlot; \condition [
-#            print: "got an UndefinedSlot:: " ~ condition >string
-#            print: "invoking :use-10 restart!"
-#            :use-10 invoke-restart
-#        ]
-#    }
-#}
-
-[
-    [ 1 / 0 ] with-restarts: (assoc: {
-        { :use-0; [ 0 ] }
-        { :use-10; [ 10 ] }
-        { :signal-assertion-failure; [ assert: f ] }
-    })
-] with-handlers: {
-    {
-        InternalError; \condition [
-            print: "got an InternalError:: " ~ condition >string
-            print: "invoking :use-15 restart, which does not exist!"
-            :use-15 invoke-restart
-        ]
-    }
-    {
-        AssertionFailure; \condition [
-            print: "got an AssertionFailure:: " ~ condition >string
-            print: "using a value of 20"
-            20
-        ]
-    }
-}
-
-# This is a bit unfortunate. Delete `it`? Or just provide `it` to _every_ no-arg quote?
-[it print] call: "a string"
-[[it print] call] with-restarts: (assoc: {
-    { :use-null; [ null ] }
-})
+print: "just before using imports-test.katsu x2"
+use: "example/imports-test.katsu"
+print: "just after using imports-test.katsu x2"
+pretty-print: exported-value
