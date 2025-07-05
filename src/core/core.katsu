@@ -190,8 +190,10 @@ let: f with-return do: [
 ]
 
 let: (f cleanup: c) do: [
-    [ f call ] call/marked: t
+    mut: result = null
+    [ result: f call ] call/marked: t
     c call
+    result
 ]
 
 let: ((segment: CallSegment) each-frame: f) do: [
@@ -283,8 +285,9 @@ let: (assert: (b: Bool)) do: [
 
 let: (ensure: p? by: a) do: [
     if: not (p? call) then: [
-        a call
+        let: result = a call
         assert: (p? call)
+        result
     ]
 ]
 
@@ -339,34 +342,34 @@ let: ((module: Assoc) run-file: (path: String) contents: (contents: String) impo
     let: run-context = (make-run-context-for-path: path contents: contents)
     [
         mut: code = null
+        mut: result = null
         while: [code: (run-context parse-and-compile-in-module: module imports: imports); code != null] do: [
-            # Ignore the result.
-            code call
+            result: code call
         ]
+        result
     ] cleanup: [ run-context free ]
 ]
 
+# 1. find the right file path
+# 2. read the file contents
+# 3. create an empty module
+# 4. use a cursor in order to:
+#     * ask C++ to parse and convert to Code (eventually should be in-language instead!)
+#     * then call the Code from here to add to that new module
+#     * and move to next spot in source
+# 5. add the new module to VM modules assoc
+# 6. use-existing-module
+#
+# Also add a stack of in-progress use: invocations to detect recursive imports.
 let: use-stack = {}
 data: RecursiveUse has: { module-name }
-let: (use: (module-name: String)) do: [
-    # 1. find the right file path
-    # 2. read the file contents
-    # 3. create an empty module
-    # 4. somehow use a cursor in order to:
-    #     * ask C++ to parse and convert to Code (eventually should be in-language instead!)
-    #     * then call the Code from here to add to that new module
-    #     * and move to next spot in source
-    # 5. add the new module to VM modules assoc
-    # 6. use-existing-module
-    #
-    # maybe also add a stack of in-progress use: invocations to detect recursive imports
-
+let: (use: (module-name: String) path-loader: get-path contents-loader: get-contents) do: [
     (use-stack contains?: module-name) then: [
         signal: (RecursiveUse module-name: module-name)
     ] else: [
         ensure: [loaded-modules contains?: module-name] by: [
-            let: path = (find-module-file-path: module-name)
-            let: contents = (read-file: path)
+            let: path = get-path call
+            let: contents = (get-contents call: path)
             let: new-module = make-empty-assoc
             let: imports = {}
             imports use-default-modules
@@ -376,7 +379,18 @@ let: (use: (module-name: String)) do: [
                 new-module run-file: path contents: contents imports: imports
             ] cleanup: [ use-stack pop ]
         ]
-        # TODO: need to switch this up
+        # TODO: this needs update the imports vector of caller
         # use-existing-module: module-name
     ]
 ]
+
+let: (use: (module-name: String)) do: [
+    use: module-name path-loader: [
+        find-module-file-path: module-name
+    ] contents-loader: \path [
+        read-file: path
+    ]
+]
+
+IMPORT-EXISTING-MODULE: "core.bootstrap.load"
+use: user-module-name path-loader: [user-source-path] contents-loader: [user-source-contents]

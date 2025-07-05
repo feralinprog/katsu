@@ -249,11 +249,37 @@ namespace Katsu
             vm.set_modules(*r_modules);
         }
 
-        // Run some bootstrap files:
-        run_source(load_file("src/core/core.katsu"), "core", vm);
+        // Add a module with some constants for bootstrap files to use in order to load the
+        // requested "user" source.
+        {
+            Root<Assoc> r_core_bootstrap_load(gc, make_assoc(gc, /* capacity */ 3));
+            {
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "user-module-name")));
+                ValueRoot r_value(vm.gc, Value::object(make_string(vm.gc, module_name)));
+                append(vm.gc, r_core_bootstrap_load, r_name, r_value);
+            }
+            {
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "user-source-path")));
+                ValueRoot r_value(vm.gc, Value::object(make_string(vm.gc, *source.path)));
+                append(vm.gc, r_core_bootstrap_load, r_name, r_value);
+            }
+            {
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "user-source-contents")));
+                ValueRoot r_value(vm.gc, Value::object(make_string(vm.gc, *source.source)));
+                append(vm.gc, r_core_bootstrap_load, r_name, r_value);
+            }
 
-        // Run the requested "user" source:
-        return run_source(source, module_name, vm);
+            Root<Assoc> r_modules(vm.gc, vm.modules());
+            {
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.bootstrap.load")));
+                ValueRoot rv_core_builtin(gc, r_core_bootstrap_load.value());
+                append(vm.gc, r_modules, r_name, rv_core_builtin);
+            }
+            vm.set_modules(*r_modules);
+        }
+
+        // Run bootstrap files, which should run the user source.
+        return run_source(load_file("src/core/core.katsu"), "core", vm);
     }
 
     void bootstrap_and_run_file(const std::string& filepath, const std::string& module_name)

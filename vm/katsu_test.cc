@@ -926,25 +926,29 @@ let: (n triangular-num) do: [n triangular-num: 0]
 
     SECTION("nontail position - cannot tail call")
     {
+        cout_capture capture;
         input(R"(
 let: testing do: [
     TAIL-CALL: testing
     "but does something afterwards"
 ]
         )");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("TAIL-CALL: invoked not in tail position"));
+        check(Value::null());
+        CHECK_THAT(
+            capture.str(),
+            ContainsSubstring("Error: compile-error: TAIL-CALL: invoked not in tail position"));
     }
 
     SECTION("TAIL-CALL: at top level")
     {
+        cout_capture capture;
         input(R"(
 TAIL-CALL: (1 + 2)
         )");
-        CHECK_THROWS_MATCHES(run(),
-                             std::runtime_error,
-                             Message("TAIL-CALL: invoked not in tail position"));
+        check(Value::null());
+        CHECK_THAT(
+            capture.str(),
+            ContainsSubstring("Error: compile-error: TAIL-CALL: invoked not in tail position"));
     }
 
     SECTION("multimethod smoketest")

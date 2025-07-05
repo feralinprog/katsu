@@ -1,16 +1,23 @@
 #pragma once
 
 #include "ast.h"
+#include "condition.h"
 #include "gc.h"
 #include "value.h"
 
 namespace Katsu
 {
-    class compile_error : public std::runtime_error
+    class compile_error : public condition_error
     {
     public:
+        compile_error(const std::string& condition, const std::string& message,
+                      const SourceSpan& _span)
+            : condition_error(condition, message)
+            , span(_span)
+        {}
+
         compile_error(const std::string& message, const SourceSpan& _span)
-            : std::runtime_error(message)
+            : condition_error("compile-error", message)
             , span(_span)
         {}
 

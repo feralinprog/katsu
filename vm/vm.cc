@@ -246,7 +246,8 @@ namespace Katsu
                     // invoke() takes care of shifting the instruction spot.
                     this->invoke(v_method, tail_call, num_args, args);
                 } catch (const condition_error& e) {
-                    // Don't need args any more; we can do GC operations.
+                    // TODO: pass extra info, e.g. compile_error has a span that would be good to
+                    // provide. Don't need args any more; we can do GC operations.
                     Value v_method = this->v_condition_handler;
                     ValueRoot r_method(this->gc, std::move(v_method));
                     Root<String> r_condition_name(this->gc, make_string(this->gc, e.condition));
