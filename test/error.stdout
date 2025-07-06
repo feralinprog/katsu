@@ -1,0 +1,26 @@
+Error: could not load module test.
+divide-by-zero: cannot divide by integer 0
+at <src/core/core.katsu:450:1-458.2>
+at <src/core/core.katsu:248:20-248.58>
+at <src/core/core.katsu:228:23-228.52>
+at <src/core/core.katsu:248:46-248.55>
+at <src/core/core.katsu:451:5-451.98>
+at <src/core/core.katsu:394:5-430.6>
+at <src/core/core.katsu:397:31-417.10>
+at <src/core/core.katsu:292:31-292.60>
+at <src/core/core.katsu:284:5-290.6>
+at <src/core/core.katsu:287:23-287.29>
+at <src/core/core.katsu:409:13-416.14>
+at <src/core/core.katsu:268:20-268.58>
+at <src/core/core.katsu:228:23-228.52>
+at <src/core/core.katsu:268:46-268.55>
+at <src/core/core.katsu:412:17-412.78>
+at <src/core/core.katsu:363:5-370.36>
+at <src/core/core.katsu:268:20-268.58>
+at <src/core/core.katsu:228:23-228.52>
+at <src/core/core.katsu:268:46-268.55>
+at <src/core/core.katsu:366:9-368.10>
+at <src/core/core.katsu:16:9-16.18>
+at <src/core/core.katsu:367:21-367.30>
+at <test/error.katsu:2:1-2.6>
+at <src/core/condition-handler.katsu:3:5-3.73>
