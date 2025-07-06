@@ -34,7 +34,7 @@ test_source ()
     if [ -f "$expected_stdout" ]; then
         if ! cmp -s "$expected_stdout" "$stdout"; then
             echo "stdout diff from expected:"
-            git diff --no-index "$expected_stdout" "$stdout"
+            git --no-pager diff --no-index "$expected_stdout" "$stdout"
         fi
     fi
     # Check stderr whether an expected output is provided or not; if not provided, assume there
@@ -42,7 +42,7 @@ test_source ()
     if [ -f "$expected_stderr" ]; then
         if ! cmp -s "$expected_stderr" "$stderr"; then
             echo "stderr diff from expected:"
-            git diff --no-index "$expected_stderr" "$stderr"
+            git --no-pager diff --no-index "$expected_stderr" "$stderr"
         fi
     elif [ -s "$stderr" ]; then
         echo "expected no stderr, got:"
