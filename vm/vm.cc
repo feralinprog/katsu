@@ -247,7 +247,8 @@ namespace Katsu
                     this->invoke(v_method, tail_call, num_args, args);
                 } catch (const condition_error& e) {
                     // TODO: pass extra info, e.g. compile_error has a span that would be good to
-                    // provide. Don't need args any more; we can do GC operations.
+                    // provide.
+                    // Don't need args any more; we can do GC operations.
                     Value v_method = this->v_condition_handler;
                     ASSERT_MSG(v_method.is_obj_multimethod(),
                                "cannot raise conditions until v_condition_handler is set");
