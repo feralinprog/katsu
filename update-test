@@ -1,0 +1,17 @@
+#!/bin/bash
+
+if [ $# -ne 1 ]; then
+    echo "usage: ./update-test <name>   -- runs test/<test>.katsu in order to generate test/<name>.stdout and test/<name>.stderr" >&2
+    exit 1
+fi
+
+name="$1"
+
+./run b
+
+echo "============ RUNNING test/$name.katsu ==============="
+out/katsu test test/$name.katsu >test/$name.stdout 2>test/$name.stdout
+
+if [ ! -s "test/$name.stdout" ]; then
+    rm -f test/$name.stdout
+fi
