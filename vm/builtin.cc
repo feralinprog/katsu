@@ -659,16 +659,20 @@ namespace Katsu
         ASSERT(nargs == 2);
         std::string filepath = native_str(args[1].obj_string());
 
-        std::ifstream file_stream;
-        // Raise exceptions on logical error or read/write error.
-        file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        file_stream.open(filepath.c_str());
+        try {
+            std::ifstream file_stream;
+            // Raise exceptions on logical error or read/write error.
+            file_stream.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+            file_stream.open(filepath.c_str());
 
-        std::stringstream str_stream;
-        str_stream << file_stream.rdbuf();
-        std::string file_contents = str_stream.str();
+            std::stringstream str_stream;
+            str_stream << file_stream.rdbuf();
+            std::string file_contents = str_stream.str();
 
-        return Value::object(make_string(vm.gc, file_contents));
+            return Value::object(make_string(vm.gc, file_contents));
+        } catch (const std::ios_base::failure& e) {
+            throw condition_error("io-error", e.what());
+        }
     }
 
     Value native__make_empty_assoc(VM& vm, int64_t nargs, Value* args)
