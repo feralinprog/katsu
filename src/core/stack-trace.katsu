@@ -1,6 +1,6 @@
 use: {
     "core.builtin.extra"
-    "core/code.katsu"
+    "core.code"
 }
 
 let: (segment: CallSegment) length do: [

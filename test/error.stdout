@@ -1,26 +1,26 @@
 Error: could not load module test.
 divide-by-zero: cannot divide by integer 0
-at <src/core/core.katsu:305:1-313.2>
+at <src/core/core.katsu:317:1-325.2>
 at <src/core/core.katsu:146:20-146.61>
 at <src/core/core.katsu:42:23-42.52>
 at <src/core/core.katsu:146:49-146.58>
-at <src/core/core.katsu:306:5-306.98>
-at <src/core/core.katsu:229:5-265.6>
-at <src/core/core.katsu:232:31-252.10>
+at <src/core/core.katsu:318:5-318.98>
+at <src/core/core.katsu:241:5-277.6>
+at <src/core/core.katsu:244:31-264.10>
 at <src/core/core.katsu:189:31-189.60>
 at <src/core/core.katsu:181:5-187.6>
 at <src/core/core.katsu:184:23-184.29>
-at <src/core/core.katsu:244:13-251.14>
+at <src/core/core.katsu:256:13-263.14>
 at <src/core/core.katsu:169:20-169.61>
 at <src/core/core.katsu:42:23-42.52>
 at <src/core/core.katsu:169:49-169.58>
-at <src/core/core.katsu:247:17-247.78>
-at <src/core/core.katsu:198:5-205.36>
+at <src/core/core.katsu:259:17-259.78>
+at <src/core/core.katsu:210:5-217.36>
 at <src/core/core.katsu:169:20-169.61>
 at <src/core/core.katsu:42:23-42.52>
 at <src/core/core.katsu:169:49-169.58>
-at <src/core/core.katsu:201:9-203.10>
+at <src/core/core.katsu:213:9-215.10>
 at <src/core/core.katsu:14:9-14.18>
-at <src/core/core.katsu:202:21-202.30>
+at <src/core/core.katsu:214:21-214.30>
 at <test/error.katsu:2:1-2.6>
 at <src/core/condition-handler.katsu:3:5-3.73>

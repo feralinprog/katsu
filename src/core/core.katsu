@@ -188,9 +188,21 @@ let: (ensure: p? by: a else: default) do: [
 ]
 let: (ensure: p? by: a) do: [ ensure: p? by: a else: [null] ]
 
+let: (s: String) length do: [ s unsafe-read-u64-at-offset: 8 ]
 let: (find-module-file-path: (module-name: String)) do: [
     # TODO: do something more reasonable than this
-    "src/" ~ module-name
+    let: path = module-name ~ ""
+    # Replace all '.' with '/'.
+    mut: i = 0
+    while: [i < path length] do: [
+        let: offset = 16 + i
+        if: (path unsafe-read-u8-at-offset: offset) = 46 then: [
+            path unsafe-write-u8-at-offset: offset value: 47
+        ]
+        i: i + 1
+    ]
+
+    "src/" ~ path ~ ".katsu"
 ]
 
 let: ((module: Assoc) run-file: (path: String) contents: (contents: String) imports: (imports: Vector)) do: [
@@ -279,7 +291,7 @@ let: (use: (module-names: Vector)) do: [
 # Define the native->in-language condition handler in a separate module, as otherwise test code
 # runs into issues trying to define their own handlers (since 'core' is always imported).
 # TODO: ideally this would just be a private module under core.
-use: "core/condition-handler.katsu"
+use: "core.condition-handler"
 
 let: (s: String) >string do: [ s ]
 
@@ -298,8 +310,8 @@ let: (n: Fixnum) >string do: [
     ]
 ]
 
-use: "core/stack-trace.katsu"
-IMPORT-EXISTING-MODULE: "core/stack-trace.katsu"
+use: "core.stack-trace"
+IMPORT-EXISTING-MODULE: "core.stack-trace"
 
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"
 try: [
