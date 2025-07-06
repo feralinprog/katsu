@@ -1,4 +1,5 @@
 use: "core.builtin.extra"
+use: "core/optional.katsu"
 
 pretty-print: 10 + 20
 

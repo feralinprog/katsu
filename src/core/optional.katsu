@@ -1,0 +1,20 @@
+data: Optional has: {}
+data: OptionalSome extends: { Optional } has: { value }
+data: OptionalNone extends: { Optional } has: {}
+
+let: (some: value) do: [ OptionalSome value: value ]
+let: none          do: [ OptionalNone new ]
+
+let: ((opt: OptionalSome) then: some-body else: none-body) do: [
+    some-body call: opt .value
+]
+let: ((opt: OptionalNone) then: some-body else: none-body) do: [
+    none-body call
+]
+
+data: NoneValue extends: { Condition } has: {}
+let: ((opt: Optional) value!) do: [
+    opt then: [it] else: [
+        (NoneValue condition: "none-value" message: "none has no value" stack: null) signal
+    ]
+]
