@@ -1,0 +1,52 @@
+use: "core.builtin.extra"
+
+let: ((n: Fixnum) times: body) do: [
+    mut: i = 0
+    while: [i < n] do: [
+        body call: i
+        i: i + 1
+    ]
+]
+
+let: (a: Array) length do: [
+    a unsafe-read-u64-at-offset: 1
+]
+let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
+    a unsafe-read-value-at-offset: 2 + i
+]
+
+let: (_: Null) >string do: ["null"]
+let: (b: Bool) >string do: [b then: "t" else: "f"]
+
+let: v pr do: [
+    print: v >string
+    v
+]
+
+data: ReturnMarker has: {}
+let: body with-return do: [
+    let: marker = ReturnMarker new
+    let: result = (shift: [
+        OkUnwinding value: (body call: \return-value [
+            reset: (ReturnUnwinding marker: marker return-value: return-value)
+        ])
+    ])
+    assert: (result instance?: Unwinding)
+    result on-ok: [ result .value ] on-condition: [
+        # Re-raise any conditions.
+        reset: result
+    ] on-return: [
+        # If it's _our_ return, then stop here; else keep unwinding.
+        (result .marker id=: marker) then: [
+            result .return-value
+        ] else: [
+            reset: result
+        ]
+    ]
+]
+
+let: (it do: f) do: [f call: it]
+
+let: not-implemented do: [
+    (NotImplemented condition: "not-implemented" message: "not implemented" stack: null) signal
+]

@@ -1,9 +1,7 @@
 IMPORT-EXISTING-MODULE: "core.builtin.extra"
 
-let: (if: (cond: Bool) then: tbody else: fbody) do: [
-    # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
-    TAIL-CALL: (cond then: tbody else: fbody)
-]
+# This file is essentially a minimum amount of code to get to the point where we can define `use:`
+# and start loading other modules.
 
 let: (if: (cond: Bool) then: tbody) do: [
     # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
@@ -18,186 +16,10 @@ let: (while: (cond: Closure) do: (body: Closure)) do: [
     ] else: null)
 ]
 
-let: ((n: Fixnum) times: body) do: [
-    mut: i = 0
-    while: [i < n] do: [
-        body call: i
-        i: i + 1
-    ]
-]
-
-let: (v: Vector) length do: [
-    v unsafe-read-u64-at-offset: 1
-]
-let: (v: Vector) backing-array do: [
-    v unsafe-read-value-at-offset: 2
-]
-let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
-    v backing-array unsafe-at: i
-]
-
-let: (segment: CallSegment) length do: [
-    segment unsafe-read-u64-at-offset: 1
-]
-
-data: Frame has: { segment; offset }
-let: ((frame: Frame) unsafe-read-u64-at-offset: (offset: Fixnum)) do: [
-    frame .segment unsafe-read-u64-at-offset: (2 + frame .offset + offset)
-]
-let: ((frame: Frame) unsafe-read-value-at-offset: (offset: Fixnum)) do: [
-    frame .segment unsafe-read-value-at-offset: (2 + frame .offset + offset)
-]
-let: (frame: Frame) .code do: [
-    frame unsafe-read-value-at-offset: 1
-]
-let: (frame: Frame) .inst-spot do: [
-    frame .segment unsafe-read-u32-at-offset: (2 + frame .offset + 2) * 2
-]
-let: (frame: Frame) .#regs do: [
-    frame unsafe-read-u64-at-offset: 3
-]
-let: (frame: Frame) .#data do: [
-    frame unsafe-read-u64-at-offset: 4
-]
-let: (frame: Frame) .data-depth do: [
-    frame unsafe-read-u64-at-offset: 5
-]
-let: (frame: Frame) .module do: [
-    frame unsafe-read-value-at-offset: 6
-]
-let: (frame: Frame) .marker do: [
-    frame unsafe-read-value-at-offset: 7
-]
-let: (frame: Frame) next do: [
-    Frame segment: frame .segment offset: (
-        frame .offset + 8 + frame .#regs + frame .#data
-    )
-]
-
-let: (code: Code) .module do: [
-    code unsafe-read-value-at-offset: 1
-]
-let: (code: Code) .#params do: [
-    code unsafe-read-u32-at-offset: 2 * 2
-]
-let: (code: Code) .#regs do: [
-    code unsafe-read-u32-at-offset: 2 * 2 + 1
-]
-let: (code: Code) .#data do: [
-    code unsafe-read-u32-at-offset: 3 * 2
-]
-let: (code: Code) .upreg-map do: [
-    code unsafe-read-value-at-offset: 4
-]
-let: (code: Code) .insts do: [
-    code unsafe-read-value-at-offset: 5
-]
-let: (code: Code) .args do: [
-    code unsafe-read-value-at-offset: 6
-]
-let: (code: Code) .span do: [
-    code unsafe-read-value-at-offset: 7
-]
-let: (code: Code) .inst-spans do: [
-    code unsafe-read-value-at-offset: 8
-]
-
-let: (t: Tuple) length do: [
-    t unsafe-read-u64-at-offset: 1
-]
-let: ((t: Tuple) unsafe-at: (i: Fixnum)) do: [
-    t unsafe-read-value-at-offset: 2 + i
-]
-
-let: (a: Array) length do: [
-    a unsafe-read-u64-at-offset: 1
-]
-let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
-    a unsafe-read-value-at-offset: 2 + i
-]
-
-data: SourceLocation has: { index; line; column }
-data: SourceSpan has: { file; start; end }
-let: (t: Tuple) >SourceSpan do: [
-    SourceSpan file: (t unsafe-at: 0) start: (
-        SourceLocation index: (t unsafe-at: 1) line: (t unsafe-at: 2) column: (t unsafe-at: 3)
-    ) end: (
-        SourceLocation index: (t unsafe-at: 4) line: (t unsafe-at: 5) column: (t unsafe-at: 6)
-    )
-]
-
-let: digit-strings = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
-let: (n: Fixnum) digit>string do: [
-    digit-strings unsafe-at: n
-]
-
-let: ((a: Fixnum) mod: (n: Fixnum)) do: [ a - (a / n) * n ]
-
-let: (s: String) >string do: [ s ]
-let: (n: Fixnum) >string do: [
-    n < 0 then: ["-" ~ (- n) >string] else: [
-        n < 10 then: [n digit>string] else: [
-            (n / 10) >string ~ (n mod: 10) digit>string
-        ]
-    ]
-]
-let: (_: Null) >string do: ["null"]
-let: (b: Bool) >string do: [b then: "t" else: "f"]
-
-let: v pr do: [
-    print: v >string
-    v
-]
-
-let: (span: SourceSpan) >string do: [
-    "<" ~ span .file ~ ":" ~ (
-        (span .start .line + 1) >string ~ ":" ~ (span .start .column + 1) >string
-    ) ~ "-" ~ (
-        (span .end .line + 1) >string ~ "." ~ (span .end .column + 1) >string
-    ) ~ ">"
-]
-
-let: ((segment: CallSegment) each-frame: f) do: [
-    mut: frame = (Frame segment: segment offset: 0)
-    # TODO: multiplying by 8 (= sizeof(Value)) is super hacky here.
-    while: [frame .offset * 8 < segment length] do: [
-        f call: frame
-        frame: frame next
-    ]
-]
-
-let: (segment: CallSegment) print-trace-except-top do: [
-    segment each-frame: \fr [
-        # TODO: *8 here also super hacky
-        let: top? = fr next .offset * 8 >= segment length
-        if: not top? then: [
-            # Go back one instruction; each frame indicates where to _return_ to, and the previous
-            # op is the caller.
-            let: span = (fr .code .inst-spans unsafe-at: (fr .inst-spot - 1)) >SourceSpan 
-            print: "at " ~ (span >string)
-        ]
-    ]
-]
-
-data: StopIteration has: { value }
-let: ((v: Vector) each: f) do: [
-    mut: i = 0
-    mut: last = null
-    while: [i < v length and not (last instance?: StopIteration)] do: [
-        last: (f call: (v unsafe-at: i))
-        i: i + 1
-    ]
-    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
-]
-
 data: Condition has: { condition; message; stack }
 data: NotImplemented extends: { Condition } has: {}
 data: AssertionFailed extends: { Condition } has: {}
 # TODO: subtypes instead of condition field
-
-let: *default-mark* = 0
-let: (shift: f) do: [ f call/marked: *default-mark* ]
-let: (reset: f) do: [ f call/dc:     *default-mark* ]
 
 data: Unwinding has: {}
 data: OkUnwinding extends: { Unwinding } has: { value }
@@ -216,6 +38,10 @@ let: ((u: ReturnUnwinding) on-ok: ok-handler on-condition: condition-handler on-
     return-handler call: u
 ]
 
+let: *default-mark* = 0
+let: (shift: f) do: [ f call/marked: *default-mark* ]
+let: (reset: f) do: [ f call/dc:     *default-mark* ]
+
 let: (c: Condition) signal/no-trace do: [
     reset: [ConditionUnwinding cond: c]
 ]
@@ -228,6 +54,90 @@ let: (assert: (b: Bool)) do: [
     if: not b then: [
         (AssertionFailed condition: "assertion-failure" message: "an assertion failed" stack: null) signal
     ]
+]
+
+let: (v: Vector) length do: [
+    v unsafe-read-u64-at-offset: 1
+]
+let: (v: Vector) backing-array do: [
+    v unsafe-read-value-at-offset: 2
+]
+let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
+    v backing-array unsafe-at: i
+]
+
+data: StopIteration has: { value }
+let: ((v: Vector) each: f) do: [
+    mut: i = 0
+    mut: last = null
+    while: [i < v length and not (last instance?: StopIteration)] do: [
+        last: (f call: (v unsafe-at: i))
+        i: i + 1
+    ]
+    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+]
+
+let: ((v: Vector) contains?: x) do: [
+    v each: [ (it = x) then: [ StopIteration value: t ] else: f ]
+]
+
+let: ((v: Vector) push: x) do: [ v append: x ]
+let: (v: Vector) pop do: [
+    assert: v length > 0
+    let: new-length = v length - 1
+    let: end = (v unsafe-at: new-length)
+    v unsafe-write-u64-at-offset: 1 value: new-length
+    end
+]
+let: (v: Vector) peek do: [
+    assert: v length > 0
+    v unsafe-at: (v length - 1)
+]
+let: (v: Vector) empty? do: [
+    v length = 0
+]
+
+let: ((a: Assoc) length) do: [
+    a unsafe-read-u64-at-offset: 1
+]
+let: ((a: Assoc) backing-array) do: [
+    a unsafe-read-value-at-offset: 2
+]
+
+let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
+    a unsafe-read-value-at-offset: 2 + i
+]
+
+let: ((a: Assoc) each-entry: f) do: [
+    mut: i = 0
+    mut: last = null
+    while: [i < a length and not (last instance?: StopIteration)] do: [
+        last: (f call*: (a backing-array unsafe-at: i * 2), (a backing-array unsafe-at: i * 2 + 1))
+        i: i + 1
+    ]
+    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+]
+let: ((a: Assoc) at*: key) do: [
+    a each-entry: \k v [ (k = key) then: [ StopIteration value: v ] else: null ]
+]
+let: ((a: Assoc) each-key: f) do: [
+    mut: i = 0
+    mut: last = null
+    while: [i < a length and not (last instance?: StopIteration)] do: [
+        last: (f call: (a backing-array unsafe-at: i * 2))
+        i: i + 1
+    ]
+    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+]
+let: ((a: Assoc) contains?: k) do: [
+    a each-key: [ (it = k) then: [ StopIteration value: t ] else: f ]
+]
+
+let: (t: Tuple) length do: [
+    t unsafe-read-u64-at-offset: 1
+]
+let: ((t: Tuple) unsafe-at: (i: Fixnum)) do: [
+    t unsafe-read-value-at-offset: 2 + i
 ]
 
 # handlers should be a vector of (type <= Exception, handler) pairs.
@@ -267,28 +177,6 @@ let: (body finally: recover) do: [
     ]
 ]
 
-data: ReturnMarker has: {}
-let: body with-return do: [
-    let: marker = ReturnMarker new
-    let: result = (shift: [
-        OkUnwinding value: (body call: \return-value [
-            reset: (ReturnUnwinding marker: marker return-value: return-value)
-        ])
-    ])
-    assert: (result instance?: Unwinding)
-    result on-ok: [ result .value ] on-condition: [
-        # Re-raise any conditions.
-        reset: result
-    ] on-return: [
-        # If it's _our_ return, then stop here; else keep unwinding.
-        (result .marker id=: marker) then: [
-            result .return-value
-        ] else: [
-            reset: result
-        ]
-    ]
-]
-
 let: (ensure: p? by: a else: default) do: [
     (p? call) then: [
         default call
@@ -300,71 +188,9 @@ let: (ensure: p? by: a else: default) do: [
 ]
 let: (ensure: p? by: a) do: [ ensure: p? by: a else: [null] ]
 
-let: ((v: Vector) contains?: x) do: [
-    v each: [ (it = x) then: [ StopIteration value: t ] else: f ]
-]
-
-let: (it do: f) do: [f call: it]
-
 let: (find-module-file-path: (module-name: String)) do: [
     # TODO: do something more reasonable than this
     "src/" ~ module-name
-]
-
-let: ((a: Assoc) length) do: [
-    a unsafe-read-u64-at-offset: 1
-]
-let: ((a: Assoc) backing-array) do: [
-    a unsafe-read-value-at-offset: 2
-]
-
-let: ((v: Vector) push: x) do: [ v append: x ]
-let: (v: Vector) pop do: [
-    assert: v length > 0
-    let: new-length = v length - 1
-    let: end = (v unsafe-at: new-length)
-    v unsafe-write-u64-at-offset: 1 value: new-length
-    end
-]
-let: (v: Vector) peek do: [
-    assert: v length > 0
-    v unsafe-at: (v length - 1)
-]
-let: (v: Vector) empty? do: [
-    v length = 0
-]
-
-let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
-    a unsafe-read-value-at-offset: 2 + i
-]
-let: ((a: Assoc) each-key: f) do: [
-    mut: i = 0
-    mut: last = null
-    while: [i < a length and not (last instance?: StopIteration)] do: [
-        last: (f call: (a backing-array unsafe-at: i * 2))
-        i: i + 1
-    ]
-    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
-]
-let: ((a: Assoc) contains?: k) do: [
-    a each-key: [ (it = k) then: [ StopIteration value: t ] else: f ]
-]
-
-let: ((a: Assoc) each-entry: f) do: [
-    mut: i = 0
-    mut: last = null
-    while: [i < a length and not (last instance?: StopIteration)] do: [
-        last: (f call*: (a backing-array unsafe-at: i * 2), (a backing-array unsafe-at: i * 2 + 1))
-        i: i + 1
-    ]
-    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
-]
-let: ((a: Assoc) at*: key) do: [
-    a each-entry: \k v [ (k = key) then: [ StopIteration value: v ] else: null ]
-]
-
-let: not-implemented do: [
-    (NotImplemented condition: "not-implemented" message: "not implemented" stack: null) signal
 ]
 
 let: ((module: Assoc) run-file: (path: String) contents: (contents: String) imports: (imports: Vector)) do: [
@@ -454,6 +280,26 @@ let: (use: (module-names: Vector)) do: [
 # runs into issues trying to define their own handlers (since 'core' is always imported).
 # TODO: ideally this would just be a private module under core.
 use: "core/condition-handler.katsu"
+
+let: (s: String) >string do: [ s ]
+
+let: digit-strings = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+let: (n: Fixnum) digit>string do: [
+    digit-strings unsafe-at: n
+]
+
+let: ((a: Fixnum) mod: (n: Fixnum)) do: [ a - (a / n) * n ]
+
+let: (n: Fixnum) >string do: [
+    n < 0 then: ["-" ~ (- n) >string] else: [
+        n < 10 then: [n digit>string] else: [
+            (n / 10) >string ~ (n mod: 10) digit>string
+        ]
+    ]
+]
+
+use: "core/stack-trace.katsu"
+IMPORT-EXISTING-MODULE: "core/stack-trace.katsu"
 
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"
 try: [

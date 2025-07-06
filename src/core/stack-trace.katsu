@@ -1,0 +1,82 @@
+use: {
+    "core.builtin.extra"
+    "core/code.katsu"
+}
+
+let: (segment: CallSegment) length do: [
+    segment unsafe-read-u64-at-offset: 1
+]
+
+data: Frame has: { segment; offset }
+let: ((frame: Frame) unsafe-read-u64-at-offset: (offset: Fixnum)) do: [
+    frame .segment unsafe-read-u64-at-offset: (2 + frame .offset + offset)
+]
+let: ((frame: Frame) unsafe-read-value-at-offset: (offset: Fixnum)) do: [
+    frame .segment unsafe-read-value-at-offset: (2 + frame .offset + offset)
+]
+let: (frame: Frame) .code do: [
+    frame unsafe-read-value-at-offset: 1
+]
+let: (frame: Frame) .inst-spot do: [
+    frame .segment unsafe-read-u32-at-offset: (2 + frame .offset + 2) * 2
+]
+let: (frame: Frame) .#regs do: [
+    frame unsafe-read-u64-at-offset: 3
+]
+let: (frame: Frame) .#data do: [
+    frame unsafe-read-u64-at-offset: 4
+]
+let: (frame: Frame) .data-depth do: [
+    frame unsafe-read-u64-at-offset: 5
+]
+let: (frame: Frame) .module do: [
+    frame unsafe-read-value-at-offset: 6
+]
+let: (frame: Frame) .marker do: [
+    frame unsafe-read-value-at-offset: 7
+]
+let: (frame: Frame) next do: [
+    Frame segment: frame .segment offset: (
+        frame .offset + 8 + frame .#regs + frame .#data
+    )
+]
+
+let: ((segment: CallSegment) each-frame: f) do: [
+    mut: frame = (Frame segment: segment offset: 0)
+    # TODO: multiplying by 8 (= sizeof(Value)) is super hacky here.
+    while: [frame .offset * 8 < segment length] do: [
+        f call: frame
+        frame: frame next
+    ]
+]
+
+data: SourceLocation has: { index; line; column }
+data: SourceSpan has: { file; start; end }
+let: (t: Tuple) >SourceSpan do: [
+    SourceSpan file: (t unsafe-at: 0) start: (
+        SourceLocation index: (t unsafe-at: 1) line: (t unsafe-at: 2) column: (t unsafe-at: 3)
+    ) end: (
+        SourceLocation index: (t unsafe-at: 4) line: (t unsafe-at: 5) column: (t unsafe-at: 6)
+    )
+]
+
+let: (span: SourceSpan) >string do: [
+    "<" ~ span .file ~ ":" ~ (
+        (span .start .line + 1) >string ~ ":" ~ (span .start .column + 1) >string
+    ) ~ "-" ~ (
+        (span .end .line + 1) >string ~ "." ~ (span .end .column + 1) >string
+    ) ~ ">"
+]
+
+let: (segment: CallSegment) print-trace-except-top do: [
+    segment each-frame: \fr [
+        # TODO: *8 here also super hacky
+        let: top? = fr next .offset * 8 >= segment length
+        if: not top? then: [
+            # Go back one instruction; each frame indicates where to _return_ to, and the previous
+            # op is the caller.
+            let: span = (fr .code .inst-spans unsafe-at: (fr .inst-spot - 1)) >SourceSpan 
+            print: "at " ~ (span >string)
+        ]
+    ]
+]
