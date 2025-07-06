@@ -936,7 +936,7 @@ let: testing do: [
         check(Value::null());
         CHECK_THAT(
             capture.str(),
-            ContainsSubstring("Error: compile-error: TAIL-CALL: invoked not in tail position"));
+            ContainsSubstring("compile-error: TAIL-CALL: invoked not in tail position"));
     }
 
     SECTION("TAIL-CALL: at top level")
@@ -948,7 +948,7 @@ TAIL-CALL: (1 + 2)
         check(Value::null());
         CHECK_THAT(
             capture.str(),
-            ContainsSubstring("Error: compile-error: TAIL-CALL: invoked not in tail position"));
+            ContainsSubstring("compile-error: TAIL-CALL: invoked not in tail position"));
     }
 
     SECTION("multimethod smoketest")

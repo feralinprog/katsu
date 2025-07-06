@@ -132,11 +132,6 @@ pretty-print: (tup unsafe-at: 0)
 pretty-print: (tup unsafe-at: 1)
 pretty-print: (tup unsafe-at: 2)
 
-print: "-----------------"
-
-let: i = 12
-print: ((Frame segment: (null) get-call-stack offset: 0) .code .inst-spans unsafe-at: i) >SourceSpan >string
-
 print: "----------------------------------"
 
 print: "aaaaa"
@@ -156,45 +151,58 @@ print: "zzzzz"
 
 print: "----------------------------------"
 
-print: (\return [
-    print: "doing some things"
-    return call: "early return"
-    print: "oops, after return!"
-] with-return)
-
-print: "----------------------------------"
-
-\r [
-    print: "doing some setup"
-    [
-        print: "doing some calcs"
-        r call
-        print: "after early return - shouldn't see this at all"
-    ] cleanup: [
-        print: "cleaning up!"
-    ]
-    print: "after cleanup - also shouldn't see this, since early return should still be active"
-] with-return
+# print: (\return [
+#     print: "doing some things"
+#     return call: "early return"
+#     print: "oops, after return!"
+# ] with-return)
+# 
+# print: "----------------------------------"
+# 
+# \r [
+#     print: "doing some setup"
+#     [
+#         print: "doing some calcs"
+#         r call
+#         print: "after early return - shouldn't see this at all"
+#     ] cleanup: [
+#         print: "cleaning up!"
+#     ]
+#     print: "after cleanup - also shouldn't see this, since early return should still be active"
+# ] with-return
 
 let: n do-test do: [
     TAIL-CALL: (n = 0 then: [ () >string ] else: [
         (n - 1) do-test
     ])
 ]
-5 do-test
 
 try: [
-    print: "before throw"
-    (Exception message: "I'm an exception!" stack: null) throw
-    print: "after throw"
+    5 do-test
 ] except: {
-    (Exception, \e [ print: "Got exception: " ~ e .message; e .stack print-trace-except-top ])
+    (Condition, \cond [
+        assert: cond .condition = "no-matching-method"
+    ])
+}
+
+try: [
+    print: "before signal"
+    (Condition condition: "a condition" message: "I'm a signal!" stack: null) signal
+    print: "after signal"
+] except: {
+    (Condition, \c [ print: "Got signal: " ~ c .condition ~ " - " ~ c .message; c .stack print-trace-except-top ])
 }
 
 let: divide-by-zero do: [
     1 / 0
 ]
-divide-by-zero
+try: [
+    divide-by-zero
+] except: {
+    (Condition, \cond [
+        assert: cond .condition = "divide-by-zero"
+    ])
+}
 
 pretty-print: ({ 1; 2; 3 } contains?: 1)
 pretty-print: ({ 1; 2; 3 } contains?: 2)

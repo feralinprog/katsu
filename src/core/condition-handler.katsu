@@ -1,5 +1,5 @@
 use: "core.builtin.extra"
 let: (condition handle-raw-condition-with-message: message) do: [
-    signal: (Condition condition: condition message: message)
+    (Condition condition: condition message: message stack: null) signal
 ]
 set-condition-handler-from-module
