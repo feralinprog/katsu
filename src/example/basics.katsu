@@ -151,25 +151,25 @@ print: "zzzzz"
 
 print: "----------------------------------"
 
-# print: (\return [
-#     print: "doing some things"
-#     return call: "early return"
-#     print: "oops, after return!"
-# ] with-return)
-# 
-# print: "----------------------------------"
-# 
-# \r [
-#     print: "doing some setup"
-#     [
-#         print: "doing some calcs"
-#         r call
-#         print: "after early return - shouldn't see this at all"
-#     ] cleanup: [
-#         print: "cleaning up!"
-#     ]
-#     print: "after cleanup - also shouldn't see this, since early return should still be active"
-# ] with-return
+print: (\return [
+    print: "doing some things"
+    return call: "early return"
+    print: "oops, after return!"
+] with-return)
+
+print: "----------------------------------"
+
+print: (\r [
+    print: "doing some setup"
+    [
+        print: "doing some calcs"
+        r call: "return value here"
+        print: "after early return - shouldn't see this at all"
+    ] finally: [
+        print: "cleaning up!"
+    ]
+    print: "after cleanup - also shouldn't see this, since early return should still be active"
+] with-return)
 
 let: n do-test do: [
     TAIL-CALL: (n = 0 then: [ () >string ] else: [

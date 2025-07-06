@@ -213,12 +213,6 @@ let: ((v: Vector) each: f) do: [
     (last instance?: StopIteration) then: [ last .value ] else: [ last ]
 ]
 
-data: Result has: {}
-data: OkResult extends: { Result } has: { value }
-data: ErrorResult extends: { Result } has: {
-    cond # TODO: should be Condition
-}
-
 data: Condition has: { condition; message; stack }
 data: NotImplemented extends: { Condition } has: {}
 data: AssertionFailed extends: { Condition } has: {}
@@ -228,8 +222,25 @@ let: *default-mark* = 0
 let: (shift: f) do: [ f call/marked: *default-mark* ]
 let: (reset: f) do: [ f call/dc:     *default-mark* ]
 
+data: Unwinding has: {}
+data: OkUnwinding extends: { Unwinding } has: { value }
+data: ConditionUnwinding extends: { Unwinding } has: {
+    cond # TODO: should be Condition
+}
+data: ReturnUnwinding extends: { Unwinding } has: { marker; return-value }
+
+let: ((u: OkUnwinding) on-ok: ok-handler on-condition: condition-handler on-return: return-handler) do: [
+    ok-handler call: u
+]
+let: ((u: ConditionUnwinding) on-ok: ok-handler on-condition: condition-handler on-return: return-handler) do: [
+    condition-handler call: u
+]
+let: ((u: ReturnUnwinding) on-ok: ok-handler on-condition: condition-handler on-return: return-handler) do: [
+    return-handler call: u
+]
+
 let: (c: Condition) signal/no-trace do: [
-    reset: [ErrorResult cond: c]
+    reset: [ConditionUnwinding cond: c]
 ]
 let: (c: Condition) signal do: [
     c stack: get-call-stack
@@ -245,9 +256,9 @@ let: (assert: (b: Bool)) do: [
 # handlers should be a vector of (type <= Exception, handler) pairs.
 # TODO: improve the error handling here.
 let: (try: body except: handlers) do: [
-    let: result = (shift: [ OkResult value: (body call) ])
-    assert: (result instance?: Result)
-    (result instance?: OkResult) then: [ result .value ] else: [
+    let: result = (shift: [ OkUnwinding value: (body call) ])
+    assert: (result instance?: Unwinding)
+    result on-ok: [ result .value ] on-condition: [
         let: cond = result .cond
         # Search through handlers for a handler matching this condition;
         # else re-raise the signal.
@@ -261,24 +272,45 @@ let: (try: body except: handlers) do: [
             ]
         ])
         handled then: [ handler-result ] else: [ cond signal/no-trace ]
+    ] on-return: [
+        # Continue returning.
+        reset: result
     ]
 ]
 
 let: (body finally: recover) do: [
-    let: result = (shift: [ OkResult value: (body call) ])
+    let: result = (shift: [ OkUnwinding value: (body call) ])
     recover call
-    assert: (result instance?: Result)
-    # Re-raise if the body signaled a condition.
-    (result instance?: OkResult) then: [ result .value ] else: [
-        result .cond signal/no-trace
+    assert: (result instance?: Unwinding)
+    # Re-reset down to the next shift for conditions or returns.
+    result on-ok: [ result .value ] on-condition: [
+        reset: result
+    ] on-return: [
+        reset: result
     ]
 ]
 
-# let: f with-return do: [
-#     f call: \return-value [
-#         reset: (OkResult value: return-value)
-#     ]
-# ]
+data: ReturnMarker has: {}
+let: body with-return do: [
+    let: marker = ReturnMarker new
+    let: result = (shift: [
+        OkUnwinding value: (body call: \return-value [
+            reset: (ReturnUnwinding marker: marker return-value: return-value)
+        ])
+    ])
+    assert: (result instance?: Unwinding)
+    result on-ok: [ result .value ] on-condition: [
+        # Re-raise any conditions.
+        reset: result
+    ] on-return: [
+        # If it's _our_ return, then stop here; else keep unwinding.
+        (result .marker id=: marker) then: [
+            result .return-value
+        ] else: [
+            reset: result
+        ]
+    ]
+]
 
 let: (ensure: p? by: a else: default) do: [
     (p? call) then: [
