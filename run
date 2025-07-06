@@ -19,10 +19,47 @@ build ()
     cmake $CMAKE_BUILD_FLAGS --build out
 }
 
+# test_source <module.name> <path/to/source.katsu>
+test_source ()
+{
+    module_name="$1"
+    source="$2"
+    expected_stdout="${source%.katsu}.stdout"
+    expected_stderr="${source%.katsu}.stderr"
+    stdout=$(mktemp --tmpdir "test-source-stdout.XXXXXXXXXXX")
+    stderr=$(mktemp --tmpdir "test-source-stderr.XXXXXXXXXXX")
+    echo "===== testing source: $source ====="
+    out/katsu "$module_name" "$source" >$stdout 2>$stderr
+    # Check stdout if an expected output is provided.
+    if [ -f "$expected_stdout" ]; then
+        if ! cmp -s "$expected_stdout" "$stdout"; then
+            echo "stdout diff from expected:"
+            git diff --no-index "$expected_stdout" "$stdout"
+        fi
+    fi
+    # Check stderr whether an expected output is provided or not; if not provided, assume there
+    # should be no stderr emitted.
+    if [ -f "$expected_stderr" ]; then
+        if ! cmp -s "$expected_stderr" "$stderr"; then
+            echo "stderr diff from expected:"
+            git diff --no-index "$expected_stderr" "$stderr"
+        fi
+    elif [ -s "$stderr" ]; then
+        echo "expected no stderr, got:"
+        cat "$stderr"
+        return 1
+    fi
+    echo "Test passed"
+}
+
 test ()
 {
     echo "================== TESTING =================="
     out/test $@
+
+    for f in $(find test/ -name "*.katsu"); do
+        test_source test $f
+    done
 }
 
 _valgrind ()
