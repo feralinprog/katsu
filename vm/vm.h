@@ -124,6 +124,7 @@ namespace Katsu
         SET_SLOT,
     };
 
+    // Keep in sync with stack-trace.katsu.
     struct Frame
     {
         // Frame which called this one, or nullptr if bottom of stack.
@@ -203,6 +204,7 @@ namespace Katsu
         }
     };
     static_assert(sizeof(Frame) % sizeof(Value) == 0);
+    static_assert(sizeof(Frame) == 64);
 
     enum BuiltinId
     {

@@ -9,10 +9,10 @@ let: ((n: Fixnum) times: body) do: [
 ]
 
 let: (a: Array) length do: [
-    a unsafe-read-u64-at-offset: 1
+    a unsafe-read-u64-at-offset: 8
 ]
 let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
-    a unsafe-read-value-at-offset: 2 + i
+    a unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
 let: (_: Null) >string do: ["null"]

@@ -4,47 +4,53 @@ use: {
 }
 
 let: (segment: CallSegment) length do: [
-    segment unsafe-read-u64-at-offset: 1
+    segment unsafe-read-u64-at-offset: 8
 ]
 
 data: Frame has: { segment; offset }
+let: ((frame: Frame) unsafe-read-u8-at-offset: (offset: Fixnum)) do: [
+    frame .segment unsafe-read-u8-at-offset: (16 + frame .offset + offset)
+]
+let: ((frame: Frame) unsafe-read-u32-at-offset: (offset: Fixnum)) do: [
+    frame .segment unsafe-read-u32-at-offset: (16 + frame .offset + offset)
+]
 let: ((frame: Frame) unsafe-read-u64-at-offset: (offset: Fixnum)) do: [
-    frame .segment unsafe-read-u64-at-offset: (2 + frame .offset + offset)
+    frame .segment unsafe-read-u64-at-offset: (16 + frame .offset + offset)
 ]
 let: ((frame: Frame) unsafe-read-value-at-offset: (offset: Fixnum)) do: [
-    frame .segment unsafe-read-value-at-offset: (2 + frame .offset + offset)
+    frame .segment unsafe-read-value-at-offset: (16 + frame .offset + offset)
 ]
+
 let: (frame: Frame) .code do: [
-    frame unsafe-read-value-at-offset: 1
+    frame unsafe-read-value-at-offset: 8
 ]
 let: (frame: Frame) .inst-spot do: [
-    frame .segment unsafe-read-u32-at-offset: (2 + frame .offset + 2) * 2
+    frame unsafe-read-u32-at-offset: 16
 ]
 let: (frame: Frame) .#regs do: [
-    frame unsafe-read-u64-at-offset: 3
+    frame unsafe-read-u64-at-offset: 24
 ]
 let: (frame: Frame) .#data do: [
-    frame unsafe-read-u64-at-offset: 4
+    frame unsafe-read-u64-at-offset: 32
 ]
 let: (frame: Frame) .data-depth do: [
-    frame unsafe-read-u64-at-offset: 5
+    frame unsafe-read-u64-at-offset: 40
 ]
 let: (frame: Frame) .module do: [
-    frame unsafe-read-value-at-offset: 6
+    frame unsafe-read-value-at-offset: 48
 ]
 let: (frame: Frame) .marker do: [
-    frame unsafe-read-value-at-offset: 7
+    frame unsafe-read-value-at-offset: 56
 ]
 let: (frame: Frame) next do: [
     Frame segment: frame .segment offset: (
-        frame .offset + 8 + frame .#regs + frame .#data
+        frame .offset + 64 + 8 * (frame .#regs + frame .#data)
     )
 ]
 
 let: ((segment: CallSegment) each-frame: f) do: [
     mut: frame = (Frame segment: segment offset: 0)
-    # TODO: multiplying by 8 (= sizeof(Value)) is super hacky here.
-    while: [frame .offset * 8 < segment length] do: [
+    while: [frame .offset < segment length] do: [
         f call: frame
         frame: frame next
     ]
@@ -70,8 +76,7 @@ let: (span: SourceSpan) >string do: [
 
 let: (segment: CallSegment) print-trace-except-top do: [
     segment each-frame: \fr [
-        # TODO: *8 here also super hacky
-        let: top? = fr next .offset * 8 >= segment length
+        let: top? = fr next .offset >= segment length
         if: not top? then: [
             # Go back one instruction; each frame indicates where to _return_ to, and the previous
             # op is the caller.

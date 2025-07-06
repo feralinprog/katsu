@@ -57,10 +57,10 @@ let: (assert: (b: Bool)) do: [
 ]
 
 let: (v: Vector) length do: [
-    v unsafe-read-u64-at-offset: 1
+    v unsafe-read-u64-at-offset: 8
 ]
 let: (v: Vector) backing-array do: [
-    v unsafe-read-value-at-offset: 2
+    v unsafe-read-value-at-offset: 16
 ]
 let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
     v backing-array unsafe-at: i
@@ -86,7 +86,7 @@ let: (v: Vector) pop do: [
     assert: v length > 0
     let: new-length = v length - 1
     let: end = (v unsafe-at: new-length)
-    v unsafe-write-u64-at-offset: 1 value: new-length
+    v unsafe-write-u64-at-offset: 8 value: new-length
     end
 ]
 let: (v: Vector) peek do: [
@@ -98,14 +98,14 @@ let: (v: Vector) empty? do: [
 ]
 
 let: ((a: Assoc) length) do: [
-    a unsafe-read-u64-at-offset: 1
+    a unsafe-read-u64-at-offset: 8
 ]
 let: ((a: Assoc) backing-array) do: [
-    a unsafe-read-value-at-offset: 2
+    a unsafe-read-value-at-offset: 16
 ]
 
 let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
-    a unsafe-read-value-at-offset: 2 + i
+    a unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
 let: ((a: Assoc) each-entry: f) do: [
@@ -134,10 +134,10 @@ let: ((a: Assoc) contains?: k) do: [
 ]
 
 let: (t: Tuple) length do: [
-    t unsafe-read-u64-at-offset: 1
+    t unsafe-read-u64-at-offset: 8
 ]
 let: ((t: Tuple) unsafe-at: (i: Fixnum)) do: [
-    t unsafe-read-value-at-offset: 2 + i
+    t unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
 # handlers should be a vector of (type <= Exception, handler) pairs.

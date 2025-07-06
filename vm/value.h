@@ -221,6 +221,8 @@ namespace Katsu
 
         // TODO: do another templated fn for size()
     };
+    // Keep in sync with katsu core.
+    static_assert(sizeof(Object) == 8);
 
     // Forward declarations for helper functions:
     struct Ref;

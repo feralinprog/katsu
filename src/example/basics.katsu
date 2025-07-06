@@ -69,7 +69,7 @@ pretty-print: {1; 2; 3}
 let: v = {1;2;3;4}
 v length
 pretty-print: v
-v unsafe-write-value-at-offset: 2 value: "I swappa the arrey"
+v unsafe-write-value-at-offset: 16 value: "I swappa the arrey"
 pretty-print: v
 
 let: (f: n) do: [

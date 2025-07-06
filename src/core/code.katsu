@@ -1,29 +1,29 @@
 use: "core.builtin.extra"
 
 let: (code: Code) .module do: [
-    code unsafe-read-value-at-offset: 1
+    code unsafe-read-value-at-offset: 8
 ]
 let: (code: Code) .#params do: [
-    code unsafe-read-u32-at-offset: 2 * 2
+    code unsafe-read-u32-at-offset: 16
 ]
 let: (code: Code) .#regs do: [
-    code unsafe-read-u32-at-offset: 2 * 2 + 1
+    code unsafe-read-u32-at-offset: 20
 ]
 let: (code: Code) .#data do: [
-    code unsafe-read-u32-at-offset: 3 * 2
+    code unsafe-read-u32-at-offset: 24
 ]
 let: (code: Code) .upreg-map do: [
-    code unsafe-read-value-at-offset: 4
+    code unsafe-read-value-at-offset: 32
 ]
 let: (code: Code) .insts do: [
-    code unsafe-read-value-at-offset: 5
+    code unsafe-read-value-at-offset: 40
 ]
 let: (code: Code) .args do: [
-    code unsafe-read-value-at-offset: 6
+    code unsafe-read-value-at-offset: 48
 ]
 let: (code: Code) .span do: [
-    code unsafe-read-value-at-offset: 7
+    code unsafe-read-value-at-offset: 56
 ]
 let: (code: Code) .inst-spans do: [
-    code unsafe-read-value-at-offset: 8
+    code unsafe-read-value-at-offset: 64
 ]

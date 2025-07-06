@@ -504,24 +504,33 @@ namespace Katsu
         return Value::null();
     }
 
-    Value native__unsafe_read_u64_at_offset_(VM& vm, int64_t nargs, Value* args)
+    template <typename T> inline T unsafe_read_at_offset(Object* object, int64_t offset)
     {
-        // obj read-u64-at-offset: offset
-        ASSERT(nargs == 2);
-        ASSERT(args[0].is_object());
-        uint64_t read = *((uint64_t*)args[0].object() + args[1].fixnum());
-        ASSERT(read <= INT64_MAX);
-        return Value::fixnum((int64_t)read);
+        return *(T*)((uint8_t*)object + offset);
     }
 
-    Value native__unsafe_write_u64_at_offset_value_(VM& vm, int64_t nargs, Value* args)
+    template <typename T>
+    inline void unsafe_write_at_offset(Object* object, int64_t offset, T value)
     {
-        // obj write-u64-at-offset: offset value: u64
+        *(T*)((uint8_t*)object + offset) = value;
+    }
+
+    Value native__unsafe_read_u8_at_offset_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj read-u8-at-offset: offset
+        ASSERT(nargs == 2);
+        ASSERT(args[0].is_object());
+        return Value::fixnum(unsafe_read_at_offset<uint8_t>(args[0].object(), args[1].fixnum()));
+    }
+    Value native__unsafe_write_u8_at_offset_value_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj write-u8-at-offset: offset value: value
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
-        ASSERT(args[2].fixnum() >= 0);
-        uint64_t write = (uint64_t)args[2].fixnum();
-        *((uint64_t*)args[0].object() + args[1].fixnum()) = write;
+        // TODO: check range
+        unsafe_write_at_offset<uint8_t>(args[0].object(),
+                                        args[1].fixnum(),
+                                        (uint8_t)args[2].fixnum());
         return Value::null();
     }
 
@@ -530,19 +539,37 @@ namespace Katsu
         // obj read-u32-at-offset: offset
         ASSERT(nargs == 2);
         ASSERT(args[0].is_object());
-        uint32_t read = *((uint32_t*)args[0].object() + args[1].fixnum());
-        return Value::fixnum((int64_t)read);
+        return Value::fixnum(unsafe_read_at_offset<uint32_t>(args[0].object(), args[1].fixnum()));
     }
-
     Value native__unsafe_write_u32_at_offset_value_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj write-u32-at-offset: offset value: u32
+        // obj write-u32-at-offset: offset value: value
+        ASSERT(nargs == 3);
+        ASSERT(args[0].is_object());
+        // TODO: check range
+        unsafe_write_at_offset<uint32_t>(args[0].object(),
+                                         args[1].fixnum(),
+                                         (uint32_t)args[2].fixnum());
+        return Value::null();
+    }
+
+    Value native__unsafe_read_u64_at_offset_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj read-u64-at-offset: offset
+        ASSERT(nargs == 2);
+        ASSERT(args[0].is_object());
+        uint64_t read = unsafe_read_at_offset<uint64_t>(args[0].object(), args[1].fixnum());
+        ASSERT(read <= INT64_MAX);
+        return Value::fixnum((int64_t)read);
+    }
+    Value native__unsafe_write_u64_at_offset_value_(VM& vm, int64_t nargs, Value* args)
+    {
+        // obj write-u64-at-offset: offset value: u64
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
         ASSERT(args[2].fixnum() >= 0);
-        // TODO: check range
-        uint32_t write = (uint32_t)args[2].fixnum();
-        *((uint32_t*)args[0].object() + args[1].fixnum()) = write;
+        uint64_t write = (uint64_t)args[2].fixnum();
+        unsafe_write_at_offset(args[0].object(), args[1].fixnum(), write);
         return Value::null();
     }
 
@@ -551,7 +578,7 @@ namespace Katsu
         // obj read-value-at-offset: offset
         ASSERT(nargs == 2);
         ASSERT(args[0].is_object());
-        return *((Value*)args[0].object() + args[1].fixnum());
+        return unsafe_read_at_offset<Value>(args[0].object(), args[1].fixnum());
     }
 
     Value native__unsafe_write_value_at_offset_value_(VM& vm, int64_t nargs, Value* args)
@@ -559,7 +586,7 @@ namespace Katsu
         // obj write-value-at-offset: offset value: value
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
-        *((Value*)args[0].object() + args[1].fixnum()) = args[2];
+        unsafe_write_at_offset<Value>(args[0].object(), args[1].fixnum(), args[2]);
         return Value::null();
     }
 
@@ -970,14 +997,14 @@ namespace Katsu
                         {matches_any, matches_type(_Bool)},
                         &native__TEST_ASSERT_);
 
-        register_native("unsafe-read-u64-at-offset:",
+        register_native("unsafe-read-u8-at-offset:",
                         r_extras,
                         {matches_any, matches_type(_Fixnum)},
-                        &native__unsafe_read_u64_at_offset_);
-        register_native("unsafe-write-u64-at-offset:value:",
+                        &native__unsafe_read_u8_at_offset_);
+        register_native("unsafe-write-u8-at-offset:value:",
                         r_extras,
                         {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
-                        &native__unsafe_write_u64_at_offset_value_);
+                        &native__unsafe_write_u8_at_offset_value_);
         register_native("unsafe-read-u32-at-offset:",
                         r_extras,
                         {matches_any, matches_type(_Fixnum)},
@@ -986,6 +1013,14 @@ namespace Katsu
                         r_extras,
                         {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__unsafe_write_u32_at_offset_value_);
+        register_native("unsafe-read-u64-at-offset:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum)},
+                        &native__unsafe_read_u64_at_offset_);
+        register_native("unsafe-write-u64-at-offset:value:",
+                        r_extras,
+                        {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__unsafe_write_u64_at_offset_value_);
         register_native("unsafe-read-value-at-offset:",
                         r_extras,
                         {matches_any, matches_type(_Fixnum)},
