@@ -229,23 +229,10 @@ namespace Katsu
     {
         VM vm(gc, call_stack_size);
 
-        // Establish builtins in the core.builtin module.
+        // Establish builtins in various core.builtin.* modules.
         {
-            Root<Assoc> r_core_builtin_default(gc, make_assoc(gc, /* capacity */ 0));
-            Root<Assoc> r_core_builtin_misc(gc, make_assoc(gc, /* capacity */ 0));
-            register_builtins(vm, r_core_builtin_default, r_core_builtin_misc);
-
             Root<Assoc> r_modules(vm.gc, vm.modules());
-            {
-                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.default")));
-                ValueRoot rv_core_builtin(gc, r_core_builtin_default.value());
-                append(vm.gc, r_modules, r_name, rv_core_builtin);
-            }
-            {
-                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.misc")));
-                ValueRoot rv_core_builtin(gc, r_core_builtin_misc.value());
-                append(vm.gc, r_modules, r_name, rv_core_builtin);
-            }
+            register_builtins(vm, r_modules);
             vm.set_modules(*r_modules);
         }
 

@@ -842,8 +842,24 @@ namespace Katsu
         _register(vm, id, r_name, r_module, r_value);
     }
 
-    void register_builtins(VM& vm, Root<Assoc>& r_default, Root<Assoc>& r_misc)
+    void register_builtins(VM& vm, Root<Assoc>& r_modules)
     {
+        // Builtin modules:
+        // * core.builtin.default - automatically imported by every module
+        // * core.builtin.misc - grab-bag of opt-in builtins
+        Root<Assoc> r_default(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
+        Root<Assoc> r_misc(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
+        {
+            ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.default")));
+            ValueRoot rv_core_builtin(vm.gc, r_default.value());
+            append(vm.gc, r_modules, r_name, rv_core_builtin);
+        }
+        {
+            ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.misc")));
+            ValueRoot rv_core_builtin(vm.gc, r_misc.value());
+            append(vm.gc, r_modules, r_name, rv_core_builtin);
+        }
+
         const auto register_base_type = [&vm, &r_default](BuiltinId id, const std::string& name) {
             Root<String> r_name(vm.gc, make_string(vm.gc, name));
             ValueRoot r_type(vm.gc, make_base_type(vm.gc, r_name));

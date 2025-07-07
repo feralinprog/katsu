@@ -91,8 +91,16 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         Root<Assoc> r_module(gc, make_assoc(gc, /* capacity */ 0));
         Root<Vector> r_imports(gc, make_vector(gc, /* capacity */ 0));
 
-        // Just throw everything in the same module.
-        register_builtins(vm, r_module, r_module);
+        // Just import every builtin module.
+        {
+            Root<Assoc> r_modules(gc, make_assoc(gc, /* capacity */ 0));
+            register_builtins(vm, r_modules);
+            for (uint64_t i = 0; i < r_modules->length; i++) {
+                Value v_builtins = r_modules->entries()[i].v_value;
+                ValueRoot r_builtins(gc, std::move(v_builtins));
+                append(gc, r_imports, r_builtins);
+            }
+        }
 
         {
             Root<Array> matchers2(vm.gc, make_array(vm.gc, 2));

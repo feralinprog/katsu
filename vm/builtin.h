@@ -6,10 +6,8 @@
 
 namespace Katsu
 {
-    // Add builtins to the VM's builtin array and to the given modules:
-    // * defaults - automatically imported by every module
-    // * misc - grab-bag of opt-in builtins
-    void register_builtins(VM& vm, Root<Assoc>& r_default, Root<Assoc>& r_misc);
+    // Add builtins to the VM's builtin array and to various core.builtin.* modules.
+    void register_builtins(VM& vm, Root<Assoc>& r_modules);
 
     // Helper functions:
     void add_native(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
