@@ -1,5 +1,4 @@
 TODO:
-* add integration tests outside of C++, e.g. running a file and comparing stdout against another file
 * int64 / uint64 and bignums
 * FFI and lua-style userdata (or similar)
 * coroutines / fibers (should be supported by delimited continuations..?)
