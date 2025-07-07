@@ -863,6 +863,17 @@ a + #b
         check(Value::fixnum(8));
     }
 
+    // TODO: this should raise an error
+    SECTION("module immutable shadowing")
+    {
+        input(R"(
+let: thing = 1
+let: thing = 2
+thing
+        )");
+        check(Value::fixnum(1));
+    }
+
     SECTION("basic method, closure, mutable bindings")
     {
         input(R"(
