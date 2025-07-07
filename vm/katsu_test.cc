@@ -853,6 +853,16 @@ a + b
         check(Value::fixnum(8));
     }
 
+    SECTION("comments")
+    {
+        input(R"(
+let: a = 3 # here's a comment
+let: #b = 5 # and another
+a + #b
+        )");
+        check(Value::fixnum(8));
+    }
+
     SECTION("basic method, closure, mutable bindings")
     {
         input(R"(

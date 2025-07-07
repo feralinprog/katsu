@@ -91,7 +91,7 @@ pretty-print: fm .inst-spot
 pretty-print: fm .#regs
 pretty-print: fm .#data
 pretty-print: fm .data-depth
-#pretty-print: fm .module
+# pretty-print: fm .module
 
 let: fh = fm next
 print: "'h' FRAME:"
@@ -100,7 +100,7 @@ pretty-print: fh .inst-spot
 pretty-print: fh .#regs
 pretty-print: fh .#data
 pretty-print: fh .data-depth
-#pretty-print: fm .module
+# pretty-print: fm .module
 
 let: fg = fh next
 print: "'g' FRAME:"
@@ -109,7 +109,7 @@ pretty-print: fg .inst-spot
 pretty-print: fg .#regs
 pretty-print: fg .#data
 pretty-print: fg .data-depth
-#pretty-print: fm .module
+# pretty-print: fm .module
 
 let: ff = fg next
 print: "'f' FRAME:"
@@ -118,7 +118,7 @@ pretty-print: ff .inst-spot
 pretty-print: ff .#regs
 pretty-print: ff .#data
 pretty-print: ff .data-depth
-#pretty-print: fm .module
+# pretty-print: fm .module
 
 let: c = ff .code
 print: "'f' CODE:"
