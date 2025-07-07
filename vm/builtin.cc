@@ -530,14 +530,14 @@ namespace Katsu
 
     Value native__unsafe_read_u8_at_offset_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj read-u8-at-offset: offset
+        // obj unsafe-read-u8-at-offset: offset
         ASSERT(nargs == 2);
         ASSERT(args[0].is_object());
         return Value::fixnum(unsafe_read_at_offset<uint8_t>(args[0].object(), args[1].fixnum()));
     }
     Value native__unsafe_write_u8_at_offset_value_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj write-u8-at-offset: offset value: value
+        // obj unsafe-write-u8-at-offset: offset value: u8
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
         // TODO: check range
@@ -549,14 +549,14 @@ namespace Katsu
 
     Value native__unsafe_read_u32_at_offset_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj read-u32-at-offset: offset
+        // obj unsafe-read-u32-at-offset: offset
         ASSERT(nargs == 2);
         ASSERT(args[0].is_object());
         return Value::fixnum(unsafe_read_at_offset<uint32_t>(args[0].object(), args[1].fixnum()));
     }
     Value native__unsafe_write_u32_at_offset_value_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj write-u32-at-offset: offset value: value
+        // obj unsafe-write-u32-at-offset: offset value: u32
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
         // TODO: check range
@@ -568,7 +568,7 @@ namespace Katsu
 
     Value native__unsafe_read_u64_at_offset_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj read-u64-at-offset: offset
+        // obj unsafe-read-u64-at-offset: offset
         ASSERT(nargs == 2);
         ASSERT(args[0].is_object());
         uint64_t read = unsafe_read_at_offset<uint64_t>(args[0].object(), args[1].fixnum());
@@ -577,26 +577,25 @@ namespace Katsu
     }
     Value native__unsafe_write_u64_at_offset_value_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj write-u64-at-offset: offset value: u64
+        // obj unsafe-write-u64-at-offset: offset value: u64
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
         ASSERT(args[2].fixnum() >= 0);
         uint64_t write = (uint64_t)args[2].fixnum();
-        unsafe_write_at_offset(args[0].object(), args[1].fixnum(), write);
+        unsafe_write_at_offset<uint64_t>(args[0].object(), args[1].fixnum(), write);
         return Value::null();
     }
 
     Value native__unsafe_read_value_at_offset_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj read-value-at-offset: offset
+        // obj unsafe-read-value-at-offset: offset
         ASSERT(nargs == 2);
         ASSERT(args[0].is_object());
         return unsafe_read_at_offset<Value>(args[0].object(), args[1].fixnum());
     }
-
     Value native__unsafe_write_value_at_offset_value_(VM& vm, int64_t nargs, Value* args)
     {
-        // obj write-value-at-offset: offset value: value
+        // obj unsafe-write-value-at-offset: offset value: value
         ASSERT(nargs == 3);
         ASSERT(args[0].is_object());
         unsafe_write_at_offset<Value>(args[0].object(), args[1].fixnum(), args[2]);
