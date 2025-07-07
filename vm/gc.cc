@@ -153,6 +153,11 @@ namespace Katsu
                         obj_size = v->size();
                         break;
                     }
+                    case ObjectTag::FOREIGN: {
+                        auto v = obj->object<ForeignValue*>();
+                        obj_size = v->size();
+                        break;
+                    }
                     default: [[unlikely]] ALWAYS_ASSERT_MSG(false, "missed an object tag?");
                 }
 #if DEBUG_GC_LOG
@@ -347,6 +352,12 @@ namespace Katsu
 
                         frame = frame->next();
                     }
+                    obj_size = v->size();
+                    break;
+                }
+                case ObjectTag::FOREIGN: {
+                    // No internal values to move.
+                    auto v = obj->object<ForeignValue*>();
                     obj_size = v->size();
                     break;
                 }

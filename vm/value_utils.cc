@@ -254,6 +254,13 @@ namespace Katsu
         return segment;
     }
 
+    ForeignValue* make_foreign(GC& gc, void* value)
+    {
+        ForeignValue* foreign = gc.alloc<ForeignValue>();
+        foreign->value = value;
+        return foreign;
+    }
+
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value)
     {
         Vector* vector = *r_vector;
@@ -714,6 +721,9 @@ namespace Katsu
                 pchild(o->v_type, "v_type = ");
                 // TODO!
                 pnative() << "slots: (TODO)\n";
+            } else if (value.is_obj_foreign()) {
+                ForeignValue* o = value.obj_foreign();
+                std::cout << "*foreign: " << o->value << "\n";
             } else {
                 std::cout << "object: ??? (object tag = " << static_cast<int>(value.object()->tag())
                           << ")\n";
@@ -1016,6 +1026,7 @@ namespace Katsu
                     case ObjectTag::TYPE: return vm.builtin(BuiltinId::_Type);
                     case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
                     case ObjectTag::CALL_SEGMENT: return vm.builtin(BuiltinId::_CallSegment);
+                    case ObjectTag::FOREIGN: return vm.builtin(BuiltinId::_Foreign);
                     default: ASSERT_MSG(false, "forgot an ObjectTag?");
                 }
             }

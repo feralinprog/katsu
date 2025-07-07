@@ -169,6 +169,20 @@ namespace Katsu
         return Value::_bool(!string_eq(args[0].obj_string(), args[1].obj_string()));
     }
 
+    Value native__foreign_eq_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a = b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0].obj_foreign()->value == args[1].obj_foreign()->value);
+    }
+
+    Value native__foreign_ne_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a != b
+        ASSERT(nargs == 2);
+        return Value::_bool(args[0].obj_foreign()->value != args[1].obj_foreign()->value);
+    }
+
     Value native__gt_(VM& vm, int64_t nargs, Value* args)
     {
         // a > b
@@ -888,6 +902,7 @@ namespace Katsu
         register_base_type(BuiltinId::_MultiMethod, "MultiMethod");
         register_base_type(BuiltinId::_Type, "Type");
         register_base_type(BuiltinId::_CallSegment, "CallSegment");
+        register_base_type(BuiltinId::_Foreign, "Foreign");
 
         // Use shorthand for builtin IDs just to reduce noise and make it easier to read.
         register_native("~:",
@@ -928,6 +943,15 @@ namespace Katsu
                         r_defaults,
                         {matches_type(_String), matches_type(_String)},
                         &native__str_ne_);
+
+        register_native("=:",
+                        r_defaults,
+                        {matches_type(_Foreign), matches_type(_Foreign)},
+                        &native__foreign_eq_);
+        register_native("!=:",
+                        r_defaults,
+                        {matches_type(_Foreign), matches_type(_Foreign)},
+                        &native__foreign_ne_);
 
         register_native(">:",
                         r_defaults,

@@ -61,6 +61,9 @@ namespace Katsu
     // in the segment.
     CallSegment* make_call_segment(GC& gc, Frame* segment_bottom, uint64_t total_length);
 
+    // Make a foreign value with the specified field.
+    ForeignValue* make_foreign(GC& gc, void* value);
+
     // Append a value to a vector, reallocating if necessary to expand the vector.
     // For convenience, this returns a pointer to the resulting Vector (which may have been moved
     // due to reallocation).

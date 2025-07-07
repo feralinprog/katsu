@@ -228,6 +228,7 @@ namespace Katsu
         _MultiMethod,
         _Type,
         _CallSegment,
+        _Foreign,
 
         // Keep this last!
         NUM_BUILTINS,

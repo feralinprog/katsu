@@ -30,6 +30,7 @@ namespace Katsu
      *   - type values
      *   - dataclass instances
      *   - call stack segment (a group of call frames)
+     *   - foreign values (i.e. void* pointers as in C)
      *
      * Some small objects (e.g. fixnums, bools, etc.) are stored inline; others are represented as
      * tagged pointers to the actual contents (subclasses of Object) elsewhere in memory that
@@ -115,6 +116,7 @@ namespace Katsu
         TYPE,
         INSTANCE,
         CALL_SEGMENT,
+        FOREIGN,
     };
 
     static const char* object_tag_str(ObjectTag tag)
@@ -133,6 +135,7 @@ namespace Katsu
             case ObjectTag::TYPE: return "type";
             case ObjectTag::INSTANCE: return "instance";
             case ObjectTag::CALL_SEGMENT: return "call-segment";
+            case ObjectTag::FOREIGN: return "foreign";
             default: return "!unknown!";
         }
     }
@@ -152,6 +155,7 @@ namespace Katsu
             case ObjectTag::TYPE: return "TYPE";
             case ObjectTag::INSTANCE: return "INSTANCE";
             case ObjectTag::CALL_SEGMENT: return "CALL_SEGMENT";
+            case ObjectTag::FOREIGN: return "FOREIGN";
             default: return "!UNKNOWN!";
         }
     }
@@ -238,6 +242,7 @@ namespace Katsu
     struct Type;
     struct DataclassInstance;
     struct CallSegment;
+    struct ForeignValue;
 
     // TODO: create related generic types which are guaranteed to have the right tag?
     // Like TaggedValue<int64_t>, guaranteed to be a fixnum.
@@ -358,6 +363,10 @@ namespace Katsu
         {
             return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::CALL_SEGMENT;
         }
+        bool is_obj_foreign() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::FOREIGN;
+        }
 
         int64_t fixnum() const
         {
@@ -427,6 +436,10 @@ namespace Katsu
         CallSegment* obj_call_segment() const
         {
             return this->object()->object<CallSegment*>();
+        }
+        ForeignValue* obj_foreign() const
+        {
+            return this->object()->object<ForeignValue*>();
         }
 
         static Value fixnum(int64_t num)
@@ -789,6 +802,19 @@ namespace Katsu
         }
     };
 
+    struct ForeignValue : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::FOREIGN;
+
+        void* value;
+
+        // Size in bytes.
+        static inline uint64_t size()
+        {
+            return sizeof(ForeignValue);
+        }
+    };
+
     // Specializations for static_value():
     template <> inline int64_t static_value<int64_t>(Value value)
     {
@@ -888,5 +914,10 @@ namespace Katsu
     {
         ASSERT(object.tag() == ObjectTag::CALL_SEGMENT);
         return reinterpret_cast<CallSegment*>(&object);
+    }
+    template <> inline ForeignValue* static_object<ForeignValue*>(Object& object)
+    {
+        ASSERT(object.tag() == ObjectTag::FOREIGN);
+        return reinterpret_cast<ForeignValue*>(&object);
     }
 };

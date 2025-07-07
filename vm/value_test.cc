@@ -170,7 +170,8 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     F(LEFT, MultiMethod)           \
     F(LEFT, Type)                  \
     F(LEFT, DataclassInstance)     \
-    F(LEFT, CallSegment)
+    F(LEFT, CallSegment)           \
+    F(LEFT, ForeignValue)
 
 #define EACH_OBJECT_OUTER(INNER, F) \
     INNER(F, Ref)                   \
@@ -185,7 +186,8 @@ TEST_CASE("object header distinguishes forwarding vs. reference types", "[object
     INNER(F, MultiMethod)           \
     INNER(F, Type)                  \
     INNER(F, DataclassInstance)     \
-    INNER(F, CallSegment)
+    INNER(F, CallSegment)           \
+    INNER(F, ForeignValue)
 
 #define EACH_OBJECT_PAIR(F) EACH_OBJECT_OUTER(EACH_OBJECT_INNER, F)
 
@@ -226,3 +228,4 @@ TEST_CASE("object() helper checks object tags", "[object]")
 // TODO: test functions of Type
 // TODO: test functions of DataclassInstance
 // TODO: test functions of CallSegment
+// TODO: test functions of ForeignValue

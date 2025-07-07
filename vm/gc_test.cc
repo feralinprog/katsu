@@ -380,6 +380,21 @@ TEST_CASE("GC follows internal references", "[gc]")
     }
 
     // TODO: test CallSegment
+
+    SECTION("Foreign")
+    {
+        // Set up object.
+        void* value = reinterpret_cast<void*>(0x12345678);
+        ForeignValue* obj = gc.alloc<ForeignValue>();
+        obj->value = value;
+
+        Value v_obj = Value::object(obj);
+        single_root_collect(&v_obj);
+
+        // Unpack and verify object.
+        REQUIRE_NOTHROW(obj = v_obj.obj_foreign());
+        CHECK(obj->value == value);
+    }
 }
 
 // TODO: test ValueRoot more (e.g. move semantics, destructor)
