@@ -849,7 +849,7 @@ let: b = 5
 
 a + b
 
-            )");
+        )");
         check(Value::fixnum(8));
     }
 
