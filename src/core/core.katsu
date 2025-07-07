@@ -214,7 +214,7 @@ let: ((module: Assoc) run-file: (path: String) contents: (contents: String) impo
             result: code call
         ]
         result
-    ] finally: [ run-context free ]
+    ] finally: [ run-context free-run-context ]
 ]
 
 # Note: keep this in sync with C++ `use_default_imports`.

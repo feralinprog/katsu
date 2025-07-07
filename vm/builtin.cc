@@ -791,9 +791,9 @@ namespace Katsu
 
         return Value::object(code);
     }
-    Value native__free(VM& vm, int64_t nargs, Value* args)
+    Value native__free_run_context(VM& vm, int64_t nargs, Value* args)
     {
-        // run-context free
+        // run-context free-run-context
         ASSERT(nargs == 1);
         RunContext* context = RunContext::from_value(args[0]);
         delete context;
@@ -1098,7 +1098,7 @@ namespace Katsu
                         r_misc,
                         {matches_any, matches_type(_Assoc), matches_type(_Vector)},
                         &native__parse_and_compile_in_module_imports_);
-        register_native("free", r_misc, {matches_any}, &native__free);
+        register_native("free-run-context", r_misc, {matches_any}, &native__free_run_context);
 
         register_intrinsic("set-condition-handler-from-module",
                            r_misc,
