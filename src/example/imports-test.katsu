@@ -1,4 +1,4 @@
-use: "core.builtin.extra"
+use: "core.builtin.misc"
 
-print: "using a core.builtin.extra method!"
+print: "using a core.builtin.misc method!"
 let: exported-value = 5

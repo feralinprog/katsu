@@ -1,4 +1,4 @@
-use: "core.builtin.extra"
+use: "core.builtin.misc"
 
 let: (code: Code) .module do: [
     code unsafe-read-value-at-offset: 8

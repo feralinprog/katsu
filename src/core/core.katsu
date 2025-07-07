@@ -1,4 +1,4 @@
-IMPORT-EXISTING-MODULE: "core.builtin.extra"
+IMPORT-EXISTING-MODULE: "core.builtin.misc"
 
 # This file is essentially a minimum amount of code to get to the point where we can define `use:`
 # and start loading other modules.

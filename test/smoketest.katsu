@@ -1,2 +1,2 @@
-use: "core.builtin.extra"
+use: "core.builtin.misc"
 print: "smoketest!"

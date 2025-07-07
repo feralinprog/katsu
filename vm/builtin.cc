@@ -842,12 +842,12 @@ namespace Katsu
         _register(vm, id, r_name, r_module, r_value);
     }
 
-    void register_builtins(VM& vm, Root<Assoc>& r_defaults, Root<Assoc>& r_extras)
+    void register_builtins(VM& vm, Root<Assoc>& r_default, Root<Assoc>& r_misc)
     {
-        const auto register_base_type = [&vm, &r_defaults](BuiltinId id, const std::string& name) {
+        const auto register_base_type = [&vm, &r_default](BuiltinId id, const std::string& name) {
             Root<String> r_name(vm.gc, make_string(vm.gc, name));
             ValueRoot r_type(vm.gc, make_base_type(vm.gc, r_name));
-            _register(vm, id, r_name, r_defaults, r_type);
+            _register(vm, id, r_name, r_default, r_type);
         };
 
         const std::function<Value()> matches_any = []() { return Value::null(); };
@@ -875,9 +875,9 @@ namespace Katsu
             add_intrinsic(vm.gc, r_module, name, matchers.size(), r_matchers, handler);
         };
 
-        _register(vm, BuiltinId::_null, "null", r_defaults, Value::null());
-        _register(vm, BuiltinId::_true, "t", r_defaults, Value::_bool(true));
-        _register(vm, BuiltinId::_false, "f", r_defaults, Value::_bool(false));
+        _register(vm, BuiltinId::_null, "null", r_default, Value::null());
+        _register(vm, BuiltinId::_true, "t", r_default, Value::_bool(true));
+        _register(vm, BuiltinId::_false, "f", r_default, Value::_bool(false));
 
         // TODO: Number?
         register_base_type(BuiltinId::_Fixnum, "Fixnum");
@@ -900,198 +900,192 @@ namespace Katsu
 
         // Use shorthand for builtin IDs just to reduce noise and make it easier to read.
         register_native("~:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_String), matches_type(_String)},
                         &native__tilde_);
         register_native("+:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__add_);
         register_native("-:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__sub_);
-        register_native("+", r_defaults, {matches_type(_Fixnum)}, &native__plus);
-        register_native("-", r_defaults, {matches_type(_Fixnum)}, &native__minus);
+        register_native("+", r_default, {matches_type(_Fixnum)}, &native__plus);
+        register_native("-", r_default, {matches_type(_Fixnum)}, &native__minus);
         register_native("*:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__mult_);
         register_native("/:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__div_);
 
         // By default, = and id= are the same.
-        register_native("id=:", r_defaults, {matches_any, matches_any}, &native__id_eq_);
-        register_native("=:", r_defaults, {matches_any, matches_any}, &native__id_eq_);
+        register_native("id=:", r_default, {matches_any, matches_any}, &native__id_eq_);
+        register_native("=:", r_default, {matches_any, matches_any}, &native__id_eq_);
         // Likewise with != and id!= are the same.
-        register_native("id!=:", r_defaults, {matches_any, matches_any}, &native__id_ne_);
-        register_native("!=:", r_defaults, {matches_any, matches_any}, &native__id_ne_);
+        register_native("id!=:", r_default, {matches_any, matches_any}, &native__id_ne_);
+        register_native("!=:", r_default, {matches_any, matches_any}, &native__id_ne_);
 
         register_native("=:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_String), matches_type(_String)},
                         &native__str_eq_);
         register_native("!=:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_String), matches_type(_String)},
                         &native__str_ne_);
 
         register_native("=:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Foreign), matches_type(_Foreign)},
                         &native__foreign_eq_);
         register_native("!=:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Foreign), matches_type(_Foreign)},
                         &native__foreign_ne_);
 
         register_native(">:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__gt_);
         register_native(">=:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__gte_);
         register_native("<:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__lt_);
         register_native("<=:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__lte_);
 
         register_native("and:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Bool), matches_type(_Bool)},
                         &native__and_);
-        register_native("or:",
-                        r_defaults,
-                        {matches_type(_Bool), matches_type(_Bool)},
-                        &native__or_);
-        register_native("not", r_defaults, {matches_type(_Bool)}, &native__not);
+        register_native("or:", r_default, {matches_type(_Bool), matches_type(_Bool)}, &native__or_);
+        register_native("not", r_default, {matches_type(_Bool)}, &native__not);
 
-        register_native("print:", r_extras, {matches_any, matches_type(_String)}, &native__print_);
+        register_native("print:", r_misc, {matches_any, matches_type(_String)}, &native__print_);
         register_native("pretty-print:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_any},
                         &native__pretty_print_);
 
         register_intrinsic("then:else:",
-                           r_defaults,
+                           r_default,
                            {matches_any, matches_any, matches_any},
                            &intrinsic__then_else_);
 
-        register_intrinsic("call", r_defaults, {matches_any}, &intrinsic__call);
-        register_intrinsic("call:", r_defaults, {matches_any, matches_any}, &intrinsic__call_);
+        register_intrinsic("call", r_default, {matches_any}, &intrinsic__call);
+        register_intrinsic("call:", r_default, {matches_any, matches_any}, &intrinsic__call_);
         register_intrinsic("call*:",
-                           r_defaults,
+                           r_default,
                            {matches_any, matches_type(_Tuple)},
                            &intrinsic__call_star_);
 
-        register_native("type", r_defaults, {matches_any}, &native__type);
+        register_native("type", r_default, {matches_any}, &native__type);
         register_native("subtype?:",
-                        r_defaults,
+                        r_default,
                         {matches_type(_Type), matches_type(_Type)},
                         &native__subtype_p_);
         register_native("instance?:",
-                        r_defaults,
+                        r_default,
                         {matches_any, matches_type(_Type)},
                         &native__instance_p_);
 
         register_native("make-method-with-return-type:code:attrs:",
-                        r_defaults, // needed for method definitions
+                        r_default, // needed for method definitions
                         {matches_type(_Array),
                          matches_any, // TODO: Type or Null
                          matches_type(_Code),
                          matches_type(_Vector)},
                         &native__make_method_with_return_type_code_attrs_);
         register_native("add-method-to:require-unique:",
-                        r_defaults, // needed for method definitions
+                        r_default, // needed for method definitions
                         {matches_type(_Method), matches_type(_MultiMethod), matches_type(_Bool)},
                         &native__add_method_to_require_unique_);
 
         register_native("TEST-ASSERT:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Bool)},
                         &native__TEST_ASSERT_);
 
         register_native("unsafe-read-u8-at-offset:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum)},
                         &native__unsafe_read_u8_at_offset_);
         register_native("unsafe-write-u8-at-offset:value:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__unsafe_write_u8_at_offset_value_);
         register_native("unsafe-read-u32-at-offset:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum)},
                         &native__unsafe_read_u32_at_offset_);
         register_native("unsafe-write-u32-at-offset:value:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__unsafe_write_u32_at_offset_value_);
         register_native("unsafe-read-u64-at-offset:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum)},
                         &native__unsafe_read_u64_at_offset_);
         register_native("unsafe-write-u64-at-offset:value:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__unsafe_write_u64_at_offset_value_);
         register_native("unsafe-read-value-at-offset:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum)},
                         &native__unsafe_read_value_at_offset_);
         register_native("unsafe-write-value-at-offset:value:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Fixnum), matches_any},
                         &native__unsafe_write_value_at_offset_value_);
 
-        register_intrinsic("get-call-stack", r_extras, {matches_any}, &intrinsic__get_call_stack);
+        register_intrinsic("get-call-stack", r_misc, {matches_any}, &intrinsic__get_call_stack);
 
         register_intrinsic("call/marked:",
-                           r_extras,
+                           r_misc,
                            {matches_any, matches_any},
                            &intrinsic__call_marked_);
-        register_intrinsic("call/dc:", r_extras, {matches_any, matches_any}, &intrinsic__call_dc_);
+        register_intrinsic("call/dc:", r_misc, {matches_any, matches_any}, &intrinsic__call_dc_);
 
-        register_intrinsic("loaded-modules", r_extras, {matches_any}, &intrinsic__loaded_modules);
+        register_intrinsic("loaded-modules", r_misc, {matches_any}, &intrinsic__loaded_modules);
 
         register_native("read-file:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_String)},
                         &native__read_file_);
 
-        register_native("make-empty-assoc", r_extras, {matches_any}, &native__make_empty_assoc);
+        register_native("make-empty-assoc", r_misc, {matches_any}, &native__make_empty_assoc);
 
-        register_native("append:",
-                        r_extras,
-                        {matches_type(_Vector), matches_any},
-                        &native__append_);
+        register_native("append:", r_misc, {matches_type(_Vector), matches_any}, &native__append_);
         register_native("add:value:",
-                        r_extras,
+                        r_misc,
                         {matches_type(_Assoc), matches_any, matches_any},
                         &native__add_value_);
 
 
         // TODO: this is super hacky. figure out a different way to do this.
         register_native("make-run-context-for-path:contents:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_String), matches_type(_String)},
                         &native__make_run_context_for_path_);
         register_native("parse-and-compile-in-module:imports:",
-                        r_extras,
+                        r_misc,
                         {matches_any, matches_type(_Assoc), matches_type(_Vector)},
                         &native__parse_and_compile_in_module_imports_);
-        register_native("free", r_extras, {matches_any}, &native__free);
+        register_native("free", r_misc, {matches_any}, &native__free);
 
         register_intrinsic("set-condition-handler-from-module",
-                           r_extras,
+                           r_misc,
                            {matches_any},
                            &intrinsic__set_condition_handler_from_module);
 

@@ -964,7 +964,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 1")
         {
             input(R"(
-use: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
+use: "core.builtin.misc" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
@@ -980,7 +980,7 @@ let: ((a: Fixnum) mm-test: (b: Fixnum)) do: [ "Fixnum - Fixnum" ]
         SECTION("multimethod rejects undeclared argument types - case 2")
         {
             input(R"(
-use: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
+use: "core.builtin.misc" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "no-matching-method: multimethod has no methods matching the given arguments"
     12345
@@ -1032,7 +1032,7 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
         SECTION("multimethod downselection - case 3 (ambiguous)")
         {
             input(R"(
-use: "core.builtin.extra" # for TEST-ASSERT, set-condition-handler-from-module
+use: "core.builtin.misc" # for TEST-ASSERT, set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "ambiguous-method-resolution: multimethod has multiple best methods matching the given arguments"
     12345
@@ -1079,7 +1079,7 @@ let: (a: (null give-me-Fixnum)) mm-test do: [ verify-multimethod call: "multimet
     SECTION("dataclass smoketest")
     {
         input(R"(
-use: "core.builtin.extra" # for TEST-ASSERT:
+use: "core.builtin.misc" # for TEST-ASSERT:
 data: Thing has: { slot-a; slot-b; slot-c }
 
 TEST-ASSERT: not ("abc" Thing?)
@@ -1130,7 +1130,7 @@ unary
     {
         cout_capture capture;
         input(R"CODE(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations
+IMPORT-EXISTING-MODULE: "core.builtin.misc" # for delimited continuations
 print: "aaaaa"
 [
     print: "  bbbbb"
@@ -1162,7 +1162,7 @@ zzzzz
     SECTION("delimited continuation - wrong marker")
     {
         input(R"CODE(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations, TEST-ASSERT:, and set-condition-handler-from-module
+IMPORT-EXISTING-MODULE: "core.builtin.misc" # for delimited continuations, TEST-ASSERT:, and set-condition-handler-from-module
 let: (c handle-raw-condition-with-message: m) do: [
     TEST-ASSERT: (c ~ ": " ~ m) = "marker-not-found: did not find marker in call stack"
     12345
@@ -1181,7 +1181,7 @@ set-condition-handler-from-module
         {
             cout_capture capture;
             input(R"CODE(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations
+IMPORT-EXISTING-MODULE: "core.builtin.misc" # for delimited continuations
 let: m1 = "marker 1"
 let: m2 = "marker 2"
 [
@@ -1205,7 +1205,7 @@ after call/marked: m1
         {
             cout_capture capture;
             input(R"CODE(
-IMPORT-EXISTING-MODULE: "core.builtin.extra" # for delimited continuations
+IMPORT-EXISTING-MODULE: "core.builtin.misc" # for delimited continuations
 let: m1 = "marker 1"
 let: m2 = "marker 2"
 [

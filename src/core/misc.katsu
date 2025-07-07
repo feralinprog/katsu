@@ -1,4 +1,4 @@
-use: "core.builtin.extra"
+use: "core.builtin.misc"
 
 let: ((n: Fixnum) times: body) do: [
     mut: i = 0

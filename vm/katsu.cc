@@ -232,8 +232,8 @@ namespace Katsu
         // Establish builtins in the core.builtin module.
         {
             Root<Assoc> r_core_builtin_default(gc, make_assoc(gc, /* capacity */ 0));
-            Root<Assoc> r_core_builtin_extra(gc, make_assoc(gc, /* capacity */ 0));
-            register_builtins(vm, r_core_builtin_default, r_core_builtin_extra);
+            Root<Assoc> r_core_builtin_misc(gc, make_assoc(gc, /* capacity */ 0));
+            register_builtins(vm, r_core_builtin_default, r_core_builtin_misc);
 
             Root<Assoc> r_modules(vm.gc, vm.modules());
             {
@@ -242,8 +242,8 @@ namespace Katsu
                 append(vm.gc, r_modules, r_name, rv_core_builtin);
             }
             {
-                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.extra")));
-                ValueRoot rv_core_builtin(gc, r_core_builtin_extra.value());
+                ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.misc")));
+                ValueRoot rv_core_builtin(gc, r_core_builtin_misc.value());
                 append(vm.gc, r_modules, r_name, rv_core_builtin);
             }
             vm.set_modules(*r_modules);
