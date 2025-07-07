@@ -20,7 +20,6 @@ namespace Katsu
                       Root<Array>& r_param_matchers, NativeHandler native_handler,
                       IntrinsicHandler intrinsic_handler)
     {
-        // TODO: check if name exists already in module!
         Root<String> r_name(gc, make_string(gc, name));
 
         Value* v_existing = assoc_lookup(*r_module, *r_name);
