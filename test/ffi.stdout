@@ -1,0 +1,2 @@
+within ffi_test_fn: a=100, b=-58
+result: 42

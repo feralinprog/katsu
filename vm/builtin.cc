@@ -1,6 +1,7 @@
 #include "builtin.h"
 
 #include "assert.h"
+#include "builtin_ffi.h"
 #include "compile.h"
 #include "condition.h"
 #include "parser.h"
@@ -845,8 +846,10 @@ namespace Katsu
         // Builtin modules:
         // * core.builtin.default - automatically imported by every module
         // * core.builtin.misc - grab-bag of opt-in builtins
+        // * core.builtin.ffi - builtins related to libffi / C function calls
         Root<Assoc> r_default(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
         Root<Assoc> r_misc(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
+        Root<Assoc> r_ffi(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
         {
             ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.default")));
             ValueRoot rv_core_builtin(vm.gc, r_default.value());
@@ -855,6 +858,11 @@ namespace Katsu
         {
             ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.misc")));
             ValueRoot rv_core_builtin(vm.gc, r_misc.value());
+            append(vm.gc, r_modules, r_name, rv_core_builtin);
+        }
+        {
+            ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.builtin.ffi")));
+            ValueRoot rv_core_builtin(vm.gc, r_ffi.value());
             append(vm.gc, r_modules, r_name, rv_core_builtin);
         }
 
@@ -1102,6 +1110,9 @@ namespace Katsu
                            r_misc,
                            {matches_any},
                            &intrinsic__set_condition_handler_from_module);
+
+        // Farm out to builtin_ffi.cc for additional builtins.
+        register_ffi_builtins(vm, r_ffi);
 
         /*
          * TODO:

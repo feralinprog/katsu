@@ -1,0 +1,26 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+}
+
+let: cif = (malloc: sizeof-ffi_cif aligned: 8)
+let: atypes = (malloc-foreign-array: { &ffi_type_uint8; &ffi_type_sint32 } aligned: 8)
+let: result = (ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 2 rtype: &ffi_type_uint32 atypes: atypes)
+assert: result = ffi_status.FFI_OK
+
+let: arg-1 = (malloc: 1 aligned: 1)
+let: arg-2 = (malloc: 4 aligned: 4)
+let: avalues = (malloc-foreign-array: { arg-1; arg-2 } aligned: 8)
+let: rvalue = (malloc: sizeof-ffi_arg aligned: 4)
+
+arg-1 foreign-write-u8-at-offset: 0 value: 100
+arg-2 foreign-write-s32-at-offset: 0 value: - 58
+ffi-call: cif fn: &ffi_test_fn rvalue: rvalue avalues: avalues
+print: "result: " ~ (rvalue foreign-read-u32-at-offset: 0) >string
+
+rvalue free
+avalues free
+arg-2 free
+arg-1 free
+atypes free
+cif free

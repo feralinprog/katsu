@@ -22,6 +22,7 @@ add_library(katsudon STATIC
   vm/compile.cc
   vm/vm.cc
   vm/builtin.cc
+  vm/builtin_ffi.cc
   vm/katsu.cc
 )
 target_include_directories(katsudon PUBLIC vm/)
@@ -34,6 +35,8 @@ target_compile_options(katsudon PUBLIC
   -DDEBUG_GC_NEW_SEMISPACE
   # -DDEBUG_GC_VERIFY_ROOT_ORDERING=0
 )
+# For a C foreign function interface:
+target_link_libraries(katsudon PUBLIC ffi)
 
 # Main katsu executable.
 add_executable(katsu vm/main.cc)
