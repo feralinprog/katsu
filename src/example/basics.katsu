@@ -47,9 +47,9 @@ let: p = (Point3D x: 1 y: 2 z: 3)
 p .x
 p .y
 p .z
-(p x: 5; null)
-(p y: 6; null)
-(p z: 7; null)
+(p x: 5; #null)
+(p y: 6; #null)
+(p z: 7; #null)
 p .x
 p .y
 p .z
@@ -148,11 +148,11 @@ print: "aaaaa"
         print: "    result of k('abcdef'): " ~ (k call: "abcdef")
         print: "    result of k('123456'): " ~ (k call: "123456")
         print: "    ddddd"
-    ] call/dc: t)
+    ] call/dc: #t)
     print: "  eeeee"
     # Pretend to do some calculations, and return the result:
     "calcs(" ~ input ~ ")"
-] call/marked: t
+] call/marked: #t
 print: "zzzzz"
 
 print: "----------------------------------"
@@ -193,7 +193,7 @@ try: [
 
 try: [
     print: "before signal"
-    (Condition condition: "a condition" message: "I'm a signal!" stack: null) signal
+    (Condition condition: "a condition" message: "I'm a signal!" stack: #null) signal
     print: "after signal"
 ] except: {
     (Condition, \c [ print: "Got signal: " ~ c .condition ~ " - " ~ c .message; c .stack print-trace-except-top ])

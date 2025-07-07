@@ -5,7 +5,7 @@ IMPORT-EXISTING-MODULE: "core.builtin.misc"
 
 let: (if: (cond: Bool) then: tbody) do: [
     # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
-    TAIL-CALL: (cond then: tbody else: null)
+    TAIL-CALL: (cond then: tbody else: #null)
 ]
 
 let: (while: (cond: Closure) do: (body: Closure)) do: [
@@ -13,7 +13,7 @@ let: (while: (cond: Closure) do: (body: Closure)) do: [
     TAIL-CALL: ((cond call) then: [
         body call
         TAIL-CALL: (while: cond do: body)
-    ] else: null)
+    ] else: #null)
 ]
 
 data: Condition has: { condition; message; stack }
@@ -52,7 +52,7 @@ let: (c: Condition) signal do: [
 
 let: (assert: (b: Bool)) do: [
     if: not b then: [
-        (AssertionFailed condition: "assertion-failure" message: "an assertion failed" stack: null) signal
+        (AssertionFailed condition: "assertion-failure" message: "an assertion failed" stack: #null) signal
     ]
 ]
 
@@ -69,7 +69,7 @@ let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
 data: StopIteration has: { value }
 let: ((v: Vector) each: f) do: [
     mut: i = 0
-    mut: last = null
+    mut: last = #null
     while: [i < v length and not (last instance?: StopIteration)] do: [
         last: (f call: (v unsafe-at: i))
         i: i + 1
@@ -78,7 +78,7 @@ let: ((v: Vector) each: f) do: [
 ]
 
 let: ((v: Vector) contains?: x) do: [
-    v each: [ (it = x) then: [ StopIteration value: t ] else: f ]
+    v each: [ (it = x) then: [ StopIteration value: #t ] else: #f ]
 ]
 
 let: ((v: Vector) push: x) do: [ v append: x ]
@@ -110,7 +110,7 @@ let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
 
 let: ((a: Assoc) each-entry: f) do: [
     mut: i = 0
-    mut: last = null
+    mut: last = #null
     while: [i < a length and not (last instance?: StopIteration)] do: [
         last: (f call*: (a backing-array unsafe-at: i * 2), (a backing-array unsafe-at: i * 2 + 1))
         i: i + 1
@@ -118,11 +118,11 @@ let: ((a: Assoc) each-entry: f) do: [
     (last instance?: StopIteration) then: [ last .value ] else: [ last ]
 ]
 let: ((a: Assoc) at*: key) do: [
-    a each-entry: \k v [ (k = key) then: [ StopIteration value: v ] else: null ]
+    a each-entry: \k v [ (k = key) then: [ StopIteration value: v ] else: #null ]
 ]
 let: ((a: Assoc) each-key: f) do: [
     mut: i = 0
-    mut: last = null
+    mut: last = #null
     while: [i < a length and not (last instance?: StopIteration)] do: [
         last: (f call: (a backing-array unsafe-at: i * 2))
         i: i + 1
@@ -130,7 +130,7 @@ let: ((a: Assoc) each-key: f) do: [
     (last instance?: StopIteration) then: [ last .value ] else: [ last ]
 ]
 let: ((a: Assoc) contains?: k) do: [
-    a each-key: [ (it = k) then: [ StopIteration value: t ] else: f ]
+    a each-key: [ (it = k) then: [ StopIteration value: #t ] else: #f ]
 ]
 
 let: (t: Tuple) length do: [
@@ -149,12 +149,12 @@ let: (try: body except: handlers) do: [
         let: cond = result .cond
         # Search through handlers for a handler matching this condition;
         # else re-raise the signal.
-        mut: handled = f
+        mut: handled = #f
         let: handler-result = (handlers each: \h [
             let: handler-type = (h unsafe-at: 0)
             let: handler-fn = (h unsafe-at: 1)
             if: (cond instance?: handler-type) then: [
-                handled: t
+                handled: #t
                 StopIteration value: (handler-fn call: cond)
             ]
         ])
@@ -186,7 +186,7 @@ let: (ensure: p? by: a else: default) do: [
         result
     ]
 ]
-let: (ensure: p? by: a) do: [ ensure: p? by: a else: [null] ]
+let: (ensure: p? by: a) do: [ ensure: p? by: a else: [#null] ]
 
 let: (s: String) length do: [ s unsafe-read-u64-at-offset: 8 ]
 let: (find-module-file-path: (module-name: String)) do: [
@@ -208,9 +208,9 @@ let: (find-module-file-path: (module-name: String)) do: [
 let: ((module: Assoc) run-file: (path: String) contents: (contents: String) imports: (imports: Vector)) do: [
     let: run-context = (make-run-context-for-path: path contents: contents)
     [
-        mut: code = null
-        mut: result = null
-        while: [code: (run-context parse-and-compile-in-module: module imports: imports); code != null] do: [
+        mut: code = #null
+        mut: result = #null
+        while: [code: (run-context parse-and-compile-in-module: module imports: imports); code != #null] do: [
             result: code call
         ]
         result
@@ -239,7 +239,7 @@ let: imports-stack = {}
 data: RecursiveUse extends: { Condition } has: { module-name }
 let: (use: (module-name: String) path-loader: get-path contents-loader: get-contents) do: [
     (use-stack contains?: module-name) then: [
-        (RecursiveUse condition: "recursive-use" message: "" stack: null module-name: module-name) signal
+        (RecursiveUse condition: "recursive-use" message: "" stack: #null module-name: module-name) signal
     ] else: [
         let: module-result = (ensure: [loaded-modules contains?: module-name] by: [
             let: path = get-path call

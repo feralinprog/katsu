@@ -180,19 +180,19 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("null")
     {
-        input("null");
+        input("#null");
         check(Value::null());
     }
 
     SECTION("true")
     {
-        input("t");
+        input("#t");
         check(Value::_bool(true));
     }
 
     SECTION("false")
     {
-        input("f");
+        input("#f");
         check(Value::_bool(false));
     }
 
@@ -558,61 +558,61 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("bool and: false/false case")
     {
-        input("f and f");
+        input("#f and #f");
         check(Value::_bool(false));
     }
 
     SECTION("bool and: false/true case")
     {
-        input("f and t");
+        input("#f and #t");
         check(Value::_bool(false));
     }
 
     SECTION("bool and: true/false case")
     {
-        input("t and f");
+        input("#t and #f");
         check(Value::_bool(false));
     }
 
     SECTION("bool and: true/true case")
     {
-        input("t and t");
+        input("#t and #t");
         check(Value::_bool(true));
     }
 
     SECTION("bool or: false/false case")
     {
-        input("f or f");
+        input("#f or #f");
         check(Value::_bool(false));
     }
 
     SECTION("bool or: false/true case")
     {
-        input("f or t");
+        input("#f or #t");
         check(Value::_bool(true));
     }
 
     SECTION("bool or: true/false case")
     {
-        input("t or f");
+        input("#t or #f");
         check(Value::_bool(true));
     }
 
     SECTION("bool or: true/true case")
     {
-        input("t or t");
+        input("#t or #t");
         check(Value::_bool(true));
     }
 
     SECTION("bool not - false case")
     {
-        input("not f");
+        input("not #f");
         check(Value::_bool(true));
     }
 
     SECTION("bool not - true case")
     {
-        input("not t");
+        input("not #t");
         check(Value::_bool(false));
     }
 
@@ -634,12 +634,12 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("then:else: - true condition")
     {
-        input(R"(t then: ["true result"] else: ["false result"])");
+        input(R"(#t then: ["true result"] else: ["false result"])");
         check(Value::object(make_string(gc, "true result")));
     }
     SECTION("then:else: - false condition")
     {
-        input(R"(f then: ["true result"] else: ["false result"])");
+        input(R"(#f then: ["true result"] else: ["false result"])");
         check(Value::object(make_string(gc, "false result")));
     }
     SECTION("then:else: - non-bool condition")
@@ -649,7 +649,7 @@ TEST_CASE("integration - single top level expression", "[katsu]")
     }
     SECTION("then:else: - body with parameters")
     {
-        input(R"(t then: \a b [a + b] else: ["false result"])");
+        input(R"(#t then: \a b [a + b] else: ["false result"])");
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
@@ -774,13 +774,13 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
     SECTION("TEST-ASSERT: - assertion passing")
     {
-        input("TEST-ASSERT: t");
+        input("TEST-ASSERT: #t");
         check(Value::null());
     }
 
     SECTION("TEST-ASSERT: - assertion failing")
     {
-        input("TEST-ASSERT: f");
+        input("TEST-ASSERT: #f");
         CHECK_THROWS_MATCHES(run(),
                              std::logic_error,
                              MessageMatches(ContainsSubstring("TEST-ASSERT: failed assertion")));
@@ -1073,7 +1073,7 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
 let: init hacky-make-mut do: [
     mut: boxed = init
     \new-value [
-        new-value = null then: [
+        new-value = #null then: [
             boxed
         ] else: [
             boxed: new-value
@@ -1085,11 +1085,11 @@ let: verify-matcher = ("matcher not evaluated" hacky-make-mut)
 let: give-me-Fixnum do: [ verify-matcher call: "matcher evaluated"; Fixnum ]
 
 let: verify-multimethod = ("multimethod not evaluated" hacky-make-mut)
-let: (a: (null give-me-Fixnum)) mm-test do: [ verify-multimethod call: "multimethod evaluated" ]
+let: (a: give-me-Fixnum) mm-test do: [ verify-multimethod call: "multimethod evaluated" ]
 
 5 mm-test
 
-(verify-matcher call: null) ~ ", " ~ (verify-multimethod call: null)
+(verify-matcher call: #null) ~ ", " ~ (verify-multimethod call: #null)
         )");
         check(Value::object(make_string(gc, "matcher evaluated, multimethod evaluated")));
     }
@@ -1102,9 +1102,9 @@ data: Thing has: { slot-a; slot-b; slot-c }
 
 TEST-ASSERT: not ("abc" Thing?)
 
-let: thing = (Thing slot-a: t slot-b: 5 slot-c: "c")
+let: thing = (Thing slot-a: #t slot-b: 5 slot-c: "c")
 TEST-ASSERT: thing Thing?
-TEST-ASSERT: (thing .slot-a = t)
+TEST-ASSERT: (thing .slot-a = #t)
 TEST-ASSERT: (thing .slot-b = 5)
 TEST-ASSERT: (thing .slot-c = "c")
 
@@ -1157,11 +1157,11 @@ print: "aaaaa"
         print: "    result of k('abcdef'): " ~ (k call: "abcdef")
         print: "    result of k('123456'): " ~ (k call: "123456")
         print: "    ddddd"
-    ] call/dc: t)
+    ] call/dc: #t)
     print: "  eeeee"
     # Pretend to do some calculations, and return the result:
     "calcs(" ~ input ~ ")"
-] call/marked: t
+] call/marked: #t
 print: "zzzzz"
         )CODE");
         check(Value::null());
@@ -1187,8 +1187,8 @@ let: (c handle-raw-condition-with-message: m) do: [
 ]
 set-condition-handler-from-module
 [
-    [null] call/dc: f
-] call/marked: t
+    [#null] call/dc: #f
+] call/marked: #t
         )CODE");
         check(Value::fixnum(12345));
     }

@@ -15,8 +15,8 @@ let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
     a unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
-let: (_: Null) >string do: ["null"]
-let: (b: Bool) >string do: [b then: "t" else: "f"]
+let: (_: Null) >string do: ["#null"]
+let: (b: Bool) >string do: [b then: "#t" else: "#f"]
 
 let: v pr do: [
     print: v >string
@@ -48,5 +48,5 @@ let: body with-return do: [
 let: (it do: f) do: [f call: it]
 
 let: not-implemented do: [
-    (NotImplemented condition: "not-implemented" message: "not implemented" stack: null) signal
+    (NotImplemented condition: "not-implemented" message: "not implemented" stack: #null) signal
 ]

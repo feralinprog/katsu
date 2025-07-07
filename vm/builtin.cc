@@ -891,9 +891,9 @@ namespace Katsu
             add_intrinsic(vm.gc, r_module, name, matchers.size(), r_matchers, handler);
         };
 
-        _register(vm, BuiltinId::_null, "null", r_default, Value::null());
-        _register(vm, BuiltinId::_true, "t", r_default, Value::_bool(true));
-        _register(vm, BuiltinId::_false, "f", r_default, Value::_bool(false));
+        _register(vm, BuiltinId::_null, "#null", r_default, Value::null());
+        _register(vm, BuiltinId::_true, "#t", r_default, Value::_bool(true));
+        _register(vm, BuiltinId::_false, "#f", r_default, Value::_bool(false));
 
         // TODO: Number?
         register_base_type(BuiltinId::_Fixnum, "Fixnum");
