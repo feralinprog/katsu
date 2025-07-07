@@ -732,19 +732,13 @@ namespace Katsu
 
         Value to_value(GC& gc)
         {
-            // TODO: make this less hacky
-            RunContext* c = this;
-            std::string pc(reinterpret_cast<char*>(&c), sizeof(c));
-            return Value::object(make_string(gc, pc));
+            return Value::object(make_foreign(gc, reinterpret_cast<void*>(this)));
         }
         static RunContext* from_value(Value v)
         {
-            // TODO: make this less hacky
-            ASSERT(v.is_obj_string());
-            String* s = v.obj_string();
-            ASSERT(s->length == sizeof(RunContext*));
-            RunContext** pc = reinterpret_cast<RunContext**>(s->contents());
-            return *pc;
+            ASSERT(v.is_obj_foreign());
+            void* p = v.obj_foreign()->value;
+            return reinterpret_cast<RunContext*>(p);
         }
     };
     Value native__make_run_context_for_path_(VM& vm, int64_t nargs, Value* args)
