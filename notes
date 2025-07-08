@@ -1,14 +1,16 @@
-TODO:
+TODO (VM):
 * int64 / uint64 and bignums
-* FFI and lua-style userdata (or similar)
-* coroutines / fibers (should be supported by delimited continuations..?)
 * allow for docs everywhere!
 * save to image and load from image
 * allow mut:s at module level
 * handle more errors in C++ and raise as conditions
 * split multimethod declaration and method addition? or leave effectively global multimethods?
 
-more TODO:
+TODO (in-language):
+* basic collections module(s)
+* improve FFI wrapper
+* coroutines / fibers
+* parser and bytecode compiler
 * literal data structure syntax?
   * %{ { key; value}; { key; value } ... }
 * modules should provide warnings at the end (e.g. potential for ambiguous multimethod dispatch)
@@ -29,3 +31,6 @@ References for delimited continuations:
   - http://pllab.is.ocha.ac.jp/~asai/cw2011tutorial/main-e.pdf
   - https://okmij.org/ftp/continuations/caml-shift-journal.pdf
   - https://www.gnu.org/software/guile/manual/html_node/Shift-and-Reset.html
+
+Unicode:
+* http://utf8everywhere.org/
