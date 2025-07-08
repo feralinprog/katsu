@@ -7,8 +7,8 @@
 // libffi:
 #include "ffi.h"
 
-// TODO: delete
-#include <iostream>
+// Dynamic linking:
+#include <dlfcn.h>
 
 namespace Katsu
 {
@@ -280,11 +280,47 @@ namespace Katsu
         return Value::null();
     }
 
-    // TODO: delete
-    uint32_t ffi_test_fn(uint8_t a, int32_t b)
+    Value ffi__dlopen(VM& vm, int64_t nargs, Value* args)
     {
-        std::cout << "within ffi_test_fn: a=" << (int32_t)a << ", b=" << b << "\n";
-        return a + b;
+        // _ dlopen: filename flags: flags
+        ASSERT(nargs == 3);
+        return Value::object(
+            make_foreign(vm.gc,
+                         dlopen(reinterpret_cast<char*>(args[1].obj_foreign()->value),
+                                // TODO: check range
+                                static_cast<int>(args[2].fixnum()))));
+    }
+    Value ffi__dlclose(VM& vm, int64_t nargs, Value* args)
+    {
+        // handle dlclose
+        ASSERT(nargs == 1);
+        return Value::fixnum(dlclose(args[0].obj_foreign()->value));
+    }
+    Value ffi__dlerror(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ dlerror
+        ASSERT(nargs == 1);
+        return Value::object(make_foreign(vm.gc, dlerror()));
+    }
+    Value ffi__dlsym(VM& vm, int64_t nargs, Value* args)
+    {
+        // handle dlsym: symbol
+        ASSERT(nargs == 2);
+        return Value::object(
+            make_foreign(vm.gc,
+                         dlsym(reinterpret_cast<char*>(args[0].obj_foreign()->value),
+                               reinterpret_cast<char*>(args[1].obj_foreign()->value))));
+    }
+
+    Value ffi__c_string_to_string(VM& vm, int64_t nargs, Value* args)
+    {
+        // foreign c-string>string
+        ASSERT(nargs == 1);
+        const char* s = reinterpret_cast<const char*>(args[0].obj_foreign()->value);
+        size_t len = strlen(s);
+        String* str = make_string_nofill(vm.gc, len);
+        memcpy(str->contents(), s, len);
+        return Value::object(str);
     }
 
     void register_ffi_builtins(VM& vm, Root<Assoc>& r_ffi)
@@ -348,9 +384,17 @@ namespace Katsu
         register_const("&ffi_type_sint64", Value::object(make_foreign(vm.gc, &ffi_type_sint64)));
         register_const("&ffi_type_float", Value::object(make_foreign(vm.gc, &ffi_type_float)));
         register_const("&ffi_type_double", Value::object(make_foreign(vm.gc, &ffi_type_double)));
-        register_const("&ffi_type_pointer", Value::object(make_foreign(vm.gc, &ffi_type_pointer)));
+        register_const("&ffi_type_uchar", Value::object(make_foreign(vm.gc, &ffi_type_uchar)));
+        register_const("&ffi_type_schar", Value::object(make_foreign(vm.gc, &ffi_type_schar)));
+        register_const("&ffi_type_ushort", Value::object(make_foreign(vm.gc, &ffi_type_ushort)));
+        register_const("&ffi_type_sshort", Value::object(make_foreign(vm.gc, &ffi_type_sshort)));
+        register_const("&ffi_type_uint", Value::object(make_foreign(vm.gc, &ffi_type_uint)));
+        register_const("&ffi_type_sint", Value::object(make_foreign(vm.gc, &ffi_type_sint)));
+        register_const("&ffi_type_ulong", Value::object(make_foreign(vm.gc, &ffi_type_ulong)));
+        register_const("&ffi_type_slong", Value::object(make_foreign(vm.gc, &ffi_type_slong)));
         register_const("&ffi_type_longdouble",
                        Value::object(make_foreign(vm.gc, &ffi_type_longdouble)));
+        register_const("&ffi_type_pointer", Value::object(make_foreign(vm.gc, &ffi_type_pointer)));
         register_const("&ffi_type_complex_float",
                        Value::object(make_foreign(vm.gc, &ffi_type_complex_float)));
         register_const("&ffi_type_complex_double",
@@ -430,8 +474,27 @@ namespace Katsu
 
         // TODO: look into the raw API for libffi (seems like it just lifts primitives to ffi_call
         // args, so args don't all need an extra void* allocation.
+        // TODO: allow making a larger variety of `ffi_type`s.
 
-        register_const("&ffi_test_fn",
-                       Value::object(make_foreign(vm.gc, reinterpret_cast<void*>(&ffi_test_fn))));
+        register_const("NULL", Value::object(make_foreign(vm.gc, nullptr)));
+        _register(
+            "dlopen:flags:",
+            {matches_any, matches_type(_Foreign) /* filename */, matches_type(_Fixnum) /* flags */},
+            &ffi__dlopen);
+        _register("dlclose", {matches_type(_Foreign) /* handle */}, &ffi__dlclose);
+        _register("dlerror", {matches_any}, &ffi__dlerror);
+        register_const("RTLD_LAZY", Value::fixnum(RTLD_LAZY));
+        register_const("RTLD_NOW", Value::fixnum(RTLD_NOW));
+        register_const("RTLD_GLOBAL", Value::fixnum(RTLD_GLOBAL));
+        register_const("RTLD_LOCAL", Value::fixnum(RTLD_LOCAL));
+        register_const("RTLD_NODELETE", Value::fixnum(RTLD_NODELETE));
+        register_const("RTLD_NOLOAD", Value::fixnum(RTLD_NOLOAD));
+        register_const("RTLD_DEEPBIND", Value::fixnum(RTLD_DEEPBIND));
+
+        _register("dlsym:",
+                  {matches_type(_Foreign) /* handle */, matches_type(_Foreign) /* symbol */},
+                  &ffi__dlsym);
+
+        _register("c-string>string", {matches_type(_Foreign)}, &ffi__c_string_to_string);
     }
 };
