@@ -1,54 +1,28 @@
 use: {
     "core.builtin.ffi"
-    "core.builtin.misc"
+    "core.ffi"
+    "core.resource"
 }
 
-let: (s: String) >c-string do: [
-    # Null-terminate.
-    let: cs = (malloc: (s length + 1))
-    # TODO: memcpy / memmove
-    mut: i = 0
-    while: [i < s length] do: [
-        cs foreign-write-u8-at-offset: i value: (s unsafe-read-u8-at-offset: 16 + i)
-        i: i + 1
-    ]
-    cs foreign-write-u8-at-offset: i value: 0
-    cs
+with-disposal: [
+    let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
+
+    # int puts(const char*)
+    let: &puts = (libc dlsym: "puts")
+
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    let: atypes = (malloc-foreign-array: { &ffi_type_pointer }) ^dispose
+    let: prep-result = (ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: &ffi_type_sint atypes: atypes) ^dispose
+    assert: prep-result = ffi_status.FFI_OK
+
+    let: s = "hello, world! -sent from my FFI"
+    let: arg = s >c-string ^dispose
+    let: argp = (malloc: 8 aligned: 8) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    argp foreign-write-foreign-at-offset: 0 value: arg
+    let: avalues = (malloc-foreign-array: { argp }) ^dispose
+    let: rvalue = (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+
+    ffi-call: cif fn: &puts rvalue: rvalue avalues: avalues
+    let: result = (rvalue foreign-read-s32-at-offset: 0)
+    assert: result = (s length + 1)
 ]
-
-let: filename = "libc.so.6" >c-string
-assert: dlerror = NULL
-let: handle = (dlopen: filename flags: RTLD_LAZY)
-assert: handle != NULL
-
-# int puts(const char*)
-let: symbol = "puts" >c-string
-let: &puts = (handle dlsym: symbol)
-assert: &puts != NULL
-
-let: cif = (malloc: sizeof-ffi_cif)
-let: atypes = (malloc-foreign-array: { &ffi_type_pointer })
-let: prep-result = (ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: &ffi_type_sint atypes: atypes)
-assert: prep-result = ffi_status.FFI_OK
-
-let: s = "hello, world! -sent from my FFI"
-let: arg = s >c-string
-let: argp = (malloc: 8 aligned: 8) # TODO: correct alignment? maybe need to pull this from the `cif`
-argp foreign-write-foreign-at-offset: 0 value: arg
-let: avalues = (malloc-foreign-array: { argp })
-let: rvalue = (malloc: sizeof-ffi_arg aligned: 4) # TODO: correct alignment? maybe need to pull this from the `cif`
-
-ffi-call: cif fn: &puts rvalue: rvalue avalues: avalues
-let: result = (rvalue foreign-read-s32-at-offset: 0)
-assert: result = (s length + 1)
-
-rvalue free
-avalues free
-argp free
-arg free
-atypes free
-cif free
-
-symbol free
-assert: handle dlclose = 0
-filename free

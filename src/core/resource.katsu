@@ -1,0 +1,29 @@
+use: "core.builtin.misc"
+
+# TODO: just make mutable module-level fields
+data: Box has: { value }
+
+# Poor man's dynamic variable.
+# TODO: implement dynamic variables!
+let: active-resources = (Box value: #null)
+
+# TODO: delete this, add a mix-in instead for disposing.
+# By default, disposing a value is a noop.
+let: _ dispose do: [ #null ]
+
+let: (it with-disposal: f) do: [
+    let: saved-active-resources = active-resources .value
+    [
+        active-resources value: {}
+        f call: it
+    ] finally: [
+        active-resources .value each: [dispose]
+        active-resources value: saved-active-resources
+    ]
+]
+
+# TODO: add a Disposable mix-in or something similar. Only allow those within active-resources.
+let: resource ^dispose do: [
+    active-resources .value append: resource
+    resource
+]

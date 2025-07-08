@@ -1,0 +1,65 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+    "core.resource"
+}
+
+# Default disposal for a foreign value is to free it.
+# Specific types of foreign values should have thin wrappers to allow different disposal strategies.
+let: (f: Foreign) dispose do: [ f free ]
+
+let: (s: String) >c-string do: [
+    # Null-terminate.
+    let: cs = (malloc: (s length + 1))
+    # TODO: memcpy / memmove
+    mut: i = 0
+    while: [i < s length] do: [
+        cs foreign-write-u8-at-offset: i value: (s unsafe-read-u8-at-offset: 16 + i)
+        i: i + 1
+    ]
+    cs foreign-write-u8-at-offset: i value: 0
+    cs
+]
+
+data: DLOpenError extends: { Condition } has: {}
+data: DLCloseError extends: { Condition } has: {}
+data: DLSymbolNotFound extends: { Condition } has: { symbol }
+
+data: DLL has: { handle }
+let: (dlopen: (filename: String) flags: (flags: Fixnum)) do: [
+    assert: dlerror = NULL
+    with-disposal: [
+        let: ~filename = filename >c-string ^dispose
+        let: handle = (dlopen: ~filename flags: flags)
+        if: handle = NULL then: [
+            let: ~err = dlerror
+            # There should be an error message.
+            assert: ~err != NULL
+            (DLOpenError condition: "dlopen-error" message: ~err c-string>string stack: #null) signal
+        ]
+        DLL handle: handle
+    ]
+]
+let: (dll: DLL) dispose do: [
+    assert: dlerror = NULL
+    let: result = dll .handle dlclose
+    if: result != 0 then: [
+        let: ~err = dlerror
+        # There should be an error message.
+        assert: ~err != NULL
+        (DLCloseError condition: "dlclose-error" message: ~err c-string>string stack: #null) signal
+    ]
+]
+
+let: ((dll: DLL) dlsym: (symbol: String)) do: [
+    assert: dlerror = NULL
+    with-disposal: [
+        let: ~symbol = symbol >c-string ^dispose
+        let: lookup = (dll .handle dlsym: ~symbol)
+        let: ~err? = dlerror
+        if: ~err? != NULL then: [
+            (DLSymbolNotFound condition: "dl-symbol-not-found" message: ~err? c-string>string stack: #null symbol: symbol) signal
+        ]
+        lookup
+    ]
+]
