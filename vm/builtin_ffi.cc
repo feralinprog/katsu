@@ -12,6 +12,18 @@
 
 namespace Katsu
 {
+    Value ffi__malloc_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ malloc: size
+        ASSERT(nargs == 2);
+        ASSERT(args[1].fixnum() >= 0);
+        // TODO: check against size_t
+        void* p = malloc(args[1].fixnum());
+        if (!p) {
+            throw condition_error("out-of-memory", "could not allocate requsted memory");
+        }
+        return Value::object(make_foreign(vm.gc, p));
+    }
     Value ffi__malloc_aligned_(VM& vm, int64_t nargs, Value* args)
     {
         // _ malloc: size aligned: bytes
@@ -35,6 +47,28 @@ namespace Katsu
         return Value::null();
     }
 
+    Value ffi__malloc_foreign_array_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ malloc-foreign-array: <vector-of-foreign>
+        ASSERT(nargs == 2);
+        Vector* src = args[1].obj_vector();
+        for (Value entry : src) {
+            if (!entry.is_obj_foreign()) {
+                throw condition_error("invalid-argument", "array must contain Foreign entries");
+            }
+        }
+        // TODO: check against size_t
+        void** ps = reinterpret_cast<void**>(malloc(src->length * sizeof(void*)));
+        if (!ps) {
+            throw condition_error("out-of-memory", "could not allocate requsted memory");
+        }
+        // Fill!
+        Array* src_arr = src->v_array.obj_array();
+        for (size_t i = 0; i < src->length; i++) {
+            ps[i] = src_arr->components()[i].obj_foreign()->value;
+        }
+        return Value::object(make_foreign(vm.gc, ps));
+    }
     Value ffi__malloc_foreign_array_aligned_(VM& vm, int64_t nargs, Value* args)
     {
         // _ malloc-foreign-array: <vector-of-foreign> aligned: bytes
@@ -344,11 +378,15 @@ namespace Katsu
             append(vm.gc, r_ffi, r_name, r_value);
         };
 
+        _register("malloc:", {matches_any, matches_type(_Fixnum)}, &ffi__malloc_);
         _register("malloc:aligned:",
                   {matches_any, matches_type(_Fixnum), matches_type(_Fixnum)},
                   &ffi__malloc_aligned_);
         _register("free", {matches_type(_Foreign)}, &ffi__free);
 
+        _register("malloc-foreign-array:",
+                  {matches_any, matches_type(_Vector)},
+                  &ffi__malloc_foreign_array_);
         _register("malloc-foreign-array:aligned:",
                   {matches_any, matches_type(_Vector), matches_type(_Fixnum)},
                   &ffi__malloc_foreign_array_aligned_);

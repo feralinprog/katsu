@@ -5,7 +5,7 @@ use: {
 
 let: (s: String) >c-string do: [
     # Null-terminate.
-    let: cs = (malloc: (s length + 1) aligned: 1) # TODO: alignment?
+    let: cs = (malloc: (s length + 1))
     # TODO: memcpy / memmove
     mut: i = 0
     while: [i < s length] do: [
@@ -26,17 +26,17 @@ let: symbol = "puts" >c-string
 let: &puts = (handle dlsym: symbol)
 assert: &puts != NULL
 
-let: cif = (malloc: sizeof-ffi_cif aligned: 8) # TODO: correct alignment?
-let: atypes = (malloc-foreign-array: { &ffi_type_pointer } aligned: 8) # TODO: correct alignment?
+let: cif = (malloc: sizeof-ffi_cif)
+let: atypes = (malloc-foreign-array: { &ffi_type_pointer })
 let: prep-result = (ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: &ffi_type_sint atypes: atypes)
 assert: prep-result = ffi_status.FFI_OK
 
 let: s = "hello, world! -sent from my FFI"
 let: arg = s >c-string
-let: argp = (malloc: 8 aligned: 8) # TODO: correct alignment?
+let: argp = (malloc: 8 aligned: 8) # TODO: correct alignment? maybe need to pull this from the `cif`
 argp foreign-write-foreign-at-offset: 0 value: arg
-let: avalues = (malloc-foreign-array: { argp } aligned: 8) # TODO: correct alignment?
-let: rvalue = (malloc: sizeof-ffi_arg aligned: 4) # TODO: correct alignment?
+let: avalues = (malloc-foreign-array: { argp })
+let: rvalue = (malloc: sizeof-ffi_arg aligned: 4) # TODO: correct alignment? maybe need to pull this from the `cif`
 
 ffi-call: cif fn: &puts rvalue: rvalue avalues: avalues
 let: result = (rvalue foreign-read-s32-at-offset: 0)
