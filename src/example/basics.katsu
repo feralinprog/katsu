@@ -178,7 +178,7 @@ print: (\r [
 ] with-return)
 
 let: n do-test do: [
-    TAIL-CALL: (n = 0 then: [ () >string ] else: [
+    TAIL-CALL: (if: n = 0 then: [ () >string ] else: [
         (n - 1) do-test
     ])
 ]

@@ -408,16 +408,16 @@ namespace Katsu
         }
     }
 
-    void intrinsic__then_else_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    void intrinsic__if_then_else_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
-        // cond then: tbody else: fbody
-        ASSERT(nargs == 3);
-        Value body = (args[0].is_bool() && args[0]._bool()) ? args[1] : args[2];
+        // _ if: cond then: tbody else: fbody
+        ASSERT(nargs == 4);
+        Value body = (args[1].is_bool() && args[1]._bool()) ? args[2] : args[3];
         call_impl(vm,
                   tail_call,
                   /* v_callable */ body,
-                  /* nargs */ 0,
-                  /* args */ nullptr);
+                  /* nargs */ 1,
+                  /* args */ &args[0]);
     }
 
     void intrinsic__call(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
@@ -1007,10 +1007,10 @@ namespace Katsu
                         {matches_any, matches_any},
                         &native__pretty_print_);
 
-        register_intrinsic("then:else:",
+        register_intrinsic("if:then:else:",
                            r_default,
-                           {matches_any, matches_any, matches_any},
-                           &intrinsic__then_else_);
+                           {matches_any, matches_any, matches_any, matches_any},
+                           &intrinsic__if_then_else_);
 
         register_intrinsic("call", r_default, {matches_any}, &intrinsic__call);
         register_intrinsic("call:", r_default, {matches_any, matches_any}, &intrinsic__call_);

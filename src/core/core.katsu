@@ -4,13 +4,13 @@ IMPORT-EXISTING-MODULE: "core.builtin.misc"
 # and start loading other modules.
 
 let: (if: (cond: Bool) then: tbody) do: [
-    # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
-    TAIL-CALL: (cond then: tbody else: #null)
+    # TODO: `if:then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
+    TAIL-CALL: (if: cond then: tbody else: #null)
 ]
 
 let: (while: (cond: Closure) do: (body: Closure)) do: [
-    # TODO: `then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
-    TAIL-CALL: ((cond call) then: [
+    # TODO: `if:then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
+    TAIL-CALL: (if: (cond call) then: [
         body call
         TAIL-CALL: (while: cond do: body)
     ] else: #null)
@@ -73,11 +73,11 @@ let: ((v: Vector) each: f) do: [
         last: (f call: (v unsafe-at: i))
         i: i + 1
     ]
-    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+    if: (last instance?: StopIteration) then: [ last .value ] else: [ last ]
 ]
 
 let: ((v: Vector) contains?: x) do: [
-    v each: [ (it = x) then: [ StopIteration value: #t ] else: #f ]
+    v each: [ if: (it = x) then: [ StopIteration value: #t ] else: #f ]
 ]
 
 let: ((v: Vector) push: x) do: [ v append: x ]
@@ -114,10 +114,10 @@ let: ((a: Assoc) each-entry: f) do: [
         last: (f call*: (a backing-array unsafe-at: i * 2), (a backing-array unsafe-at: i * 2 + 1))
         i: i + 1
     ]
-    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+    if: (last instance?: StopIteration) then: [ last .value ] else: [ last ]
 ]
 let: ((a: Assoc) at*: key) do: [
-    a each-entry: \k v [ (k = key) then: [ StopIteration value: v ] else: #null ]
+    a each-entry: \k v [ if: (k = key) then: [ StopIteration value: v ] else: #null ]
 ]
 let: ((a: Assoc) each-key: f) do: [
     mut: i = 0
@@ -126,10 +126,10 @@ let: ((a: Assoc) each-key: f) do: [
         last: (f call: (a backing-array unsafe-at: i * 2))
         i: i + 1
     ]
-    (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+    if: (last instance?: StopIteration) then: [ last .value ] else: [ last ]
 ]
 let: ((a: Assoc) contains?: k) do: [
-    a each-key: [ (it = k) then: [ StopIteration value: #t ] else: #f ]
+    a each-key: [ if: (it = k) then: [ StopIteration value: #t ] else: #f ]
 ]
 
 let: (t: Tuple) length do: [
@@ -157,7 +157,7 @@ let: (try: body except: handlers) do: [
                 StopIteration value: (handler-fn call: cond)
             ]
         ])
-        handled then: [ handler-result ] else: [ cond signal/no-trace ]
+        if: handled then: [ handler-result ] else: [ cond signal/no-trace ]
     ] on-return: [
         # Continue returning.
         reset: result
@@ -177,7 +177,7 @@ let: (body finally: recover) do: [
 ]
 
 let: (ensure: p? by: a else: default) do: [
-    (p? call) then: [
+    if: (p? call) then: [
         default call
     ] else: [
         let: result = a call
@@ -237,7 +237,7 @@ let: use-stack = {}
 let: imports-stack = {}
 data: RecursiveUse extends: { Condition } has: { module-name }
 let: (use: (module-name: String) path-loader: get-path contents-loader: get-contents) do: [
-    (use-stack contains?: module-name) then: [
+    if: (use-stack contains?: module-name) then: [
         (RecursiveUse condition: "recursive-use" message: "" stack: #null module-name: module-name) signal
     ] else: [
         let: module-result = (ensure: [loaded-modules contains?: module-name] by: [
@@ -302,8 +302,8 @@ let: (n: Fixnum) digit>string do: [
 let: ((a: Fixnum) mod: (n: Fixnum)) do: [ a - (a / n) * n ]
 
 let: (n: Fixnum) >string do: [
-    n < 0 then: ["-" ~ (- n) >string] else: [
-        n < 10 then: [n digit>string] else: [
+    if: n < 0 then: ["-" ~ (- n) >string] else: [
+        if: n < 10 then: [n digit>string] else: [
             (n / 10) >string ~ (n mod: 10) digit>string
         ]
     ]

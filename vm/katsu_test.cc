@@ -632,28 +632,33 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         CHECK(capture.str() == "fixnum 1234\n");
     }
 
-    SECTION("then:else: - true condition")
+    SECTION("if:then:else: - true condition")
     {
-        input(R"(#t then: ["true result"] else: ["false result"])");
+        input(R"(if: #t then: ["true result"] else: ["false result"])");
         check(Value::object(make_string(gc, "true result")));
     }
-    SECTION("then:else: - false condition")
+    SECTION("if:then:else: - false condition")
     {
-        input(R"(#f then: ["true result"] else: ["false result"])");
+        input(R"(if: #f then: ["true result"] else: ["false result"])");
         check(Value::object(make_string(gc, "false result")));
     }
-    SECTION("then:else: - non-bool condition")
+    SECTION("if:then:else: - non-bool condition")
     {
-        input(R"(1234 then: ["true result"] else: ["false result"])");
+        input(R"(if: 1234 then: ["true result"] else: ["false result"])");
         check(Value::object(make_string(gc, "false result")));
     }
     SECTION("then:else: - body with parameters")
     {
-        input(R"(#t then: \a b [a + b] else: ["false result"])");
+        input(R"(if: #t then: \a b [a + b] else: ["false result"])");
         CHECK_THROWS_MATCHES(
             run(),
             std::runtime_error,
             Message("argument-count-mismatch: called a closure with wrong number of arguments"));
+    }
+    SECTION("then:else: - implicit parameter")
+    {
+        input(R"("true result" if: #t then: [it] else: ["false result"])");
+        check(Value::object(make_string(gc, "true result")));
     }
 
     SECTION("call - closure")
@@ -922,7 +927,7 @@ test: 5
     {
         input(R"(
 let: (n triangular-num: result) do: [
-    (n = 0) then: result else: [
+    if: (n = 0) then: result else: [
         (n - 1) triangular-num: (n + result)
     ]
 ]
@@ -941,7 +946,7 @@ let: (n triangular-num) do: [n triangular-num: 0]
         input(R"(
 let: (n triangular-num: result) do: [
     # TODO: then:else: should probably assume tail-call if in tail position, even if not requested
-    TAIL-CALL: ((n = 0) then: result else: [
+    TAIL-CALL: (if: (n = 0) then: result else: [
         TAIL-CALL: ((n - 1) triangular-num: (n + result))
     ])
 ]
@@ -1085,7 +1090,7 @@ let: ( a          mm-test:  b         ) do: [ "any - any"    ]
 let: init hacky-make-mut do: [
     mut: boxed = init
     \new-value [
-        new-value = #null then: [
+        if: new-value = #null then: [
             boxed
         ] else: [
             boxed: new-value

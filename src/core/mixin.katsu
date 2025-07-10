@@ -24,10 +24,10 @@ let: ((v: Vector) keep: good?) do: [
     filtered
 ]
 let: ((v: Vector) all?: p?) do: [
-    v each: [ (p? call: it) then: [ #t ] else: [ StopIteration value: #f ] ]
+    v each: [ if: (p? call: it) then: [ #t ] else: [ StopIteration value: #f ] ]
 ]
 let: ((v: Vector) any?: p?) do: [
-    v each: [ (p? call: it) then: [ StopIteration value: #t ] else: [ #f ] ]
+    v each: [ if: (p? call: it) then: [ StopIteration value: #t ] else: [ #f ] ]
 ]
 let: ((v: Vector) empty?) do: [ v length = 0 ]
 
@@ -35,14 +35,14 @@ data: OutOfRange extends: { Condition } has: { range; index }
 let: (out-of-range: range index: index) do: [ OutOfRange condition: "out-of-range" message: "index out of range" stack: #null range: range index: index ]
 
 let: ((a: Array) at: (i: Fixnum)) do: [
-    (i >= 0 and i < a length) then: [
+    if: (i >= 0 and i < a length) then: [
         a unsafe-at: i
     ] else: [
         (out-of-range: a index: i) signal
     ]
 ]
 let: ((v: Vector) at: (i: Fixnum)) do: [
-    (i >= 0 and i < v length) then: [
+    if: (i >= 0 and i < v length) then: [
         v unsafe-at: i
     ] else: [
         (out-of-range: v index: i) signal
@@ -62,7 +62,7 @@ let: (s contains?: x starting-at: index) do: [
 let: ((v: Vector) first: project where: accept? else: default) do: [
     v each: [
         let: p = (project call: it)
-        (accept? call: p) then: [ StopIteration value: p ] else: [ default ]
+        if: (accept? call: p) then: [ StopIteration value: p ] else: [ default ]
     ]
 ]
 
