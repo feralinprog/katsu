@@ -17,6 +17,7 @@ let: (it with-disposal: f) do: [
         active-resources value: {}
         f call: it
     ] finally: [
+        # TODO: reverse first. need collections methods!
         active-resources .value each: [dispose]
         active-resources value: saved-active-resources
     ]
