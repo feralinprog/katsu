@@ -717,6 +717,14 @@ namespace Katsu
         return Value::object(append(vm.gc, r_assoc, r_key, r_value));
     }
 
+    Value native__vector_to_array(VM& vm, int64_t nargs, Value* args)
+    {
+        // vec vector>array
+        ASSERT(nargs == 1);
+        Root<Vector> r_vector(vm.gc, args[0].obj_vector());
+        return Value::object(vector_to_array(vm.gc, r_vector));
+    }
+
     struct RunContext
     {
         Lexer lexer;
@@ -1094,6 +1102,7 @@ namespace Katsu
                         {matches_type(_Assoc), matches_any, matches_any},
                         &native__add_value_);
 
+        register_native("vector>array", r_misc, {matches_type(_Vector)}, &native__vector_to_array);
 
         // TODO: this is super hacky. figure out a different way to do this.
         register_native("make-run-context-for-path:contents:",
