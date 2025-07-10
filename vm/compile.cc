@@ -538,10 +538,16 @@ namespace Katsu
                 return;
             }
             Value v_existing;
-            if (lookup_name(builder, *r_name, &v_existing) != SUCCESS) {
-                throw compile_error("name is not defined in module (and is also not <a mutable "
-                                    "local>:), or is ambiguous in the current module and imports",
-                                    expr->span);
+            LookupResult lookup;
+            if ((lookup = lookup_name(builder, *r_name, &v_existing)) != SUCCESS) {
+                if (lookup == NOT_FOUND) {
+                    throw compile_error(
+                        "name is not defined in module (and is also not <a mutable local>:)",
+                        expr->span);
+                } else {
+                    throw compile_error("name is ambiguous in the current module and imports",
+                                        expr->span);
+                }
             }
             ValueRoot r_existing(gc, std::move(v_existing));
 
