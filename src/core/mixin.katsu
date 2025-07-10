@@ -1,0 +1,172 @@
+use: {
+    "core.builtin.misc"
+    "core.condition"
+    "core.misc"
+}
+
+# TODO: ideally this would all be in a collections module or similar
+
+let: (a: Array) >vector do: [
+    let: v = {}
+    v unsafe-write-value-at-offset: 16 value: a
+    v unsafe-write-u64-at-offset: 8 value: a length
+    v
+]
+
+let: ((v: Vector) map: f) do: [
+    let: mapped = {}
+    v each: [ mapped append: (f call: it) ]
+    mapped
+]
+let: ((v: Vector) keep: good?) do: [
+    let: filtered = {}
+    v each: \x [ if: (good? call: x) then: [ filtered append: x ] ]
+    filtered
+]
+let: ((v: Vector) all?: p?) do: [
+    v each: [ (p? call: it) then: [ #t ] else: [ StopIteration value: #f ] ]
+]
+let: ((v: Vector) any?: p?) do: [
+    v each: [ (p? call: it) then: [ StopIteration value: #t ] else: [ #f ] ]
+]
+let: ((v: Vector) empty?) do: [ v length = 0 ]
+
+data: OutOfRange extends: { Condition } has: { range; index }
+let: (out-of-range: range index: index) do: [ OutOfRange condition: "out-of-range" message: "index out of range" stack: #null range: range index: index ]
+
+let: ((a: Array) at: (i: Fixnum)) do: [
+    (i >= 0 and i < a length) then: [
+        a unsafe-at: i
+    ] else: [
+        (out-of-range: a index: i) signal
+    ]
+]
+let: ((v: Vector) at: (i: Fixnum)) do: [
+    (i >= 0 and i < v length) then: [
+        v unsafe-at: i
+    ] else: [
+        (out-of-range: v index: i) signal
+    ]
+]
+
+let: (s contains?: x starting-at: index) do: [
+    mut: found = #f
+    mut: i = index
+    while: [ i < s length and not found ] do: [
+        if: (s at: i) = x then: [ found: #t ]
+        i: i + 1
+    ]
+    found
+]
+
+let: ((v: Vector) first: project where: accept? else: default) do: [
+    v each: [
+        let: p = (project call: it)
+        (accept? call: p) then: [ StopIteration value: p ] else: [ default ]
+    ]
+]
+
+let: ((a: Vector) concat: (b: Vector)) do: [
+    let: c = {}
+    a each: [ c append: it ]
+    b each: [ c append: it ]
+    c
+]
+
+###############################################################################
+
+let: PRIMITIVE = 0
+let: DATACLASS = 1
+let: MIXIN = 2
+
+let: (t: Type) .name do: [ t unsafe-read-value-at-offset: 8 ]
+let: (t: Type) .bases do: [ t unsafe-read-value-at-offset: 16 ]
+let: (t: Type) .sealed do: [ (t unsafe-read-u8-at-offset: 24) != 0 ]
+let: (t: Type) .linearization do: [ t unsafe-read-value-at-offset: 32 ]
+let: (t: Type) .subtypes do: [ t unsafe-read-value-at-offset: 40 ]
+let: (t: Type) .kind do: [ t unsafe-read-u32-at-offset: 48 ]
+let: (t: Type) .slots do: [ t unsafe-read-value-at-offset: 56 ]
+let: (t: Type) .num-total-slots do: [ t unsafe-read-u32-at-offset: 64 ]
+
+let: ((t: Type) bases: (b: Array)) do: [ t unsafe-write-value-at-offset: 16 value: b ]
+let: ((t: Type) linearization: (l: Array)) do: [ t unsafe-write-value-at-offset: 32 value: l ]
+let: ((t: Type) subtypes: (s: Vector)) do: [ t unsafe-write-value-at-offset: 40 value: s ]
+
+data: Cursor has: { seq; spot }
+let: (c: Cursor) used? do: [ c .spot = c .seq length]
+let: (c: Cursor) cur do: [ c .seq at: c .spot ]
+let: (c: Cursor) shift do: [ c spot: c .spot + 1 ]
+
+let: ((c: Cursor) tail-contains?: x) do: [
+    c .seq contains?: x starting-at: c .spot + 1
+]
+
+let: (cursors c3-head?: x) do: [
+    not (cursors any?: [ tail-contains?: x ])
+]
+
+data: NoLinearization extends: { Condition } has: {}
+let: no-linearization do: [ NoLinearization condition: "no-linearization" message: "C3 linearization not possible" stack: #null ]
+
+let: (linearizations: Vector) c3-merge do: [
+    let: merged = {}
+    mut: cursors = (linearizations map: [ Cursor seq: it spot: 0 ])
+
+    while: [ not cursors empty? ] do: [
+        # Find the first head possible from any linearization.
+        # "candidate" = any linearization[current spot] value.
+        # "head" = any candidate which for every linearization is _not_ in
+        #     linearization[current spot + 1:] (using Pythonish syntax).
+        let: head = (cursors first: [ cur ] where: [ cursors c3-head?: it ] else: #null)
+
+        if: head = #null then: [
+            no-linearization signal
+        ]
+
+        merged append: head
+        # Ratchet past this head as the candidate in any linearization.
+        cursors each: \c [
+            if: c cur = head then: [ c shift ]
+        ]
+        cursors: (cursors keep: [ not used? ])
+    ]
+
+    merged
+]
+
+data: InheritanceCycle extends: { Condition } has: { type; base }
+let: (inheritance-cycle: type base: base) do: [
+    InheritanceCycle condition: "inheritance-cycle" message: (
+        "inheritance cycle starting from " ~ type .name ~ " through base " ~ base .name
+    ) stack: #null type: type base: base
+]
+
+# C3 linearization, but using a possibly swapped out collection of type bases.
+let: ((type: Type) c3-linearization: (bases: Vector)) do: [
+    bases each: \base [
+        if: (base .linearization >vector contains?: type) then: [
+            (inheritance-cycle: type base: base) signal
+        ]
+    ]
+
+    let: linearizations = (bases map: [ .linearization ])
+    linearizations append: bases
+
+    { type } concat: linearizations c3-merge
+]
+
+# Classic C3 linearization, using the type's existing bases.
+let: (type: Type) c3-linearization do: [ type c3-linearization: type .bases ]
+
+let: ((mixin: Type) mix-in-to: (type: Type)) do: [
+    if: mixin .kind != MIXIN then: [ (invalid-argument: "mixin must be a MIXIN Type") signal ]
+
+    let: new-bases = (type .bases >vector concat: { mixin })
+    let: new-linearization = (type c3-linearization: new-bases)
+    
+    type bases: new-bases vector>array
+    type linearization: new-linearization vector>array
+    mixin .subtypes append: type
+
+    #null
+]

@@ -950,9 +950,6 @@ namespace Katsu
         return *r_type;
     }
 
-    // NOTE: when porting over try_set_bases(), make sure to also update supertypes' subtype
-    // vectors...
-
     void add_method(GC& gc, Root<MultiMethod>& r_multimethod, Root<Method>& r_method,
                     bool require_unique)
     {

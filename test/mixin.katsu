@@ -1,0 +1,17 @@
+use: {
+    "core.builtin.misc"
+    "core.mixin"
+}
+
+data: Concrete has: { a; b }
+mixin: Abstract
+
+Abstract mix-in-to: Concrete
+
+let: (c: Concrete) sum do: [ c .a + c .b ]
+
+let: (a: Abstract) print-sum do: [
+    print: a sum >string
+]
+
+(Concrete a: 3 b: 5 ) print-sum
