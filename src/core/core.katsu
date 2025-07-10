@@ -18,7 +18,7 @@ let: (while: (cond: Closure) do: (body: Closure)) do: [
 
 data: Condition has: { condition; message; stack }
 data: AssertionFailed extends: { Condition } has: {}
-# TODO: subtypes instead of condition field
+# TODO: subtypes instead of condition field, and have core.condition convert from raw inputs from VM into Condition objects
 
 data: Unwinding has: {}
 data: OkUnwinding extends: { Unwinding } has: { value }
