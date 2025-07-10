@@ -1,0 +1,6 @@
+data: NotImplemented extends: { Condition } has: {}
+data: InvalidArgument extends: { Condition } has: {}
+
+let: (assertion-failed: message) do: [ AssertionFailed condition: "assertion-failed" message: message stack: #null ]
+let: (not-implemented: message) do: [ NotImplemented condition: "not-implemented" message: message stack: #null ]
+let: (invalid-argument: message) do: [ InvalidArgument condition: "invalid-argument" message: message stack: #null ]

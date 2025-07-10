@@ -46,7 +46,3 @@ let: body with-return do: [
 ]
 
 let: (it do: f) do: [f call: it]
-
-let: not-implemented do: [
-    (NotImplemented condition: "not-implemented" message: "not implemented" stack: #null) signal
-]

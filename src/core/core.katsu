@@ -17,7 +17,6 @@ let: (while: (cond: Closure) do: (body: Closure)) do: [
 ]
 
 data: Condition has: { condition; message; stack }
-data: NotImplemented extends: { Condition } has: {}
 data: AssertionFailed extends: { Condition } has: {}
 # TODO: subtypes instead of condition field
 
