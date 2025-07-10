@@ -1124,18 +1124,7 @@ namespace Katsu
         register_ffi_builtins(vm, r_ffi);
 
         /*
-         * TODO:
-         * - cleanup: (or maybe this is just delimited continuations...)
-         * - panic!: (or maybe this is just delimited continuations...)
-         * - mix-in:to:
-         * - at:
-         * - at:=:
-         * - append:
-         * - pop
-         * - length (String / Vector)
-         * - anything for FFI!
-         *
-         * also move / add some things to compile-time builtins:
+         * TODO: move / add some things to compile-time builtins:
          * - let:do:
          * - let:do:::
          * - let:
@@ -1144,12 +1133,11 @@ namespace Katsu
          * - data:extends:has:
          * - mixin:
          *
-         * also move / add some things to katsu instead:
+         * TODO: also move / add some things to katsu instead:
          * - Fixnum? (etc. for other builtin types)
          *   (v Fixnum? === v instance-of?: Fixnum)
          * - print:
          * - pretty-print:
-         * - >string
          */
     }
 };
