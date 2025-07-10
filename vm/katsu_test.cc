@@ -858,6 +858,7 @@ a + b
         input(R"(
 let: a = 3 # here's a comment
 let: #b = 5 # and another
+###### <-- and another
 a + #b
         )");
         check(Value::fixnum(8));

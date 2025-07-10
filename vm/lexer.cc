@@ -124,7 +124,14 @@ namespace Katsu
                 // from the word.
 
                 // Special case: comments.
-                if (word == "#") {
+                bool all_comment_chars = true;
+                for (char c : word) {
+                    if (c != '#') {
+                        all_comment_chars = false;
+                        break;
+                    }
+                }
+                if (all_comment_chars) {
                     // It's a comment. Continue until end of line or EOF.
                     while (!this->eof() && this->peek() != '\n') {
                         this->get();
