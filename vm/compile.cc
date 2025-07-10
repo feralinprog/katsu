@@ -1405,6 +1405,48 @@ namespace Katsu
         }
     }
 
+    void compile_mixin(GC& gc, Root<Assoc>& r_module, Root<Vector>& r_imports,
+                       const std::string& message, SourceSpan& span, Expr* receiver, Expr& name)
+    {
+        if (receiver) {
+            std::stringstream ss;
+            ss << message << " takes no receiver";
+            throw compile_error(ss.str(), span);
+        }
+
+        NameExpr* name_expr = dynamic_cast<NameExpr*>(&name);
+        if (!name_expr) {
+            std::stringstream ss;
+            ss << message << " 'name' argument must be a name";
+            throw compile_error(ss.str(), name.span);
+        }
+        const std::string& mixin_name = std::get<std::string>(name_expr->name.value);
+        Root<String> r_mixin_name(gc, make_string(gc, mixin_name));
+        LookupResult lookup = lookup_name(*r_module, *r_imports, *r_mixin_name);
+        if (lookup == SUCCESS || lookup == AMBIGUOUS) {
+            std::stringstream ss;
+            ss << message << " mixin name '" << mixin_name
+               << "' already exists in module scope or in imports";
+            throw compile_error(ss.str(), name.span);
+        }
+
+        // TODO: allow inheritance?
+        // TODO: allow specifying required methods? (i.e. checker for when we are later mixing-in)
+        OptionalRoot<Array> r_slots(gc, nullptr);
+        Root<Array> r_bases(gc, make_array(gc, 0));
+        Root<Type> r_type(gc,
+                          make_type(gc,
+                                    r_mixin_name,
+                                    r_bases,
+                                    /* sealed */ false,
+                                    Type::Kind::MIXIN,
+                                    r_slots,
+                                    /* num_total_slots */ std::nullopt));
+        ValueRoot rv_type(gc, r_type.value());
+        ValueRoot r_key(gc, r_mixin_name.value());
+        append(gc, r_module, r_key, rv_type);
+    }
+
     Code* compile_into_module(VM& vm, Root<Assoc>& r_module, Root<Vector>& r_imports,
                               SourceSpan& span,
                               std::vector<std::unique_ptr<Expr>>& module_top_level_exprs)
@@ -1535,6 +1577,16 @@ namespace Katsu
                                       *expr->args[0],
                                       expr->args[1].get(),
                                       *expr->args[2]);
+                    continue;
+                } else if (expr->messages.size() == 1 &&
+                           std::get<std::string>(expr->messages[0].value) == "mixin") {
+                    compile_mixin(gc,
+                                  r_module,
+                                  r_imports,
+                                  "mixin:",
+                                  expr->span,
+                                  expr->target ? expr->target->get() : nullptr,
+                                  *expr->args[0]);
                     continue;
                 } else if (expr->messages.size() == 1 &&
                            std::get<std::string>(expr->messages[0].value) ==
