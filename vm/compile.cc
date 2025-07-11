@@ -693,9 +693,9 @@ namespace Katsu
         }
     }
 
-    // receiver, attrs are optional
+    // receiver, body, attrs are optional
     void compile_method(GC& gc, CodeBuilder& module_builder, const std::string& message,
-                        SourceSpan& span, Expr* receiver, Expr& _decl, Expr& _body, Expr* attrs)
+                        SourceSpan& span, Expr* receiver, Expr& _decl, Expr* _body, Expr* attrs)
     {
         if (receiver) {
             std::stringstream ss;
@@ -762,7 +762,7 @@ namespace Katsu
         } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
             unary = true;
             std::stringstream ss;
-            ss << "When the " << message << "'declaration' argument is a unary message, "
+            ss << "When the " << message << " 'declaration' argument is a unary message, "
                << "it must be a simple unary message of the form [target-name message-name] "
                << "or else a unary message of the form [(target-name: matcher) message-name]";
             const std::string& error_msg = ss.str();
@@ -771,10 +771,8 @@ namespace Katsu
         } else if (NAryMessageExpr* d = dynamic_cast<NAryMessageExpr*>(decl)) {
             unary = false;
             std::stringstream ss;
-            ss << "When the " << message
-               << "'declaration' argument is an n-ary message, it must be a simple n-ary message "
-               << "of the form "
-               << "[target-name message: param-name ...] "
+            ss << "When the " << message << " 'declaration' argument is an n-ary message, it must"
+               << "be a simple n-ary message of the form [target-name message: param-name ...] "
                << "or else an n-ary message of the form "
                << "[(target-name: matcher) message: (param-name: matcher) ...] "
                << "(the target-name is optional, as is each parameter matcher declaration)";
@@ -812,17 +810,21 @@ namespace Katsu
                                          : concat_with_suffix(gc, method_name_parts, ":"));
 
         Expr* body;
-        if (BlockExpr* b = dynamic_cast<BlockExpr*>(&_body)) {
-            if (!b->parameters.empty()) {
+        if (_body) {
+            if (BlockExpr* b = dynamic_cast<BlockExpr*>(_body)) {
+                if (!b->parameters.empty()) {
+                    std::stringstream ss;
+                    ss << message << " 'body' argument should not specify any parameters";
+                    throw compile_error(ss.str(), _body->span);
+                }
+                body = b->body.get();
+            } else {
                 std::stringstream ss;
-                ss << message << "'body' argument should not specify any parameters";
-                throw compile_error(ss.str(), _body.span);
+                ss << message << " 'body' argument should be a block";
+                throw compile_error(ss.str(), _body->span);
             }
-            body = b->body.get();
         } else {
-            std::stringstream ss;
-            ss << message << "'body' argument should be a block";
-            throw compile_error(ss.str(), _body.span);
+            body = nullptr;
         }
 
         MultiMethod* multimethod;
@@ -831,6 +833,10 @@ namespace Katsu
             LookupResult lookup = lookup_name(module_builder, *r_method_name, &existing);
             if (lookup == SUCCESS) {
                 if (existing.is_obj_multimethod()) {
+                    if (!body) {
+                        throw compile_error("multimethod is already defined in the current context",
+                                            span);
+                    }
                     multimethod = existing.obj_multimethod();
                 } else {
                     throw compile_error("method name is already defined in the current context, "
@@ -856,6 +862,12 @@ namespace Katsu
                     span);
             }
         }
+
+        if (!body) {
+            // Early exit; all we needed to do was make a multimethod.
+            return;
+        }
+
         Root<MultiMethod> r_multimethod(gc, std::move(multimethod));
 
         // Compile the body.
@@ -1493,7 +1505,7 @@ namespace Katsu
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
                                    *expr->args[0],
-                                   *expr->args[1],
+                                   expr->args[1].get(),
                                    nullptr);
                     continue;
                 } else if (expr->messages.size() == 3 &&
@@ -1508,8 +1520,19 @@ namespace Katsu
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
                                    *expr->args[0],
-                                   *expr->args[1],
+                                   expr->args[1].get(),
                                    expr->args[2].get());
+                    continue;
+                } else if (expr->messages.size() == 1 &&
+                           std::get<std::string>(expr->messages[0].value) == "generic") {
+                    compile_method(gc,
+                                   builder,
+                                   "generic:",
+                                   expr->span,
+                                   expr->target ? expr->target->get() : nullptr,
+                                   *expr->args[0],
+                                   nullptr,
+                                   nullptr);
                     continue;
                 } else if (expr->messages.size() == 1 &&
                            std::get<std::string>(expr->messages[0].value) == "let") {

@@ -1,12 +1,14 @@
 use: {
     "core.builtin.ffi"
     "core.builtin.misc"
+    "core.mixin"
     "core.resource"
 }
 
 # Default disposal for a foreign value is to free it.
 # Specific types of foreign values should have thin wrappers to allow different disposal strategies.
 let: (f: Foreign) dispose do: [ f free ]
+Disposable mix-in-to: Foreign
 
 let: (s: String) >c-string do: [
     # Null-terminate.
@@ -50,6 +52,7 @@ let: (dll: DLL) dispose do: [
         (DLCloseError condition: "dlclose-error" message: ~err c-string>string stack: #null) signal
     ]
 ]
+Disposable mix-in-to: DLL
 
 let: ((dll: DLL) dlsym: (symbol: String)) do: [
     assert: dlerror = NULL

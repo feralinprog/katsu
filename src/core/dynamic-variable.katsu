@@ -17,3 +17,10 @@ let: ((d: DynamicVariable) with-scope: body) do: [
         d set: saved-value
     ]
 ]
+
+let: ((d: DynamicVariable) with-value: value do: body) do: [
+    d with-scope: [
+        d set: value
+        body call: value
+    ]
+]
