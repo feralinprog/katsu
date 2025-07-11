@@ -1,0 +1,25 @@
+use: {
+    "core.builtin.misc"
+    "core.dynamic-variable"
+}
+
+let: d = (make-dynamic: "dyn")
+pretty-print: d get
+d set: "outer"
+pretty-print: d get
+d with-scope: [
+    pretty-print: it
+    d set: "inner"
+    pretty-print: d get
+]
+pretty-print: d get
+
+try: [
+    d with-scope: [
+        d set: "inner again"
+        1 / 0
+    ]
+] except: {
+    (Condition, \c [ print: "caught a condition" ])
+}
+pretty-print: d get

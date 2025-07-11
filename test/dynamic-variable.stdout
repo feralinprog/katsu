@@ -1,0 +1,7 @@
+null
+*string: "outer"
+*string: "outer"
+*string: "inner"
+*string: "outer"
+caught a condition
+*string: "outer"

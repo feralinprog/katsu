@@ -1,0 +1,19 @@
+data: DynamicVariable has: { name; value }
+
+let: (make-dynamic: (name: String) initial: value) do: [
+    DynamicVariable name: name value: value
+]
+let: (make-dynamic: (name: String)) do: [
+    DynamicVariable name: name value: #null
+]
+
+let: ((d: DynamicVariable) set: value) do: [ d value: value ]
+let: ((d: DynamicVariable) get) do: [ d .value ]
+let: ((d: DynamicVariable) with-scope: body) do: [
+    let: saved-value = d get
+    [
+        body call: d get
+    ] finally: [
+        d set: saved-value
+    ]
+]
