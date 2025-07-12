@@ -821,6 +821,16 @@ namespace Katsu
         vm.frame()->inst_spot++;
     }
 
+    Value native__terminate_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ terminate: message
+        ASSERT(nargs == 2);
+        String* message = args[1].obj_string();
+        std::cerr << "terminating program: " << native_str(message) << "\n";
+        std::cerr.flush();
+        std::abort();
+    }
+
     Value make_base_type(GC& gc, Root<String>& r_name)
     {
         Root<Array> r_bases(gc, make_array(gc, 0));
@@ -1119,6 +1129,11 @@ namespace Katsu
                            r_misc,
                            {matches_any},
                            &intrinsic__set_condition_handler_from_module);
+
+        register_native("terminate:",
+                        r_misc,
+                        {matches_any, matches_type(_String)},
+                        &native__terminate_);
 
         // Farm out to builtin_ffi.cc for additional builtins.
         register_ffi_builtins(vm, r_ffi);
