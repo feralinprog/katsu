@@ -4,15 +4,16 @@
 #include <stdexcept>
 
 #include "ast.h"
+#include "condition.h"
 #include "lexer.h"
 
 namespace Katsu
 {
-    class parse_error : public std::runtime_error
+    class parse_error : public condition_error
     {
     public:
         parse_error(const std::string& message, const SourceSpan& _span)
-            : std::runtime_error(message)
+            : condition_error("parse-error", message)
             , span(_span)
         {}
 
