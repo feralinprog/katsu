@@ -703,6 +703,9 @@ namespace Katsu
             throw compile_error(ss.str(), span);
         }
 
+        bool has_body = _body != nullptr;
+        bool decl_only = !has_body;
+
         Expr* decl = &_decl;
 
         while (ParenExpr* p = dynamic_cast<ParenExpr*>(decl)) {
@@ -714,34 +717,38 @@ namespace Katsu
         // Parameter matchers are evaluated at runtime later; this generates code to evaluate them.
 
         auto add_param_name_and_matcher =
-            [&gc, &module_builder, &param_names](Expr& param_decl,
-                                                 const std::string& error_msg) -> void {
+            [&gc, &module_builder, has_body, &param_names](Expr& param_decl,
+                                                           const std::string& error_msg) -> void {
             if (NameExpr* d = dynamic_cast<NameExpr*>(&param_decl)) {
                 param_names.push_back(std::get<std::string>(d->name.value));
-                // Add an any-matcher by loading null.
-                // LOAD_VALUE: <value>
-                module_builder.emit_op(gc,
-                                       OpCode::LOAD_VALUE,
-                                       /* stack_height_delta */ +1,
-                                       d->span);
-                module_builder.emit_arg(gc, Value::null());
+                if (has_body) {
+                    // Add an any-matcher by loading null.
+                    // LOAD_VALUE: <value>
+                    module_builder.emit_op(gc,
+                                           OpCode::LOAD_VALUE,
+                                           /* stack_height_delta */ +1,
+                                           d->span);
+                    module_builder.emit_arg(gc, Value::null());
+                }
                 return;
             } else if (ParenExpr* d = dynamic_cast<ParenExpr*>(&param_decl)) {
                 if (NAryMessageExpr* n = dynamic_cast<NAryMessageExpr*>(d->inner.get())) {
                     if (!n->target && n->messages.size() == 1) {
                         param_names.push_back(std::get<std::string>(n->messages[0].value));
 
-                        // Add a type-matcher evaluated from n->args[0];
-                        compile_expr(gc,
-                                     module_builder,
-                                     *n->args[0],
-                                     /* tail_position */ false,
-                                     /* tail_call */ false);
-                        // We must ensure it's a Type at runtime.
-                        module_builder.emit_op(gc,
-                                               OpCode::VERIFY_IS_TYPE,
-                                               /* stack_height_delta */ 0,
-                                               n->args[0]->span);
+                        if (has_body) {
+                            // Add a type-matcher evaluated from n->args[0];
+                            compile_expr(gc,
+                                         module_builder,
+                                         *n->args[0],
+                                         /* tail_position */ false,
+                                         /* tail_call */ false);
+                            // We must ensure it's a Type at runtime.
+                            module_builder.emit_op(gc,
+                                                   OpCode::VERIFY_IS_TYPE,
+                                                   /* stack_height_delta */ 0,
+                                                   n->args[0]->span);
+                        }
                         return;
                     }
                 }
@@ -755,10 +762,15 @@ namespace Katsu
             unary = true;
             method_name_parts.push_back(std::get<std::string>(d->name.value));
             param_names.push_back("self");
-            // Add an any-matcher by loading null.
-            // LOAD_VALUE: <value>
-            module_builder.emit_op(gc, OpCode::LOAD_VALUE, /* stack_height_delta */ +1, d->span);
-            module_builder.emit_arg(gc, Value::null());
+            if (has_body) {
+                // Add an any-matcher by loading null.
+                // LOAD_VALUE: <value>
+                module_builder.emit_op(gc,
+                                       OpCode::LOAD_VALUE,
+                                       /* stack_height_delta */ +1,
+                                       d->span);
+                module_builder.emit_arg(gc, Value::null());
+            }
         } else if (UnaryMessageExpr* d = dynamic_cast<UnaryMessageExpr*>(decl)) {
             unary = true;
             std::stringstream ss;
@@ -786,13 +798,15 @@ namespace Katsu
                 add_param_name_and_matcher(**d->target, error_msg);
             } else {
                 param_names.push_back("self");
-                // Add an any-matcher by loading null.
-                // LOAD_VALUE: <value>
-                module_builder.emit_op(gc,
-                                       OpCode::LOAD_VALUE,
-                                       /* stack_height_delta */ +1,
-                                       d->span);
-                module_builder.emit_arg(gc, Value::null());
+                if (has_body) {
+                    // Add an any-matcher by loading null.
+                    // LOAD_VALUE: <value>
+                    module_builder.emit_op(gc,
+                                           OpCode::LOAD_VALUE,
+                                           /* stack_height_delta */ +1,
+                                           d->span);
+                    module_builder.emit_arg(gc, Value::null());
+                }
             }
 
             for (const std::unique_ptr<Expr>& arg : d->args) {
@@ -863,7 +877,7 @@ namespace Katsu
             }
         }
 
-        if (!body) {
+        if (decl_only) {
             // Early exit; all we needed to do was make a multimethod.
             return;
         }
@@ -1102,7 +1116,7 @@ namespace Katsu
             if (!data_expr) {
                 std::stringstream ss;
                 ss << message << " 'has' argument must be a vector of names";
-                throw compile_error(ss.str(), extends->span);
+                throw compile_error(ss.str(), has.span);
             }
             for (std::unique_ptr<Expr>& slot_expr : data_expr->components) {
                 NameExpr* slot_name_expr = dynamic_cast<NameExpr*>(slot_expr.get());
@@ -1417,8 +1431,10 @@ namespace Katsu
         }
     }
 
+    // receiver, extends are optional
     void compile_mixin(GC& gc, Root<Assoc>& r_module, Root<Vector>& r_imports,
-                       const std::string& message, SourceSpan& span, Expr* receiver, Expr& name)
+                       const std::string& message, SourceSpan& span, Expr* receiver, Expr& name,
+                       Expr* extends)
     {
         if (receiver) {
             std::stringstream ss;
@@ -1442,10 +1458,47 @@ namespace Katsu
             throw compile_error(ss.str(), name.span);
         }
 
-        // TODO: allow inheritance?
+        Root<Vector> r_extends(gc, make_vector(gc, 0));
+        if (extends) {
+            DataExpr* data_expr = dynamic_cast<DataExpr*>(extends);
+            if (!data_expr) {
+                std::stringstream ss;
+                ss << message << " 'extends' argument must be a vector of names";
+                throw compile_error(ss.str(), extends->span);
+            }
+            for (std::unique_ptr<Expr>& base_expr : data_expr->components) {
+                NameExpr* base_name_expr = dynamic_cast<NameExpr*>(base_expr.get());
+                if (!base_name_expr) {
+                    std::stringstream ss;
+                    ss << message << " 'extends' argument must be a sequence of names";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+                const std::string& base_name = std::get<std::string>(base_name_expr->name.value);
+                Root<String> r_base_name(gc, make_string(gc, base_name));
+                Value lookup = lookup_name(*r_module, *r_imports, *r_base_name, base_expr->span);
+                if (!lookup.is_obj_type()) {
+                    std::stringstream ss;
+                    ss << "Value '" << base_name << "' must be a Type";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+
+                Type* base = lookup.obj_type();
+                if (base->sealed) {
+                    std::stringstream ss;
+                    ss << "Cannot extend from sealed type '" << base_name << "'";
+                    throw compile_error(ss.str(), base_expr->span);
+                }
+                if (base->kind != Type::Kind::MIXIN) {
+                    throw compile_error("Mixins can only extend from mixins", base_expr->span);
+                }
+                ValueRoot r_base(gc, Value::object(base));
+                append(gc, r_extends, r_base);
+            }
+        }
+        Root<Array> r_bases(gc, vector_to_array(gc, r_extends));
+
         // TODO: allow specifying required methods? (i.e. checker for when we are later mixing-in)
         OptionalRoot<Array> r_slots(gc, nullptr);
-        Root<Array> r_bases(gc, make_array(gc, 0));
         Root<Type> r_type(gc,
                           make_type(gc,
                                     r_mixin_name,
@@ -1609,7 +1662,20 @@ namespace Katsu
                                   "mixin:",
                                   expr->span,
                                   expr->target ? expr->target->get() : nullptr,
-                                  *expr->args[0]);
+                                  *expr->args[0],
+                                  nullptr);
+                    continue;
+                } else if (expr->messages.size() == 2 &&
+                           std::get<std::string>(expr->messages[0].value) == "mixin" &&
+                           std::get<std::string>(expr->messages[1].value) == "extends") {
+                    compile_mixin(gc,
+                                  r_module,
+                                  r_imports,
+                                  "mixin:",
+                                  expr->span,
+                                  expr->target ? expr->target->get() : nullptr,
+                                  *expr->args[0],
+                                  expr->args[1].get());
                     continue;
                 } else if (expr->messages.size() == 1 &&
                            std::get<std::string>(expr->messages[0].value) ==
