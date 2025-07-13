@@ -37,6 +37,8 @@ target_compile_options(katsudon PUBLIC
 )
 # For a C foreign function interface:
 target_link_libraries(katsudon PUBLIC ffi)
+# For bignums and multi-precision floats:
+target_link_libraries(katsudon PUBLIC gmp)
 
 # Main katsu executable.
 add_executable(katsu vm/main.cc)

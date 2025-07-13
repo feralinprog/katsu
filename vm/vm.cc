@@ -9,6 +9,9 @@
 
 #include <iostream>
 
+#include "compile.h"
+#include "parser.h"
+
 namespace Katsu
 {
     VM::VM(GC& _gc, uint64_t call_stack_size)
@@ -163,6 +166,19 @@ namespace Katsu
         }
     }
 
+    std::ostream& operator<<(std::ostream& s, const Katsu::SourceSpan& span)
+    {
+        s << "<" << *span.file.path << ":";
+        s << span.start.line + 1 << ":" << span.start.column + 1;
+        s << "-";
+        // For convenience, follow vscode format (well, one of them...) for links with spans. Yes,
+        // the format is inconsistent between start/end formatting :(
+        // https://github.com/microsoft/vscode/blob/05edb9ac5410ee1d4118f2be70f019fb68937751/src/vs/workbench/contrib/terminalContrib/links/browser/terminalLinkParsing.ts#L79
+        s << span.end.line + 1 << "." << span.end.column + 1;
+        s << ">";
+        return s;
+    }
+
     inline void VM::single_step()
     {
         Code* frame_code = this->current_frame->v_code.obj_code();
@@ -249,6 +265,17 @@ namespace Katsu
                     // invoke() takes care of shifting the instruction spot.
                     this->invoke(v_method, tail_call, num_args, args);
                 } catch (const condition_error& e) {
+                    if (const parse_error* c = dynamic_cast<const parse_error*>(&e)) {
+                        std::cout << "parse error: " << c->what() << " at " << c->span << "\n";
+                    } else if (const compile_error* c = dynamic_cast<const compile_error*>(&e)) {
+                        std::cout << "compile error: " << c->what() << " at " << c->span << "\n";
+                    } else {
+                        // print_vm_state();
+                        std::cout << "condition: " << e.condition << ": " << e.what() << "\n";
+                        std::cout.flush();
+                        // __builtin_trap();
+                    }
+
                     // TODO: pass extra info, e.g. compile_error has a span that would be good to
                     // provide.
                     // Don't need args any more; we can do GC operations.
@@ -431,6 +458,8 @@ namespace Katsu
         size_t frame_size = Frame::size(num_regs, num_data);
         if (reinterpret_cast<uint8_t*>(frame) + frame_size >
             this->call_stack_mem + this->call_stack_size) {
+            std::cout.flush();
+            std::cerr.flush();
             throw std::runtime_error("katsu stack overflow");
         }
 
