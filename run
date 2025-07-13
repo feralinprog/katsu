@@ -26,10 +26,16 @@ test_source ()
     source="$2"
     expected_stdout="${source%.katsu}.stdout"
     expected_stderr="${source%.katsu}.stderr"
+    expected_exitcode="${source%.katsu}.exitcode"
     stdout=$(mktemp --tmpdir "test-source-stdout.XXXXXXXXXXX")
     stderr=$(mktemp --tmpdir "test-source-stderr.XXXXXXXXXXX")
+    exitcode=$(mktemp --tmpdir "test-source-exitcode.XXXXXXXXXXX")
+
     echo "===== testing source: $source ====="
-    out/katsu "$module_name" "$source" >$stdout 2>$stderr
+    exit_code=0
+    out/katsu "$module_name" "$source" >$stdout 2>$stderr || exit_code=$?
+    echo $exit_code > $exitcode
+
     # Check stdout if an expected output is provided.
     if [ -f "$expected_stdout" ]; then
         if ! cmp -s "$expected_stdout" "$stdout"; then
@@ -47,6 +53,17 @@ test_source ()
     elif [ -s "$stderr" ]; then
         echo "expected no stderr, got:"
         cat "$stderr"
+        return 1
+    fi
+    # Check exitcode whether an expected output is provided or not; if not provided, assume the
+    # exit code should be 0.
+    if [ -f "$expected_exitcode" ]; then
+        if ! cmp -s "$expected_exitcode" "$exitcode"; then
+            echo "exitcode diff from expected:"
+            git --no-pager diff --no-index "$expected_exitcode" "$exitcode"
+        fi
+    elif [ $exit_code -ne 0 ]; then
+        echo "expected exit-code 0, got: $exit_code"
         return 1
     fi
     echo "Test passed"

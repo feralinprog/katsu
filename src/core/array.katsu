@@ -1,0 +1,23 @@
+use: "core.builtin.misc"
+
+let: (a: Array) length do: [
+    a unsafe-read-u64-at-offset: 8
+]
+let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
+    a unsafe-read-value-at-offset: 16 + 8 * i
+]
+
+let: (a: Array) >vector do: [
+    let: v = {}
+    v unsafe-write-value-at-offset: 16 value: a
+    v unsafe-write-u64-at-offset: 8 value: a length
+    v
+]
+
+# let: ((a: Array) at: (i: Fixnum)) do: [
+#     if: (i >= 0 and i < a length) then: [
+#         a ~unsafe-at: i
+#     ] else: [
+#         (out-of-bounds: a index: i) signal
+#     ]
+# ]

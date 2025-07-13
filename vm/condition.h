@@ -15,4 +15,12 @@ namespace Katsu
 
         const std::string condition;
     };
+
+    class terminate_error : public std::runtime_error
+    {
+    public:
+        terminate_error(const std::string& message)
+            : std::runtime_error(message)
+        {}
+    };
 };

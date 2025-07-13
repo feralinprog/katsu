@@ -1,0 +1,7 @@
+use: {
+    "core.array"
+    "core.mixin"
+    "core.sequence"
+}
+
+Sequence mix-in-to: Array

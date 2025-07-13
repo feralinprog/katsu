@@ -1,10 +1,7 @@
 use: {
-    "core.builtin.misc"
     "core.dynamic-variable"
+    "core.sequence"
 }
-
-# TODO: just make mutable module-level fields
-data: Box has: { value }
 
 let: active-resources = (make-dynamic: "resources")
 
@@ -19,6 +16,9 @@ let: (x with-disposal: f) do: [
         ]
     ]
 ]
+
+# TODO: delete when multimethods are global
+use: "core.builtin.misc"
 
 let: (resource: Disposable) ^dispose do: [
     active-resources get append: resource

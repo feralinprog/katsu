@@ -864,9 +864,7 @@ namespace Katsu
         // _ terminate: message
         ASSERT(nargs == 2);
         String* message = args[1].obj_string();
-        std::cerr << "terminating program: " << native_str(message) << "\n";
-        std::cerr.flush();
-        std::abort();
+        throw terminate_error(native_str(message));
     }
 
     Value make_base_type(GC& gc, Root<String>& r_name)

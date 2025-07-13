@@ -3,6 +3,7 @@ use: {
     "core.builtin.misc"
     "core.mixin"
     "core.resource"
+    "core.string"
 }
 
 # Default disposal for a foreign value is to free it.

@@ -1,4 +1,5 @@
 TODO (VM):
+* stack overflow -> print stack trace
 * int64 / uint64 and bignums
 * allow for docs everywhere!
 * save to image and load from image
