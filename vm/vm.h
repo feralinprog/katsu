@@ -252,17 +252,14 @@ namespace Katsu
 
         void register_builtin(BuiltinId id, Value value);
 
-        inline Assoc* modules()
-        {
-            return this->v_modules.obj_assoc();
-        }
-        inline void set_modules(Assoc* modules)
-        {
-            this->v_modules = Value::object(modules);
-        }
-
         // GC for values tracked by this VM.
         GC& gc;
+
+        // All loaded modules, by name.
+        Value v_modules; // Assoc
+
+        // All (global) multimethods, by name.
+        Value v_multimethods; // Assoc
 
         // Value to call in order to signal a condition in-langauge from e.g. a C++ condition_error.
         Value v_condition_handler;
@@ -306,9 +303,6 @@ namespace Katsu
         // Builtin values that we need convenient access to (and which are GC'ed).
         // Indexed by BuiltinId.
         Value builtin_values[BuiltinId::NUM_BUILTINS];
-
-        // All loaded modules, by name.
-        Value v_modules; // Assoc
 
         bool verbose_logging = false;
     };

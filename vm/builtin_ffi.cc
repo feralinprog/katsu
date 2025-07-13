@@ -370,7 +370,14 @@ namespace Katsu
             for (size_t i = 0; i < matchers.size(); i++) {
                 r_matchers->components()[i] = matchers[i]();
             }
-            add_native(vm.gc, r_ffi, name, matchers.size(), r_matchers, handler);
+            add_native(vm.gc,
+                       vm.v_multimethods,
+                       true /* global */,
+                       r_ffi,
+                       name,
+                       matchers.size(),
+                       r_matchers,
+                       handler);
         };
         const auto register_const = [&vm, &r_ffi](const std::string& name, Value value) -> void {
             ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, name)));

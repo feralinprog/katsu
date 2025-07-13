@@ -1,0 +1,18 @@
+use: "example.imports.indirect"
+
+generic: (n: Fixnum) do-a-thing
+
+use: "example.imports.multimethods"
+
+defer: (n: Fixnum) do-another-thing
+
+5 do-a-thing
+10 do-another-thing
+
+# Didn't import core.builtin.misc!
+generic: (seq append: value)
+let: v = {}
+v append: 15
+
+use: "core.builtin.misc"
+pretty-print: v

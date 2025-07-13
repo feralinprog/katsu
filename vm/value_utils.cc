@@ -1054,7 +1054,7 @@ namespace Katsu
         // Always use core.builtin.default.
         {
             String* name = make_string(vm.gc, "core.builtin.default");
-            Value* maybe_module = assoc_lookup(vm.modules(), name);
+            Value* maybe_module = assoc_lookup(vm.v_modules.obj_assoc(), name);
             ASSERT(maybe_module);
             Value module = *maybe_module;
             ValueRoot r_module_default(vm.gc, std::move(module));

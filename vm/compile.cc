@@ -194,6 +194,10 @@ namespace Katsu
             }
 
             if (lookup) {
+                // Accept ambiguous lookups but only for multimethods, and if they're identical.
+                if (*import_lookup == *lookup && lookup->is_obj_multimethod()) {
+                    continue;
+                }
                 return AMBIGUOUS;
             } else {
                 lookup = import_lookup;
@@ -694,8 +698,13 @@ namespace Katsu
     }
 
     // receiver, body, attrs are optional
-    void compile_method(GC& gc, CodeBuilder& module_builder, const std::string& message,
-                        SourceSpan& span, Expr* receiver, Expr& _decl, Expr* _body, Expr* attrs)
+    // allow_existing:
+    // - if true, allow adding to an existing multimethod in the module (and its current imports)
+    // - if false, raise a compile_error if the declaration matches a multimethod in scope
+    // global: if true, add to v_multimethods
+    void compile_method(GC& gc, Value& v_multimethods, bool allow_existing, bool global,
+                        CodeBuilder& module_builder, const std::string& message, SourceSpan& span,
+                        Expr* receiver, Expr& _decl, Expr* _body, Expr* attrs)
     {
         if (receiver) {
             std::stringstream ss;
@@ -847,7 +856,7 @@ namespace Katsu
             LookupResult lookup = lookup_name(module_builder, *r_method_name, &existing);
             if (lookup == SUCCESS) {
                 if (existing.is_obj_multimethod()) {
-                    if (!body) {
+                    if (!allow_existing) {
                         throw compile_error("multimethod is already defined in the current context",
                                             span);
                     }
@@ -858,14 +867,42 @@ namespace Katsu
                                         span);
                 }
             } else if (lookup == NOT_FOUND) {
-                // We know we're about to add at least one method!
-                Root<Vector> r_methods(gc, make_vector(gc, 1));
-                Root<Vector> r_attributes(gc, make_vector(gc, 0));
-                multimethod = make_multimethod(gc,
-                                               r_method_name,
-                                               param_names.size(),
-                                               r_methods,
-                                               r_attributes);
+                // If `global`, make sure the multimethod exists in v_multimethods.
+                // Regardless, add it to the current module.
+                if (global) {
+                    Value* existing_global =
+                        assoc_lookup(v_multimethods.obj_assoc(), *r_method_name);
+                    if (existing_global) {
+                        ASSERT(existing_global->is_obj_multimethod());
+                        multimethod = existing_global->obj_multimethod();
+                    } else {
+                        Root<Vector> r_methods(gc,
+                                               make_vector(gc, /* capacity */ decl_only ? 0 : 1));
+                        Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                        multimethod = make_multimethod(gc,
+                                                       r_method_name,
+                                                       param_names.size(),
+                                                       r_methods,
+                                                       r_attributes);
+                        ValueRoot r_multimethod(gc, Value::object(multimethod));
+                        ValueRoot r_key(gc, r_method_name.value());
+                        {
+                            Root<Assoc> r_multimethods(gc, v_multimethods.obj_assoc());
+                            append(gc, r_multimethods, r_key, r_multimethod);
+                            v_multimethods = r_multimethods.value();
+                        }
+                        multimethod = r_multimethod->obj_multimethod();
+                    }
+                } else {
+                    Root<Vector> r_methods(gc, make_vector(gc, /* capacity */ decl_only ? 0 : 1));
+                    Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                    multimethod = make_multimethod(gc,
+                                                   r_method_name,
+                                                   param_names.size(),
+                                                   r_methods,
+                                                   r_attributes);
+                }
+
                 ValueRoot r_multimethod(gc, Value::object(multimethod));
                 ValueRoot r_key(gc, r_method_name.value());
                 append(gc, module_builder.r_module, r_key, r_multimethod);
@@ -1553,6 +1590,9 @@ namespace Katsu
                     std::get<std::string>(expr->messages[0].value) == "let" &&
                     std::get<std::string>(expr->messages[1].value) == "do") {
                     compile_method(gc,
+                                   vm.v_multimethods,
+                                   true /* allow_existing */,
+                                   true /* global */,
                                    builder,
                                    "let:do:",
                                    expr->span,
@@ -1568,6 +1608,9 @@ namespace Katsu
 
                 ) {
                     compile_method(gc,
+                                   vm.v_multimethods,
+                                   true /* allow_existing */,
+                                   true /* global */,
                                    builder,
                                    "let:do:::",
                                    expr->span,
@@ -1579,8 +1622,25 @@ namespace Katsu
                 } else if (expr->messages.size() == 1 &&
                            std::get<std::string>(expr->messages[0].value) == "generic") {
                     compile_method(gc,
+                                   vm.v_multimethods,
+                                   false /* allow_existing */,
+                                   true /* global */,
                                    builder,
                                    "generic:",
+                                   expr->span,
+                                   expr->target ? expr->target->get() : nullptr,
+                                   *expr->args[0],
+                                   nullptr,
+                                   nullptr);
+                    continue;
+                } else if (expr->messages.size() == 1 &&
+                           std::get<std::string>(expr->messages[0].value) == "defer") {
+                    compile_method(gc,
+                                   vm.v_multimethods,
+                                   true /* allow_existing */,
+                                   true /* global */,
+                                   builder,
+                                   "defer:",
                                    expr->span,
                                    expr->target ? expr->target->get() : nullptr,
                                    *expr->args[0],
@@ -1690,7 +1750,7 @@ namespace Katsu
                         if (maybe_module_name) {
                             const std::string& module_name = *maybe_module_name;
                             String* name = make_string(gc, module_name);
-                            Value* maybe_module = assoc_lookup(vm.modules(), name);
+                            Value* maybe_module = assoc_lookup(vm.v_modules.obj_assoc(), name);
                             if (!maybe_module) {
                                 throw compile_error(
                                     "IMPORT-EXISTING-MODULE: could not find existing module",

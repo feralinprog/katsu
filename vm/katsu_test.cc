@@ -107,6 +107,8 @@ TEST_CASE("integration - single top level expression", "[katsu]")
             matchers2->components()[0] = vm.builtin(BuiltinId::_String);
             matchers2->components()[1] = vm.builtin(BuiltinId::_String);
             add_native(vm.gc,
+                       vm.v_multimethods,
+                       true /* global */,
                        r_module,
                        "handle-raw-condition-with-message:",
                        2,

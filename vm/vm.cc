@@ -32,6 +32,7 @@ namespace Katsu
 
         // Don't use GC yet.
         this->v_modules = Value::null();
+        this->v_multimethods = Value::null();
 
         this->v_condition_handler = Value::null();
 
@@ -39,6 +40,7 @@ namespace Katsu
 
         // Now we can use the GC.
         this->v_modules = Value::object(make_assoc(this->gc, 0));
+        this->v_multimethods = Value::object(make_assoc(this->gc, 0));
     }
 
     VM::~VM()
@@ -58,6 +60,7 @@ namespace Katsu
         }
 
         visitor(&this->v_modules);
+        visitor(&this->v_multimethods);
         visitor(&this->v_condition_handler);
 
         Frame* frame = reinterpret_cast<Frame*>(this->call_stack_mem);

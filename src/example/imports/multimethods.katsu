@@ -1,0 +1,11 @@
+use: "core.builtin.misc"
+
+let: (n: Fixnum) do-a-thing do: [
+    print: "doing a thing!"
+    pretty-print: n
+]
+
+let: (n: Fixnum) do-another-thing do: [
+    print: "doing another thing!"
+    pretty-print: n
+]

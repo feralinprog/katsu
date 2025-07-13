@@ -165,11 +165,11 @@ namespace Katsu
         // Create a separate module for the source we're executing.
         Root<Assoc> r_module(vm.gc, make_assoc(vm.gc, /* capacity */ 0));
         {
-            Root<Assoc> r_modules(vm.gc, vm.modules());
+            Root<Assoc> r_modules(vm.gc, vm.v_modules.obj_assoc());
             ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, module_name)));
             ValueRoot rv_module(vm.gc, r_module.value());
             append(vm.gc, r_modules, r_name, rv_module);
-            vm.set_modules(*r_modules);
+            vm.v_modules = r_modules.value();
         }
 
         Root<Vector> r_imports(vm.gc, make_vector(vm.gc, /* capacity */ 0));
@@ -231,9 +231,9 @@ namespace Katsu
 
         // Establish builtins in various core.builtin.* modules.
         {
-            Root<Assoc> r_modules(vm.gc, vm.modules());
+            Root<Assoc> r_modules(vm.gc, vm.v_modules.obj_assoc());
             register_builtins(vm, r_modules);
-            vm.set_modules(*r_modules);
+            vm.v_modules = r_modules.value();
         }
 
         // Add a module with some constants for bootstrap files to use in order to load the
@@ -256,13 +256,13 @@ namespace Katsu
                 append(vm.gc, r_core_bootstrap_load, r_name, r_value);
             }
 
-            Root<Assoc> r_modules(vm.gc, vm.modules());
+            Root<Assoc> r_modules(vm.gc, vm.v_modules.obj_assoc());
             {
                 ValueRoot r_name(vm.gc, Value::object(make_string(vm.gc, "core.bootstrap.load")));
                 ValueRoot rv_core_builtin(gc, r_core_bootstrap_load.value());
                 append(vm.gc, r_modules, r_name, rv_core_builtin);
             }
-            vm.set_modules(*r_modules);
+            vm.v_modules = r_modules.value();
         }
 
         // Run bootstrap files, which should run the user source.

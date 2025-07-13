@@ -17,9 +17,9 @@
 namespace Katsu
 {
     // TODO: return type
-    void _add_handler(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
-                      Root<Array>& r_param_matchers, NativeHandler native_handler,
-                      IntrinsicHandler intrinsic_handler)
+    void _add_handler(GC& gc, Value& v_multimethods, bool global, Root<Assoc>& r_module,
+                      const std::string& name, uint32_t num_params, Root<Array>& r_param_matchers,
+                      NativeHandler native_handler, IntrinsicHandler intrinsic_handler)
     {
         Root<String> r_name(gc, make_string(gc, name));
 
@@ -32,9 +32,33 @@ namespace Katsu
             multi = v_existing->obj_multimethod();
             ASSERT(multi->num_params == num_params);
         } else {
-            Root<Vector> r_methods(gc, make_vector(gc, 1));
-            Root<Vector> r_attributes(gc, make_vector(gc, 0));
-            multi = make_multimethod(gc, r_name, num_params, r_methods, r_attributes);
+            // TODO: dedupe with compile.cc?
+            // If `global`, make sure the multimethod exists in v_multimethods.
+            // Regardless, add it to r_module.
+            if (global) {
+                Value* existing_global = assoc_lookup(v_multimethods.obj_assoc(), *r_name);
+                if (existing_global) {
+                    ASSERT(existing_global->is_obj_multimethod());
+                    multi = existing_global->obj_multimethod();
+                } else {
+                    Root<Vector> r_methods(gc, make_vector(gc, 1));
+                    Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                    multi = make_multimethod(gc, r_name, num_params, r_methods, r_attributes);
+                    ValueRoot r_multimethod(gc, Value::object(multi));
+                    ValueRoot r_key(gc, r_name.value());
+                    {
+                        Root<Assoc> r_multimethods(gc, v_multimethods.obj_assoc());
+                        append(gc, r_multimethods, r_key, r_multimethod);
+                        v_multimethods = r_multimethods.value();
+                    }
+                    multi = r_multimethod->obj_multimethod();
+                }
+            } else {
+                Root<Vector> r_methods(gc, make_vector(gc, 1));
+                Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                multi = make_multimethod(gc, r_name, num_params, r_methods, r_attributes);
+            }
+
             ValueRoot r_multimethod(gc, Value::object(multi));
             ValueRoot r_key(gc, r_name.value());
             append(gc, r_module, r_key, r_multimethod);
@@ -59,10 +83,13 @@ namespace Katsu
         add_method(gc, r_multi, r_method, /* require_unique */ true);
     }
 
-    void add_native(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
-                    Root<Array>& r_param_matchers, NativeHandler native_handler)
+    void add_native(GC& gc, Value& v_multimethods, bool global, Root<Assoc>& r_module,
+                    const std::string& name, uint32_t num_params, Root<Array>& r_param_matchers,
+                    NativeHandler native_handler)
     {
         _add_handler(gc,
+                     v_multimethods,
+                     global,
                      r_module,
                      name,
                      num_params,
@@ -71,10 +98,13 @@ namespace Katsu
                      /* intrinsic_handler */ nullptr);
     }
 
-    void add_intrinsic(GC& gc, Root<Assoc>& r_module, const std::string& name, uint32_t num_params,
-                       Root<Array>& r_param_matchers, IntrinsicHandler intrinsic_handler)
+    void add_intrinsic(GC& gc, Value& v_multimethods, bool global, Root<Assoc>& r_module,
+                       const std::string& name, uint32_t num_params, Root<Array>& r_param_matchers,
+                       IntrinsicHandler intrinsic_handler)
     {
         _add_handler(gc,
+                     v_multimethods,
+                     global,
                      r_module,
                      name,
                      num_params,
@@ -662,7 +692,15 @@ namespace Katsu
     {
         // _ loaded-modules
         ASSERT(nargs == 1);
-        vm.frame()->push(Value::object(vm.vm.modules()));
+        vm.frame()->push(vm.vm.v_modules);
+        vm.frame()->inst_spot++;
+    }
+
+    void intrinsic__global_multimethods(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ global-multimethods
+        ASSERT(nargs == 1);
+        vm.frame()->push(vm.vm.v_multimethods);
         vm.frame()->inst_spot++;
     }
 
@@ -902,7 +940,14 @@ namespace Katsu
             for (size_t i = 0; i < matchers.size(); i++) {
                 r_matchers->components()[i] = matchers[i]();
             }
-            add_native(vm.gc, r_module, name, matchers.size(), r_matchers, handler);
+            add_native(vm.gc,
+                       vm.v_multimethods,
+                       true /* global */,
+                       r_module,
+                       name,
+                       matchers.size(),
+                       r_matchers,
+                       handler);
         };
         const auto register_intrinsic = [&vm](const std::string& name,
                                               Root<Assoc>& r_module,
@@ -912,7 +957,14 @@ namespace Katsu
             for (size_t i = 0; i < matchers.size(); i++) {
                 r_matchers->components()[i] = matchers[i]();
             }
-            add_intrinsic(vm.gc, r_module, name, matchers.size(), r_matchers, handler);
+            add_intrinsic(vm.gc,
+                          vm.v_multimethods,
+                          true /* global */,
+                          r_module,
+                          name,
+                          matchers.size(),
+                          r_matchers,
+                          handler);
         };
 
         _register(vm, BuiltinId::_null, "#null", r_default, Value::null());
@@ -1098,6 +1150,10 @@ namespace Katsu
         register_intrinsic("call/dc:", r_misc, {matches_any, matches_any}, &intrinsic__call_dc_);
 
         register_intrinsic("loaded-modules", r_misc, {matches_any}, &intrinsic__loaded_modules);
+        register_intrinsic("global-multimethods",
+                           r_misc,
+                           {matches_any},
+                           &intrinsic__global_multimethods);
 
         register_native("read-file:",
                         r_misc,
