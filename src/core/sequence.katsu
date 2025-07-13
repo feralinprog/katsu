@@ -59,9 +59,7 @@ let: ((seq: Sequence) each/index: f) do: [
 
 # generic: ((n: Fixnum) make-like: (exemplar: Sequence))
 generic: (exemplar: Sequence) empty-like
-# TODO: make multimethods actually global, delete hack and define generic
-use: "core.builtin.misc"
-# generic: ((seq: Sequence) append: value)
+generic: ((seq: Sequence) append: value)
 
 let: ((seq: Sequence) map: f as: (exemplar: Sequence)) do: [
     let: mapped = exemplar empty-like
