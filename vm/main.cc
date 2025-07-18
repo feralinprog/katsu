@@ -2,6 +2,7 @@
 #include <string>
 
 #include "compile.h"
+#include "condition.h"
 #include "katsu.h"
 #include "parser.h"
 
@@ -34,6 +35,7 @@ int main(int argc, char** argv)
     std::string path(argv[2]);
     try {
         Katsu::bootstrap_and_run_file(path, module_name);
+        return EXIT_SUCCESS;
     } catch (const std::ios_base::failure& e) {
         std::cerr << "Error: " << e.what() << "\n";
         std::cerr << "Could not execute file '" << path << "'.\n";
@@ -43,6 +45,9 @@ int main(int argc, char** argv)
     } catch (const Katsu::compile_error& e) {
         std::cerr << "Compilation error: " << e.what() << "\n";
         std::cerr << "at " << e.span << "\n";
+    } catch (const Katsu::terminate_error& e) {
+        std::cerr << "terminating program: " << e.what() << "\n";
+        std::cerr.flush();
     }
-    return EXIT_SUCCESS;
+    return EXIT_FAILURE;
 }
