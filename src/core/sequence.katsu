@@ -1,0 +1,134 @@
+use: {
+    "core.combinator"
+    "core.condition"
+    "core.dynamic-variable"
+}
+
+# Sequence should support:
+#   length
+# and at least one of:
+#   at:
+#   unsafe-at:
+mixin: Sequence
+generic: (seq: Sequence) length
+generic: ((seq: Sequence) at: (index: Fixnum))
+generic: ((seq: Sequence) unsafe-at: (index: Fixnum))
+
+mixin: MutableSequence extends: { Sequence }
+generic: ((seq: Sequence) at: (index: Fixnum) put: value)
+generic: ((seq: Sequence) unsafe-at: (index: Fixnum) put: value)
+
+data: OutOfBounds extends: { Condition } has: { seq; index }
+let: (out-of-bounds: seq index: index) do: [ OutOfBounds condition: "out-of-bounds" message: "index out of bounds" stack: #null seq: seq index: index ]
+
+# Implement at: and unsafe-at: in terms of each other, as defaults.
+# Likewise for at:put: and unsafe-at:put:.
+let: ((s: Sequence) at: (i: Fixnum)) do: [
+    if: i >= 0 and i < s length then: [
+        s unsafe-at: i
+    ] else: [
+        (out-of-bounds: s index: i) signal 
+    ]
+]
+let: ((s: Sequence) unsafe-at: (i: Fixnum)) do: [ s at: i ]
+
+let: ((s: Sequence) at: (i: Fixnum) put: v) do: [
+    if: i >= 0 and i < s length then: [
+        s unsafe-at: i put: v
+    ] else: [
+        (out-of-bounds: s index: i) signal 
+    ]
+]
+let: ((s: Sequence) unsafe-at: (i: Fixnum) put: v) do: [ s at: i put: v ]
+
+
+let: ((seq: Sequence) each: f) do: [
+    mut: i = 0
+    while: [ i < seq length ] do: [
+        f call: (seq at: i)
+        i: i + 1
+    ]
+]
+let: ((seq: Sequence) each/index: f) do: [
+    mut: i = 0
+    while: [ i < seq length ] do: [
+        f call*: i, (seq at: i)
+        i: i + 1
+    ]
+]
+
+# generic: ((n: Fixnum) make-like: (exemplar: Sequence))
+generic: (exemplar: Sequence) empty-like
+generic: ((seq: Sequence) append: value)
+
+let: ((seq: Sequence) map: f as: (exemplar: Sequence)) do: [
+    let: mapped = exemplar empty-like
+    seq each: [
+        mapped append: (f call: it)
+    ]
+    mapped
+]
+let: ((seq: Sequence) map: f) do: [
+    seq map: f as: seq
+]
+
+let: ((seq: Sequence) keep: good? as: (exemplar: Sequence)) do: [
+    let: filtered = exemplar empty-like
+    seq each: [ if: (good? call: it) then: [ filtered append: it ] ]
+    filtered
+]
+let: ((seq: Sequence) keep: good?) do: [
+    seq keep: good? as: seq
+]
+
+let: ((seq: Sequence) all?: p?) do: [
+    with-return: [
+        seq each: [ if: not (p? call: it) then: [ return: #f ] ]
+        #t
+    ]
+]
+let: ((seq: Sequence) any?: p?) do: [
+    with-return: [
+        seq each: [ if: (p? call: it) then: [ return: #t ] ]
+        #f
+    ]
+]
+let: ((seq: Sequence) empty?) do: [ seq length = 0 ]
+
+let: ((seq: Sequence) contains?: x) do: [
+    seq any?: [ it = x ]
+]
+
+let: ((seq: Sequence) contains?: x starting-at: index) do: [
+    with-return: [
+        mut: i = index
+        while: [ i < seq ] do: [
+            if: (seq at: i) = x then: [ return: #t ]
+            i: i + 1
+        ]
+        #f
+    ]
+]
+
+let: ((seq: Sequence) first: project where: accept? else: default) do: [
+    with-return: [
+        seq each: [
+            let: p = (project call: it)
+            if: (accept? call: p) then: [ return: p ]
+        ]
+        default
+    ]
+]
+
+data: Reversed extends: { Sequence } has: { seq }
+let: (r: Reversed) length do: [ r .seq length ]
+let: ((r: Reversed) at: (i: Fixnum)) do: [
+    r .seq at: (r length - 1 - i)
+]
+let: ((s: Sequence) reversed) do: [ Reversed seq: s ]
+
+data: Slice extends: { Sequence } has: {
+    seq # backing sequence
+    start # starting index, inclusive, in seq
+    end # ending index, exclusive, in seq
+}

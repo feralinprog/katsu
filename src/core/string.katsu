@@ -1,0 +1,1 @@
+let: (s: String) length do: [ s ~length ]

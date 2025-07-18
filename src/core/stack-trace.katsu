@@ -59,10 +59,10 @@ let: ((segment: CallSegment) each-frame: f) do: [
 data: SourceLocation has: { index; line; column }
 data: SourceSpan has: { file; start; end }
 let: (t: Tuple) >SourceSpan do: [
-    SourceSpan file: (t unsafe-at: 0) start: (
-        SourceLocation index: (t unsafe-at: 1) line: (t unsafe-at: 2) column: (t unsafe-at: 3)
+    SourceSpan file: (t ~unsafe-at: 0) start: (
+        SourceLocation index: (t ~unsafe-at: 1) line: (t ~unsafe-at: 2) column: (t ~unsafe-at: 3)
     ) end: (
-        SourceLocation index: (t unsafe-at: 4) line: (t unsafe-at: 5) column: (t unsafe-at: 6)
+        SourceLocation index: (t ~unsafe-at: 4) line: (t ~unsafe-at: 5) column: (t ~unsafe-at: 6)
     )
 ]
 
@@ -80,7 +80,7 @@ let: (segment: CallSegment) print-trace-except-top do: [
         if: not top? then: [
             # Go back one instruction; each frame indicates where to _return_ to, and the previous
             # op is the caller.
-            let: span = (fr .code .inst-spans unsafe-at: (fr .inst-spot - 1)) >SourceSpan 
+            let: span = (fr .code .inst-spans ~unsafe-at: (fr .inst-spot - 1)) >SourceSpan
             print: "at " ~ (span >string)
         ]
     ]

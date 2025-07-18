@@ -1,0 +1,7 @@
+use: {
+    "core.mixin"
+    "core.sequence"
+    "core.vector"
+}
+
+Sequence mix-in-to: Vector

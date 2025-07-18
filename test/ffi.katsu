@@ -2,6 +2,7 @@ use: {
     "core.builtin.ffi"
     "core.ffi"
     "core.resource"
+    "core.sequence"
 }
 
 # TODO: add an operator precedence to parser once it's implemented in-language, delete the _

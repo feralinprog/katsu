@@ -1,0 +1,4 @@
+use: "core.builtin.misc"
+
+let: (t: Tuple) length do: [ t ~length ]
+let: ((t: Tuple) unsafe-at: (i: Fixnum)) do: [ t ~unsafe-at: i ]

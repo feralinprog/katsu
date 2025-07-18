@@ -1,10 +1,7 @@
 use: {
-    "core.builtin.misc"
     "core.dynamic-variable"
+    "core.sequence"
 }
-
-# TODO: just make mutable module-level fields
-data: Box has: { value }
 
 let: active-resources = (make-dynamic: "resources")
 
@@ -14,8 +11,7 @@ generic: (resource: Disposable) dispose
 let: (x with-disposal: f) do: [
     active-resources with-value: {} do: [
         [ f call: x ] finally: [
-            # TODO: reverse first. need collections methods!
-            active-resources get each: [dispose]
+            active-resources get reversed each: [dispose]
         ]
     ]
 ]

@@ -55,87 +55,91 @@ let: (assert: (b: Bool)) do: [
     ]
 ]
 
-let: (v: Vector) length do: [
+# Add a ~ prefix to various collections-related methods to not conflict with other core modules such as core.sequence.
+# We'll reimplement these methods in other modules, in a cleaner way.
+# Anything here is meant to be shortest path to `use:`.
+
+let: (v: Vector) ~length do: [
     v unsafe-read-u64-at-offset: 8
 ]
-let: (v: Vector) backing-array do: [
+let: (v: Vector) ~backing-array do: [
     v unsafe-read-value-at-offset: 16
 ]
-let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
-    v backing-array unsafe-at: i
+let: ((v: Vector) ~unsafe-at: (i: Fixnum)) do: [
+    v ~backing-array ~unsafe-at: i
 ]
 
-data: StopIteration has: { value }
-let: ((v: Vector) each: f) do: [
+data: ~StopIteration has: { value }
+let: ((v: Vector) ~each: f) do: [
     mut: i = 0
     mut: last = #null
-    while: [i < v length and not (last instance?: StopIteration)] do: [
-        last: (f call: (v unsafe-at: i))
+    while: [i < v ~length and not (last instance?: ~StopIteration)] do: [
+        last: (f call: (v ~unsafe-at: i))
         i: i + 1
     ]
-    if: (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+    if: (last instance?: ~StopIteration) then: [ last .value ] else: [ last ]
 ]
 
-let: ((v: Vector) contains?: x) do: [
-    v each: [ if: (it = x) then: [ StopIteration value: #t ] else: #f ]
+let: ((v: Vector) ~contains?: x) do: [
+    v ~each: [ if: (it = x) then: [ ~StopIteration value: #t ] else: #f ]
 ]
 
-let: ((v: Vector) push: x) do: [ v append: x ]
-let: (v: Vector) pop do: [
-    assert: v length > 0
-    let: new-length = v length - 1
-    let: end = (v unsafe-at: new-length)
+let: ((v: Vector) ~push: x) do: [ v append: x ]
+let: (v: Vector) ~pop do: [
+    assert: v ~length > 0
+    let: new-length = v ~length - 1
+    let: end = (v ~unsafe-at: new-length)
     v unsafe-write-u64-at-offset: 8 value: new-length
     end
 ]
-let: (v: Vector) peek do: [
-    assert: v length > 0
-    v unsafe-at: (v length - 1)
+let: (v: Vector) ~peek do: [
+    assert: v ~length > 0
+    v ~unsafe-at: (v ~length - 1)
 ]
-let: (v: Vector) empty? do: [
-    v length = 0
+let: (v: Vector) ~empty? do: [
+    v ~length = 0
 ]
 
-let: ((a: Assoc) length) do: [
+let: ((a: Assoc) ~length) do: [
     a unsafe-read-u64-at-offset: 8
 ]
-let: ((a: Assoc) backing-array) do: [
+let: ((a: Assoc) ~backing-array) do: [
     a unsafe-read-value-at-offset: 16
 ]
 
-let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
+let: ((a: Array) ~unsafe-at: (i: Fixnum)) do: [
     a unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
-let: ((a: Assoc) each-entry: f) do: [
+let: ((a: Assoc) ~each-entry: f) do: [
     mut: i = 0
     mut: last = #null
-    while: [i < a length and not (last instance?: StopIteration)] do: [
-        last: (f call*: (a backing-array unsafe-at: i * 2), (a backing-array unsafe-at: i * 2 + 1))
+    while: [i < a ~length and not (last instance?: ~StopIteration)] do: [
+        last: (f call*: (a ~backing-array ~unsafe-at: i * 2), (a ~backing-array ~unsafe-at: i * 2 + 1))
         i: i + 1
     ]
-    if: (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+    if: (last instance?: ~StopIteration) then: [ last .value ] else: [ last ]
 ]
-let: ((a: Assoc) at*: key) do: [
-    a each-entry: \k v [ if: (k = key) then: [ StopIteration value: v ] else: #null ]
+let: ((a: Assoc) ~at*: key) do: [
+    a ~each-entry: \k v [ if: (k = key) then: [ ~StopIteration value: v ] else: #null ]
 ]
-let: ((a: Assoc) each-key: f) do: [
+let: ((a: Assoc) ~each-key: f) do: [
     mut: i = 0
     mut: last = #null
-    while: [i < a length and not (last instance?: StopIteration)] do: [
-        last: (f call: (a backing-array unsafe-at: i * 2))
+    while: [i < a ~length and not (last instance?: ~StopIteration)] do: [
+        last: (f call: (a ~backing-array ~unsafe-at: i * 2))
         i: i + 1
     ]
-    if: (last instance?: StopIteration) then: [ last .value ] else: [ last ]
+    if: (last instance?: ~StopIteration) then: [ last .value ] else: [ last ]
 ]
-let: ((a: Assoc) contains?: k) do: [
-    a each-key: [ if: (it = k) then: [ StopIteration value: #t ] else: #f ]
+let: ((a: Assoc) ~contains?: k) do: [
+    a ~each-key: [ if: (it = k) then: [ ~StopIteration value: #t ] else: #f ]
 ]
 
-let: (t: Tuple) length do: [
+let: (t: Tuple) ~length do: [
     t unsafe-read-u64-at-offset: 8
 ]
-let: ((t: Tuple) unsafe-at: (i: Fixnum)) do: [
+let: ((t: Tuple) ~unsafe-at: (i: Fixnum)) do: [
     t unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
@@ -149,12 +153,12 @@ let: (try: body except: handlers) do: [
         # Search through handlers for a handler matching this condition;
         # else re-raise the signal.
         mut: handled = #f
-        let: handler-result = (handlers each: \h [
-            let: handler-type = (h unsafe-at: 0)
-            let: handler-fn = (h unsafe-at: 1)
+        let: handler-result = (handlers ~each: \h [
+            let: handler-type = (h ~unsafe-at: 0)
+            let: handler-fn = (h ~unsafe-at: 1)
             if: (cond instance?: handler-type) then: [
                 handled: #t
-                StopIteration value: (handler-fn call: cond)
+                ~StopIteration value: (handler-fn call: cond)
             ]
         ])
         if: handled then: [ handler-result ] else: [ cond signal/no-trace ]
@@ -187,13 +191,13 @@ let: (ensure: p? by: a else: default) do: [
 ]
 let: (ensure: p? by: a) do: [ ensure: p? by: a else: [#null] ]
 
-let: (s: String) length do: [ s unsafe-read-u64-at-offset: 8 ]
+let: (s: String) ~length do: [ s unsafe-read-u64-at-offset: 8 ]
 let: (find-module-file-path: (module-name: String)) do: [
     # TODO: do something more reasonable than this
     let: path = module-name ~ ""
     # Replace all '.' with '/'.
     mut: i = 0
-    while: [i < path length] do: [
+    while: [i < path ~length] do: [
         let: offset = 16 + i
         if: (path unsafe-read-u8-at-offset: offset) = 46 then: [
             path unsafe-write-u8-at-offset: offset value: 47
@@ -237,37 +241,39 @@ let: use-stack = {}
 let: imports-stack = {}
 data: RecursiveUse extends: { Condition } has: { module-name }
 let: (use: (module-name: String) path-loader: get-path contents-loader: get-contents) do: [
-    if: (use-stack contains?: module-name) then: [
-        (RecursiveUse condition: "recursive-use" message: "" stack: #null module-name: module-name) signal
+    if: (use-stack ~contains?: module-name) then: [
+        (RecursiveUse condition: "recursive-use" message: (
+            "recursive `use:` starting from " ~ module-name
+        ) stack: #null module-name: module-name) signal
     ] else: [
-        let: module-result = (ensure: [loaded-modules contains?: module-name] by: [
+        let: module-result = (ensure: [loaded-modules ~contains?: module-name] by: [
             let: path = get-path call
             let: contents = (get-contents call: path)
 
             let: new-module = make-empty-assoc
             # TODO: just use a `map` instead on *default-imports*. Need to define standard collections methods...
             let: imports = {}
-            *default-imports* each: [
-                imports append: (loaded-modules at*: it)
+            *default-imports* ~each: [
+                imports append: (loaded-modules ~at*: it)
             ]
 
             loaded-modules add: module-name value: new-module
             [
-                use-stack push: module-name
-                imports-stack push: imports
+                use-stack ~push: module-name
+                imports-stack ~push: imports
                 new-module run-file: path contents: contents imports: imports
             ] finally: [
-                use-stack pop
-                imports-stack pop
+                use-stack ~pop
+                imports-stack ~pop
             ]
         ])
 
         # If the imports-stack is empty, the current module is loaded using the C++ loader,
         # and it will need to use IMPORT-EXISTING-MODULE instead.
-        if: not imports-stack empty? then: [
-            let: new-module = (loaded-modules at*: module-name)
-            let: imports = imports-stack peek
-            if: not (imports contains?: new-module) then: [
+        if: not imports-stack ~empty? then: [
+            let: new-module = (loaded-modules ~at*: module-name)
+            let: imports = imports-stack ~peek
+            if: not (imports ~contains?: new-module) then: [
                 imports append: new-module
             ]
         ]
@@ -284,7 +290,7 @@ let: (use: (module-name: String)) do: [
     ]
 ]
 let: (use: (module-names: Vector)) do: [
-    module-names each: [use: it]
+    module-names ~each: [use: it]
 ]
 
 # Define the native->in-language condition handler in a separate module, as otherwise test code
@@ -293,10 +299,12 @@ let: (use: (module-names: Vector)) do: [
 use: "core.condition-handler"
 
 let: (s: String) >string do: [ s ]
+let: (_: Null) >string do: [ "#null" ]
+let: (b: Bool) >string do: [ if: b then: "#t" else: "#f" ]
 
 let: digit-strings = ("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
 let: (n: Fixnum) digit>string do: [
-    digit-strings unsafe-at: n
+    digit-strings ~unsafe-at: n
 ]
 
 let: ((a: Fixnum) mod: (n: Fixnum)) do: [ a - (a / n) * n ]
@@ -309,8 +317,49 @@ let: (n: Fixnum) >string do: [
     ]
 ]
 
+let: v pr do: [
+    print: v >string
+    v
+]
+
 use: "core.stack-trace"
 IMPORT-EXISTING-MODULE: "core.stack-trace"
+
+# TODO: consider using everything in core automatically
+let: *all-core-modules* = {
+    "core.cleanup"
+    "core.code"
+    "core.combinator"
+    "core.condition"
+    "core.condition-handler"
+    # "core.core" <-- don't do this!
+    "core.dynamic-variable"
+    "core.ffi"
+    "core.mixin"
+    "core.optional"
+    "core.resource"
+    "core.sentinel"
+    "core.sequence"
+    "core.sequence.array"
+    "core.sequence.vector"
+    "core.stack-trace"
+    "core.string"
+    "core.tuple"
+    "core.vector"
+}
+
+*all-core-modules* ~each: \m [
+    try: [
+        use: m
+    ] except: {
+        (Condition, \cond [
+            print: "Error: could not load core module " ~ m ~ "."
+            print: cond .condition ~ ": " ~ cond .message
+            cond .stack print-trace-except-top
+            terminate: "could not load core module"
+        ])
+    }
+]
 
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"
 try: [
@@ -320,5 +369,6 @@ try: [
         print: "Error: could not load module " ~ user-module-name ~ "."
         print: cond .condition ~ ": " ~ cond .message
         cond .stack print-trace-except-top
+        terminate: "could not load module"
     ])
 }

@@ -1,9 +1,11 @@
 use: {
     "core.builtin.misc"
     "core.code"
-    "core.misc"
     "core.optional"
     "core.stack-trace"
+    "core.combinator"
+    "core.tuple"
+    "core.sequence"
 }
 
 pretty-print: 10 + 20
@@ -157,25 +159,25 @@ print: "zzzzz"
 
 print: "----------------------------------"
 
-print: (\return [
+print: (with-return: \return [
     print: "doing some things"
-    return call: "early return"
+    return: "early return"
     print: "oops, after return!"
-] with-return)
+])
 
 print: "----------------------------------"
 
-print: (\r [
+print: (with-return: [
     print: "doing some setup"
     [
         print: "doing some calcs"
-        r call: "return value here"
+        return: "return value here"
         print: "after early return - shouldn't see this at all"
     ] finally: [
         print: "cleaning up!"
     ]
     print: "after cleanup - also shouldn't see this, since early return should still be active"
-] with-return)
+])
 
 let: n do-test do: [
     TAIL-CALL: (if: n = 0 then: [ () >string ] else: [
@@ -215,44 +217,44 @@ pretty-print: ({ 1; 2; 3 } contains?: 2)
 pretty-print: ({ 1; 2; 3 } contains?: 3)
 pretty-print: ({ 1; 2; 3 } contains?: 4)
 
-do: [
-    let: a = make-empty-assoc
-    pretty-print: a
-    pretty-print: a length
-    pretty-print: a backing-array
-    a add: "key" value: "value"
-    pretty-print: a
-]
+# do: [
+#     let: a = make-empty-assoc
+#     pretty-print: a
+#     pretty-print: a length
+#     pretty-print: a backing-array
+#     a add: "key" value: "value"
+#     pretty-print: a
+# ]
 
-do: [
-    let: v = { 1; 2; 3 }
-    pretty-print: v
-    v append: 4
-    pretty-print: v
-    pretty-print: v pop
-    pretty-print: v
-    v append: 4
-    pretty-print: v
-    pretty-print: v pop
-    pretty-print: v
-]
+# do: [
+#     let: v = { 1; 2; 3 }
+#     pretty-print: v
+#     v append: 4
+#     pretty-print: v
+#     pretty-print: v pop
+#     pretty-print: v
+#     v append: 4
+#     pretty-print: v
+#     pretty-print: v pop
+#     pretty-print: v
+# ]
 
-do: [
-    let: v = { 1; 2; 3 }
-    let: a = v backing-array
-    pretty-print: v
-    pretty-print: a
-    pretty-print: (a unsafe-at: 0)
-    pretty-print: (a unsafe-at: 1)
-    pretty-print: (a unsafe-at: 2)
-]
+# do: [
+#     let: v = { 1; 2; 3 }
+#     let: a = v backing-array
+#     pretty-print: v
+#     pretty-print: a
+#     pretty-print: (a unsafe-at: 0)
+#     pretty-print: (a unsafe-at: 1)
+#     pretty-print: (a unsafe-at: 2)
+# ]
 
-do: [
-    let: a = make-empty-assoc
-    a add: "key1" value: "value1"
-    a add: "key2" value: "value2"
-    a each-key: [print: it]
-]
+# do: [
+#     let: a = make-empty-assoc
+#     a add: "key1" value: "value1"
+#     a add: "key2" value: "value2"
+#     a each-key: [print: it]
+# ]
 
 print: "just before using imports-test"
 use: "example.imports-test"

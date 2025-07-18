@@ -1,70 +1,68 @@
 use: {
+    "core.array"
     "core.builtin.misc"
+    "core.combinator"
     "core.condition"
-    "core.misc"
+    "core.vector"
 }
 
-# TODO: ideally this would all be in a collections module or similar
+# Unfortunately: duplicate some of core.sequence, since Vector / Array are not actually Sequence
+# (and therefore we cannot use core.sequence methods on vectors / arrays) until Sequence is mixed
+# in to those types, which requires sequence operations on vectors and arrays.
+# -----------------------------------------------------------------------------------------------
 
-let: (a: Array) >vector do: [
-    let: v = {}
-    v unsafe-write-value-at-offset: 16 value: a
-    v unsafe-write-u64-at-offset: 8 value: a length
-    v
+let/local: ((v: Vector) length) do: [ v ~length ]
+let/local: ((v: Vector) unsafe-at: (i: Fixnum)) do: [ v ~unsafe-at: i ]
+
+let/local: (seq each: f) do: [
+    mut: i = 0
+    while: [i < seq length] do: [
+        f call: (seq unsafe-at: i)
+        i: i + 1
+    ]
 ]
 
-let: ((v: Vector) map: f) do: [
+let/local: ((v: Vector) map: f) do: [
     let: mapped = {}
     v each: [ mapped append: (f call: it) ]
     mapped
 ]
-let: ((v: Vector) keep: good?) do: [
+let/local: ((v: Vector) keep: good?) do: [
     let: filtered = {}
     v each: \x [ if: (good? call: x) then: [ filtered append: x ] ]
     filtered
 ]
-let: ((v: Vector) all?: p?) do: [
-    v each: [ if: (p? call: it) then: [ #t ] else: [ StopIteration value: #f ] ]
+
+let/local: (seq contains?: x starting-at: index) do: [
+    with-return: [
+        mut: i = index
+        while: [ i < seq length ] do: [
+            if: (seq unsafe-at: i) = x then: [ return: #t ]
+            i: i + 1
+        ]
+        #f
+    ]
 ]
+let/local: (seq contains?: x) do: [ seq contains?: x starting-at: 0 ]
+
+let/local: ((v: Vector) first: project where: accept? else: default) do: [
+    with-return: [
+        v each: [
+            let: p = (project call: it)
+            if: (accept? call: p) then: [ return: p ]
+        ]
+        default
+    ]
+]
+
 let: ((v: Vector) any?: p?) do: [
-    v each: [ if: (p? call: it) then: [ StopIteration value: #t ] else: [ #f ] ]
-]
-let: ((v: Vector) empty?) do: [ v length = 0 ]
-
-data: OutOfRange extends: { Condition } has: { range; index }
-let: (out-of-range: range index: index) do: [ OutOfRange condition: "out-of-range" message: "index out of range" stack: #null range: range index: index ]
-
-let: ((a: Array) at: (i: Fixnum)) do: [
-    if: (i >= 0 and i < a length) then: [
-        a unsafe-at: i
-    ] else: [
-        (out-of-range: a index: i) signal
-    ]
-]
-let: ((v: Vector) at: (i: Fixnum)) do: [
-    if: (i >= 0 and i < v length) then: [
-        v unsafe-at: i
-    ] else: [
-        (out-of-range: v index: i) signal
+    with-return: [
+        v each: [ if: (p? call: it) then: [ return: #t ] ]
+        #f
     ]
 ]
 
-let: (s contains?: x starting-at: index) do: [
-    mut: found = #f
-    mut: i = index
-    while: [ i < s length and not found ] do: [
-        if: (s at: i) = x then: [ found: #t ]
-        i: i + 1
-    ]
-    found
-]
-
-let: ((v: Vector) first: project where: accept? else: default) do: [
-    v each: [
-        let: p = (project call: it)
-        if: (accept? call: p) then: [ StopIteration value: p ] else: [ default ]
-    ]
-]
+let: ((v: Vector) empty?) do: [ v ~length = 0 ]
 
 let: ((a: Vector) concat: (b: Vector)) do: [
     let: c = {}
@@ -73,7 +71,7 @@ let: ((a: Vector) concat: (b: Vector)) do: [
     c
 ]
 
-###############################################################################
+# -----------------------------------------------------------------------------------------------
 
 let: PRIMITIVE = 0
 let: DATACLASS = 1
@@ -93,8 +91,8 @@ let: ((t: Type) linearization: (l: Array)) do: [ t unsafe-write-value-at-offset:
 let: ((t: Type) subtypes: (s: Vector)) do: [ t unsafe-write-value-at-offset: 40 value: s ]
 
 data: Cursor has: { seq; spot }
-let: (c: Cursor) used? do: [ c .spot = c .seq length]
-let: (c: Cursor) cur do: [ c .seq at: c .spot ]
+let: (c: Cursor) used? do: [ c .spot = c .seq length ]
+let: (c: Cursor) cur do: [ c .seq ~unsafe-at: c .spot ]
 let: (c: Cursor) shift do: [ c spot: c .spot + 1 ]
 
 let: ((c: Cursor) tail-contains?: x) do: [

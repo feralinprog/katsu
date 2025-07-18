@@ -1,0 +1,15 @@
+# TODO: update this whole thing
+
+use: {
+    "core.sentinel"
+}
+
+# let: *cleanup-key* = (new-sentinel: "cleanup-key")
+# 
+# let: (x if-not-null: body) do: [
+#     if: x != #null then: [ body call: x ]
+# ]
+# 
+# let: (m: Assoc) cleanup do: [
+#     (m at*: *cleanup-key*) if-not-null: [ call ]
+# ]

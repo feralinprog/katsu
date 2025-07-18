@@ -808,8 +808,8 @@ TEST_CASE("integration - whole file", "[katsu]")
         };
     };
 
-    // Default to a reasonably sized 10 KiB stack.
-    uint64_t call_stack_size = 10 * 1024;
+    // Default to a reasonably sized 100 KiB stack.
+    uint64_t call_stack_size = 100 * 1024;
 
     auto run = [&source, &gc, &call_stack_size]() {
         return bootstrap_and_run_source(source, "test.integration", gc, call_stack_size);
@@ -970,7 +970,7 @@ let: testing do: [
     "but does something afterwards"
 ]
         )");
-        check(Value::null());
+        CHECK_THROWS_MATCHES(run(), terminate_error, Message("could not load module"));
         CHECK_THAT(capture.str(),
                    ContainsSubstring("compile-error: TAIL-CALL: invoked not in tail position"));
     }
@@ -981,7 +981,7 @@ let: testing do: [
         input(R"(
 TAIL-CALL: (1 + 2)
         )");
-        check(Value::null());
+        CHECK_THROWS_MATCHES(run(), terminate_error, Message("could not load module"));
         CHECK_THAT(capture.str(),
                    ContainsSubstring("compile-error: TAIL-CALL: invoked not in tail position"));
     }
