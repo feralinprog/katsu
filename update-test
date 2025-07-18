@@ -1,8 +1,17 @@
 #!/bin/bash
 
+show_options ()
+{
+    echo "Test options are:"
+    for f in $(find test -name "*.katsu"); do
+        echo "  $(basename $f .katsu)"
+    done
+}
+
 if [ $# -ne 1 ]; then
     echo "usage: ./update-test <name>   -- runs test/<test>.katsu in order to generate test/<name>.stdout and test/<name>.stderr" >&2
     echo "       ./update-test -a|--all -- updates all tests under test/" >&2
+    show_options >&2
     exit 1
 fi
 
@@ -16,10 +25,7 @@ update_test ()
 
     if [ ! -f "test/$name.katsu" ]; then
         echo "test/$name.katsu does not exist" >&2
-        echo "some options are:" >&2
-        for f in $(find test -name "*.katsu"); do
-            echo "  $(basename $f .katsu)" >&2
-        done
+        show_options >&2
         exit 1
     fi
 
