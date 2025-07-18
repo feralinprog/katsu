@@ -431,6 +431,32 @@ namespace Katsu
         size_t frame_size = Frame::size(num_regs, num_data);
         if (reinterpret_cast<uint8_t*>(frame) + frame_size >
             this->call_stack_mem + this->call_stack_size) {
+
+            std::cerr << "Stack overflow:\n";
+            for (frame = OpenVM(*this).bottom_frame(); frame <= this->current_frame;
+                 frame = frame->next()) {
+                uint32_t inst_spot = frame->inst_spot;
+                if (frame < this->current_frame) {
+                    // Go back one instruction; each frame indicates where to _return_ to, and the
+                    // previous op is the caller.
+                    ASSERT(inst_spot > 0);
+                    inst_spot--;
+                }
+
+                // See convert_span() in compile.cc.
+                Value* span = frame->v_code.obj_code()
+                                  ->v_inst_spans.obj_array()
+                                  ->components()[inst_spot]
+                                  .obj_tuple()
+                                  ->components();
+                // TODO: deduplicate with operator<< in main.cc.
+                std::cerr << "at <" << native_str(span[0].obj_string()) << ":"
+                          << span[2].fixnum() + 1 << ":" << span[3].fixnum() + 1 << "-"
+                          << span[5].fixnum() + 1 << "." << span[6].fixnum() + 1 << ">\n";
+            }
+
+            std::cout.flush();
+            std::cerr.flush();
             throw std::runtime_error("katsu stack overflow");
         }
 
