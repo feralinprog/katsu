@@ -1619,6 +1619,39 @@ namespace Katsu
                                    expr->args[1].get(),
                                    expr->args[2].get());
                     continue;
+                } else if (expr->messages.size() == 2 &&
+                           std::get<std::string>(expr->messages[0].value) == "let/local" &&
+                           std::get<std::string>(expr->messages[1].value) == "do") {
+                    compile_method(gc,
+                                   vm.v_multimethods,
+                                   true /* allow_existing */,
+                                   false /* global */,
+                                   builder,
+                                   "let/local:do:",
+                                   expr->span,
+                                   expr->target ? expr->target->get() : nullptr,
+                                   *expr->args[0],
+                                   expr->args[1].get(),
+                                   nullptr);
+                    continue;
+                } else if (expr->messages.size() == 3 &&
+                           std::get<std::string>(expr->messages[0].value) == "let/local" &&
+                           std::get<std::string>(expr->messages[1].value) == "do" &&
+                           std::get<std::string>(expr->messages[2].value) == ":"
+
+                ) {
+                    compile_method(gc,
+                                   vm.v_multimethods,
+                                   true /* allow_existing */,
+                                   false /* global */,
+                                   builder,
+                                   "let/local:do:::",
+                                   expr->span,
+                                   expr->target ? expr->target->get() : nullptr,
+                                   *expr->args[0],
+                                   expr->args[1].get(),
+                                   expr->args[2].get());
+                    continue;
                 } else if (expr->messages.size() == 1 &&
                            std::get<std::string>(expr->messages[0].value) == "generic") {
                     compile_method(gc,
