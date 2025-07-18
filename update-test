@@ -23,7 +23,21 @@ update_test ()
         exit 1
     fi
 
-    out/katsu test test/$name.katsu > >(tee test/$name.stdout) 2> >(tee test/$name.stderr)
+    # TODO: why does this put stderr also in stdout?
+    # out/katsu test test/$name.katsu > >(tee test/$name.stdout) 2> >(tee test/$name.stderr)
+    out/katsu test test/$name.katsu >test/$name.stdout 2>test/$name.stderr
+    exit_code=$?
+    echo "------ stdout -------"
+    cat test/$name.stdout
+    echo "------ stderr -------"
+    cat test/$name.stderr
+    echo "------ exit code -------"
+    echo $exit_code
+    if [ $exit_code -eq 0 ]; then
+        rm -f test/$name.exitcode
+    else
+        echo $exit_code > test/$name.exitcode
+    fi
 
     if [ ! -s "test/$name.stderr" ]; then
         rm -f test/$name.stderr
