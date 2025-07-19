@@ -341,6 +341,10 @@ namespace Katsu
         uint64_t num_entries = assoc->length;
         for (uint64_t i = 0; i < num_entries; i++) {
             Assoc::Entry& entry = assoc->entries()[i];
+            // Ignore non-strings.
+            if (!entry.v_key.is_obj_string()) {
+                continue;
+            }
             String* entry_name = entry.v_key.obj_string();
             if (entry_name->length != name_length) {
                 continue;
