@@ -39,3 +39,5 @@ with-disposal: [
 
     assert: result = (s length + 1)
 ]
+
+(malloc: 1024) dispose-on-cleanup

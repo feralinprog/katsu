@@ -1,8 +1,10 @@
 use: {
     "core.builtin.ffi"
     "core.builtin.misc"
+    "core.cleanup"
     "core.mixin"
     "core.resource"
+    "core.sequence"
     "core.string"
 }
 
@@ -66,4 +68,13 @@ let: ((dll: DLL) dlsym: (symbol: String)) do: [
         ]
         lookup
     ]
+]
+
+let: to-dispose = {}
+let: (f: Disposable) dispose-on-cleanup do: [
+    to-dispose append: f
+    f
+]
+current-module add-cleanup: [
+    to-dispose each: [ dispose ]
 ]
