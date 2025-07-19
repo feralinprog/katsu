@@ -23,3 +23,6 @@ let: (seq: Sequence) pprint-all do: [
 (6 to=: 3) pprint-all
 
 ({ "a"; "b"; "c"; "d"; "e"; "f" } at: { 4; 2; 1; 5 }) pprint-all
+
+# `each:` should produce #null
+pretty-print: ({ 1; 2; 3 } each: [ it * 10 ])
