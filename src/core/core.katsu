@@ -327,6 +327,7 @@ IMPORT-EXISTING-MODULE: "core.stack-trace"
 
 # TODO: consider using everything in core automatically
 let: *all-core-modules* = {
+    "core.array"
     "core.cleanup"
     "core.code"
     "core.combinator"
