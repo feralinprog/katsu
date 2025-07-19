@@ -132,3 +132,29 @@ data: Slice extends: { Sequence } has: {
     start # starting index, inclusive, in seq
     end # ending index, exclusive, in seq
 }
+let: (s: Slice) length do: [ s .end - s .start ]
+let: ((s: Slice) unsafe-at: (i: Fixnum)) do: [ s .seq at: i  + s .start ]
+let: ((seq: Sequence) from: start to<: end) do: [
+    Slice seq: seq start: start end: end
+]
+let: ((seq: Sequence) from: start to=: end) do: [
+    Slice seq: seq start: start end: end + 1
+]
+
+data: Subseq extends: { Sequence } has: { seq; indices }
+let: (s: Subseq) length do: [ s .indices length ]
+let: ((s: Subseq) unsafe-at: (i: Fixnum)) do: [ s .seq at: (s .indices at: i) ]
+let: ((seq: Sequence) at: (indices: Sequence)) do: [
+    Subseq seq: seq indices: indices
+]
+
+data: Steps extends: { Sequence } has: { start; step; length }
+let: (s: Steps) length do: [ s .length ]
+let: ((s: Steps) unsafe-at: (i: Fixnum)) do: [ s .start + i * s .step ]
+let: empty-steps do: [ Steps start: 0 step: 0 length: 0 ]
+let: ((a: Fixnum) to<: (b: Fixnum)) do: [
+    if: a <= b then: [
+        Steps start: a step: 1 length: b - a
+    ] else: [ empty-steps ]
+]
+let: ((a: Fixnum) to=: (b: Fixnum)) do: [ a to<: b + 1 ]

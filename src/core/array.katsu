@@ -13,11 +13,3 @@ let: (a: Array) >vector do: [
     v unsafe-write-u64-at-offset: 8 value: a length
     v
 ]
-
-# let: ((a: Array) at: (i: Fixnum)) do: [
-#     if: (i >= 0 and i < a length) then: [
-#         a ~unsafe-at: i
-#     ] else: [
-#         (out-of-bounds: a index: i) signal
-#     ]
-# ]

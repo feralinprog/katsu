@@ -1,0 +1,39 @@
+length = 3
+fixnum 1
+fixnum 2
+fixnum 3
+length = 3
+fixnum 3
+fixnum 2
+fixnum 1
+length = 3
+fixnum 2
+fixnum 3
+fixnum 4
+length = 3
+fixnum 3
+fixnum 2
+fixnum 1
+length = 4
+fixnum 2
+fixnum 3
+fixnum 4
+fixnum 5
+0 -> a
+1 -> b
+2 -> c
+length = 3
+fixnum 3
+fixnum 4
+fixnum 5
+length = 4
+fixnum 3
+fixnum 4
+fixnum 5
+fixnum 6
+length = 0
+length = 4
+*string: "e"
+*string: "c"
+*string: "b"
+*string: "f"

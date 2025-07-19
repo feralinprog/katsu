@@ -1,0 +1,25 @@
+use: {
+    "core.sequence"
+    "core.builtin.misc"
+}
+
+let: (seq: Sequence) pprint-all do: [
+    print: "length = " ~ seq length >string
+    seq each: [ pretty-print: it ]
+]
+
+{ 1; 2; 3 } pprint-all
+{ 1; 2; 3 } reversed pprint-all
+({ 0; 1; 2; 3; 4; 5 } from: 2 to<: 5) pprint-all
+({ 0; 1; 2; 3; 4; 5 } from: 1 to<: 4) reversed pprint-all
+({ 0; 1; 2; 3; 4; 5 } from: 2 to=: 5) pprint-all
+
+{ "a"; "b"; "c" } each/index: \i x [
+    print: i >string ~ " -> " ~ x
+]
+
+(3 to<: 6) pprint-all
+(3 to=: 6) pprint-all
+(6 to=: 3) pprint-all
+
+({ "a"; "b"; "c"; "d"; "e"; "f" } at: { 4; 2; 1; 5 }) pprint-all
