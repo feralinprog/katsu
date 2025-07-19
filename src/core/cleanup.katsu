@@ -24,3 +24,7 @@ let: cleanup-all-modules do: [
     ]
     not any-error
 ]
+
+let: ((module: Assoc) add-cleanup: cleanup) do: [
+    module add: *cleanup-key* value: cleanup
+]

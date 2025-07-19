@@ -1,9 +1,9 @@
 use: {
-    "core.cleanup"
     "core.builtin.misc"
+    "core.cleanup"
 }
 
-current-module add: *cleanup-key* value: [
+current-module add-cleanup: [
     print: "raising a signal"
     1 / 0
 ]
