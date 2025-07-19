@@ -337,6 +337,7 @@ let: *all-core-modules* = {
     "core.dynamic-variable"
     "core.ffi"
     "core.mixin"
+    "core.mixin.private"
     "core.optional"
     "core.resource"
     "core.sentinel"

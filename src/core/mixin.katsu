@@ -1,77 +1,9 @@
 use: {
     "core.array"
     "core.builtin.misc"
-    "core.combinator"
     "core.condition"
-    "core.vector"
+    "core.mixin.private"
 }
-
-# Unfortunately: duplicate some of core.sequence, since Vector / Array are not actually Sequence
-# (and therefore we cannot use core.sequence methods on vectors / arrays) until Sequence is mixed
-# in to those types, which requires sequence operations on vectors and arrays.
-# -----------------------------------------------------------------------------------------------
-
-let/local: ((v: Vector) length) do: [ v ~length ]
-let/local: ((v: Vector) unsafe-at: (i: Fixnum)) do: [ v ~unsafe-at: i ]
-
-let/local: (seq each: f) do: [
-    mut: i = 0
-    while: [i < seq length] do: [
-        f call: (seq unsafe-at: i)
-        i: i + 1
-    ]
-]
-
-let/local: ((v: Vector) map: f) do: [
-    let: mapped = {}
-    v each: [ mapped append: (f call: it) ]
-    mapped
-]
-let/local: ((v: Vector) keep: good?) do: [
-    let: filtered = {}
-    v each: \x [ if: (good? call: x) then: [ filtered append: x ] ]
-    filtered
-]
-
-let/local: (seq contains?: x starting-at: index) do: [
-    with-return: [
-        mut: i = index
-        while: [ i < seq length ] do: [
-            if: (seq unsafe-at: i) = x then: [ return: #t ]
-            i: i + 1
-        ]
-        #f
-    ]
-]
-let/local: (seq contains?: x) do: [ seq contains?: x starting-at: 0 ]
-
-let/local: ((v: Vector) first: project where: accept? else: default) do: [
-    with-return: [
-        v each: [
-            let: p = (project call: it)
-            if: (accept? call: p) then: [ return: p ]
-        ]
-        default
-    ]
-]
-
-let: ((v: Vector) any?: p?) do: [
-    with-return: [
-        v each: [ if: (p? call: it) then: [ return: #t ] ]
-        #f
-    ]
-]
-
-let: ((v: Vector) empty?) do: [ v ~length = 0 ]
-
-let: ((a: Vector) concat: (b: Vector)) do: [
-    let: c = {}
-    a each: [ c append: it ]
-    b each: [ c append: it ]
-    c
-]
-
-# -----------------------------------------------------------------------------------------------
 
 let: PRIMITIVE = 0
 let: DATACLASS = 1
