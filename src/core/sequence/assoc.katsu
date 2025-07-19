@@ -20,7 +20,7 @@ let: (v: AssocValues) length do: [ v .assoc length ]
 let: ((v: AssocValues) unsafe-at: (i: Fixnum)) do: [ (v .assoc unsafe-at: i) .value ]
 let: (a: Assoc) values do: [ AssocValues assoc: a ]
 
-let: ((a: Assoc) each-entry: f) do: [ a entries each: f ]
+let: ((a: Assoc) each-entry: f) do: [ a entries each: [ f call*: (it .key, it .value) ] ]
 
 let: ((a: Assoc) at*: key) do: [
     a with-return: [

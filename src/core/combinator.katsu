@@ -48,3 +48,7 @@ let: ((n: Fixnum) times: body) do: [
 ]
 
 let: (x do: f) do: [f call: x]
+
+let: (x if-not-null: body) do: [
+    if: x != #null then: [ body call: x ]
+]

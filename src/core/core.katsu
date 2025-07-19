@@ -143,7 +143,7 @@ let: ((t: Tuple) ~unsafe-at: (i: Fixnum)) do: [
     t unsafe-read-value-at-offset: 16 + 8 * i
 ]
 
-# handlers should be a vector of (type <= Exception, handler) pairs.
+# handlers should be a vector of (type <= Condition, handler) pairs.
 # TODO: improve the error handling here.
 let: (try: body except: handlers) do: [
     let: result = (shift: [ OkUnwinding value: (body call) ])
@@ -325,6 +325,13 @@ let: v pr do: [
 use: "core.stack-trace"
 IMPORT-EXISTING-MODULE: "core.stack-trace"
 
+use: "core.cleanup"
+IMPORT-EXISTING-MODULE: "core.cleanup"
+let: (cleanup-and-terminate: message) do: [
+    cleanup-all-modules
+    terminate: message
+]
+
 # TODO: consider using everything in core automatically
 let: *all-core-modules* = {
     "core.array"
@@ -360,19 +367,23 @@ let: *all-core-modules* = {
             print: "Error: could not load core module " ~ m ~ "."
             print: cond .condition ~ ": " ~ cond .message
             cond .stack print-trace-except-top
-            terminate: "could not load core module"
+            cleanup-and-terminate: "could not load core module"
         ])
     }
 ]
 
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"
-try: [
+let: user-module-result = (try: [
     use: user-module-name path-loader: [user-source-path] contents-loader: [user-source-contents]
 ] except: {
     (Condition, \cond [
         print: "Error: could not load module " ~ user-module-name ~ "."
         print: cond .condition ~ ": " ~ cond .message
         cond .stack print-trace-except-top
-        terminate: "could not load module"
+        cleanup-and-terminate: "could not load module"
     ])
-}
+})
+
+if: cleanup-all-modules then: [ user-module-result ] else: [
+    terminate: "could not clean up modules"
+]

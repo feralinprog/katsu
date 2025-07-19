@@ -695,6 +695,13 @@ namespace Katsu
         vm.frame()->push(vm.vm.v_modules);
         vm.frame()->inst_spot++;
     }
+    void intrinsic__current_module(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ current-module
+        ASSERT(nargs == 1);
+        vm.frame()->push(vm.frame()->v_module);
+        vm.frame()->inst_spot++;
+    }
 
     void intrinsic__global_multimethods(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
     {
@@ -1148,6 +1155,7 @@ namespace Katsu
         register_intrinsic("call/dc:", r_misc, {matches_any, matches_any}, &intrinsic__call_dc_);
 
         register_intrinsic("loaded-modules", r_misc, {matches_any}, &intrinsic__loaded_modules);
+        register_intrinsic("current-module", r_misc, {matches_any}, &intrinsic__current_module);
         register_intrinsic("global-multimethods",
                            r_misc,
                            {matches_any},

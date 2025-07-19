@@ -1,10 +1,10 @@
 Error: could not load module test.
 divide-by-zero: cannot divide by integer 0
-at <src/core/core.katsu:369:1-378.2>
+at <src/core/core.katsu:376:28-385.2>
 at <src/core/core.katsu:149:20-149.61>
 at <src/core/core.katsu:41:23-41.52>
 at <src/core/core.katsu:149:49-149.58>
-at <src/core/core.katsu:370:5-370.98>
+at <src/core/core.katsu:377:5-377.98>
 at <src/core/core.katsu:244:5-282.6>
 at <src/core/core.katsu:249:31-269.10>
 at <src/core/core.katsu:192:31-192.61>
