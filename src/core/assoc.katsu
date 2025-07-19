@@ -1,0 +1,21 @@
+use: {
+    "core.array"
+    "core.builtin.misc"
+    "core.combinator"
+}
+
+let: ((a: Assoc) length) do: [
+    a unsafe-read-u64-at-offset: 8
+]
+let: ((a: Assoc) unsafe-backing-array) do: [
+    a unsafe-read-value-at-offset: 16
+]
+
+data: AssocEntry has: { key; value }
+let: ((a: Assoc) unsafe-at: (i: Fixnum)) do: [
+    AssocEntry key: (
+        a unsafe-backing-array unsafe-at: i * 2
+    ) value: (
+        a unsafe-backing-array unsafe-at: i * 2 + 1
+    )
+]

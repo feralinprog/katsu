@@ -1,0 +1,30 @@
+use: {
+    "core.assoc"
+    "core.combinator"
+    "core.mixin"
+    "core.sequence"
+}
+
+data: AssocEntries extends: { Sequence } has: { assoc }
+let: (e: AssocEntries) length do: [ e .assoc length ]
+let: ((e: AssocEntries) unsafe-at: (i: Fixnum)) do: [ e .assoc unsafe-at: i ]
+let: (a: Assoc) entries do: [ AssocEntries assoc: a ]
+
+data: AssocKeys extends: { Sequence } has: { assoc }
+let: (k: AssocKeys) length do: [ k .assoc length ]
+let: ((k: AssocKeys) unsafe-at: (i: Fixnum)) do: [ (k .assoc unsafe-at: i) .key ]
+let: (a: Assoc) keys do: [ AssocKeys assoc: a ]
+
+data: AssocValues extends: { Sequence } has: { assoc }
+let: (v: AssocValues) length do: [ v .assoc length ]
+let: ((v: AssocValues) unsafe-at: (i: Fixnum)) do: [ (v .assoc unsafe-at: i) .value ]
+let: (a: Assoc) values do: [ AssocValues assoc: a ]
+
+let: ((a: Assoc) each-entry: f) do: [ a entries each: f ]
+
+let: ((a: Assoc) at*: key) do: [
+    a with-return: [
+        each-entry: \k v [ v return-if: k = key ]
+        #null
+    ]
+]

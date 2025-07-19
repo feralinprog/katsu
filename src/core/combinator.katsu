@@ -35,6 +35,9 @@ let: (x with-return: f) do: [
 let: (return: x) do: [
     return-callable get call: x
 ]
+let: (x return-if: (b: Bool)) do: [
+    if: b then: [ return: x ]
+]
 
 let: ((n: Fixnum) times: body) do: [
     mut: i = 0
