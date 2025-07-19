@@ -25,6 +25,7 @@ let: cleanup-all-modules do: [
     not any-error
 ]
 
+# TODO: add a macro for this once there's a built-in compiler
 let: ((module: Assoc) add-cleanup: cleanup) do: [
     module add: *cleanup-key* value: cleanup
 ]
