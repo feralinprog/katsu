@@ -1,15 +1,15 @@
 TODO (VM):
 * int64 / uint64 and bignums
-* allow for docs everywhere!
 * save to image and load from image
 * allow mut:s at module level
 * handle more errors in C++ and raise as conditions
-* split multimethod declaration and method addition? or leave effectively global multimethods?
+* replace let -> let/global and let/local -> let
 
 TODO (in-language):
-* basic collections module(s)
+* allow for docs everywhere!
 * improve FFI wrapper
-* coroutines / fibers
+* coroutines
+* better pretty-printing (with websocket?)
 * parser and bytecode compiler
 * literal data structure syntax?
   * %{ { key; value}; { key; value } ... }
