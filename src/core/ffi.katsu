@@ -31,6 +31,8 @@ data: DLCloseError extends: { Condition } has: {}
 data: DLSymbolNotFound extends: { Condition } has: { symbol }
 
 data: DLL has: { handle }
+# Note: dlopen:flags: is defined in core.builtin.ffi; this just adds another method to that multimethod.
+# TODO: reexport?
 let: (dlopen: (filename: String) flags: (flags: Fixnum)) do: [
     assert: dlerror = NULL
     with-disposal: [
