@@ -24,3 +24,4 @@ at <src/core/core.katsu:14:9-14.18>
 at <src/core/core.katsu:217:21-217.30>
 at <test/error.katsu:2:1-2.6>
 at <src/core/condition-handler.katsu:3:5-3.74>
+at <src/core/core.katsu:48:14-48.28>

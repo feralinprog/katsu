@@ -74,14 +74,15 @@ let: (span: SourceSpan) >string do: [
     ) ~ ">"
 ]
 
-let: (segment: CallSegment) print-trace-except-top do: [
+let: (segment: CallSegment) print-trace do: [
     segment each-frame: \fr [
         let: top? = fr next .offset >= segment length
-        if: not top? then: [
+        let: spot = (if: top? then: [ fr .inst-spot ] else: [
             # Go back one instruction; each frame indicates where to _return_ to, and the previous
             # op is the caller.
-            let: span = (fr .code .inst-spans ~unsafe-at: (fr .inst-spot - 1)) >SourceSpan
-            print: "at " ~ (span >string)
-        ]
+            fr .inst-spot - 1
+        ])
+        let: span = (fr .code .inst-spans ~unsafe-at: spot) >SourceSpan
+        print: "at " ~ (span >string)
     ]
 ]

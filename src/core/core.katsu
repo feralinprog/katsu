@@ -366,7 +366,7 @@ let: *all-core-modules* = {
         (Condition, \cond [
             print: "Error: could not load core module " ~ m ~ "."
             print: cond .condition ~ ": " ~ cond .message
-            cond .stack print-trace-except-top
+            cond .stack print-trace
             cleanup-and-terminate: "could not load core module"
         ])
     }
@@ -379,7 +379,7 @@ let: user-module-result = (try: [
     (Condition, \cond [
         print: "Error: could not load module " ~ user-module-name ~ "."
         print: cond .condition ~ ": " ~ cond .message
-        cond .stack print-trace-except-top
+        cond .stack print-trace
         cleanup-and-terminate: "could not load module"
     ])
 })

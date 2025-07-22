@@ -637,13 +637,13 @@ namespace Katsu
     {
         // _ get-call-stack
         ASSERT(nargs == 1);
-        vm.frame()->inst_spot++;
         Frame* past_top = vm.frame()->next();
         Frame* bottom = vm.bottom_frame();
         uint64_t total_stack_length =
             reinterpret_cast<uint8_t*>(past_top) - reinterpret_cast<uint8_t*>(bottom);
         vm.frame()->push(
             Value::object(make_call_segment(vm.gc, vm.bottom_frame(), total_stack_length)));
+        vm.frame()->inst_spot++;
     }
 
     void intrinsic__call_marked_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)

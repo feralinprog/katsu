@@ -198,7 +198,7 @@ try: [
     (Condition condition: "a condition" message: "I'm a signal!" stack: #null) signal
     print: "after signal"
 ] except: {
-    (Condition, \c [ print: "Got signal: " ~ c .condition ~ " - " ~ c .message; c .stack print-trace-except-top ])
+    (Condition, \c [ print: "Got signal: " ~ c .condition ~ " - " ~ c .message; c .stack print-trace ])
 }
 
 let: divide-by-zero do: [
