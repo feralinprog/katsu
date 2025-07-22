@@ -544,14 +544,15 @@ namespace Katsu
             Value v_existing;
             LookupResult lookup;
             if ((lookup = lookup_name(builder, *r_name, &v_existing)) != SUCCESS) {
+                std::stringstream ss;
                 if (lookup == NOT_FOUND) {
-                    throw compile_error(
-                        "name is not defined in module (and is also not <a mutable local>:)",
-                        expr->span);
+                    ss << "name '" << native_str(*r_name)
+                       << "' is not defined in module (and is also not <a mutable local>:)";
                 } else {
-                    throw compile_error("name is ambiguous in the current module and imports",
-                                        expr->span);
+                    ss << "name '" << native_str(*r_name)
+                       << "' is ambiguous in the current module and imports";
                 }
+                throw compile_error(ss.str(), expr->span);
             }
             ValueRoot r_existing(gc, std::move(v_existing));
 
