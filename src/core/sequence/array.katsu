@@ -1,7 +1,10 @@
 use: {
     "core.array"
+    "core.builtin.misc"
     "core.mixin"
     "core.sequence"
 }
 
 MutableSequence mix-in-to: Array
+
+let: (mutable-like: (_: Array) length: n) do: [ n nulls-array ]

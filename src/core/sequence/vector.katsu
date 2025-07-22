@@ -44,3 +44,20 @@ let: ((v: Vector) at: (i: Fixnum) put: value) do: [
 ]
 
 ResizableSequence mix-in-to: Vector
+
+let: ((a: Array) array>vector/length: (n: Fixnum)) do: [
+    # TODO: this is pretty hacky
+    assert: n <= a length
+    let: v = {}
+    v unsafe-write-value-at-offset: 16 value: a
+    v unsafe-write-u64-at-offset: 8 value: n
+    v
+]
+
+let: ((seq: Vector) like: (_: Vector)) do: [ seq ]
+let: (mutable-like: (_: Vector) length: n) do: [
+    n nulls-array array>vector/length: n
+]
+let: (resizable-like: (_: Vector) capacity: n) do: [
+    n nulls-array array>vector/length: 0
+]

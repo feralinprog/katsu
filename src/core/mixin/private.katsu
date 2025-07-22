@@ -54,16 +54,16 @@ let/local: ((v: Vector) first: project where: accept? else: default) do: [
     ]
 ]
 
-let: ((v: Vector) any?: p?) do: [
+let/local: ((v: Vector) any?: p?) do: [
     with-return: [
         v each: [ if: (p? call: it) then: [ return: #t ] ]
         #f
     ]
 ]
 
-let: ((v: Vector) empty?) do: [ v ~length = 0 ]
+let/local: ((v: Vector) empty?) do: [ v ~length = 0 ]
 
-let: ((a: Vector) concat: (b: Vector)) do: [
+let/local: ((a: Vector) concat: (b: Vector)) do: [
     let: c = {}
     a each: [ c append: it ]
     b each: [ c append: it ]

@@ -1,6 +1,7 @@
 use: {
-    "core.sequence"
     "core.builtin.misc"
+    "core.combinator"
+    "core.sequence"
 }
 
 let: (seq: Sequence) pprint-all do: [
@@ -26,3 +27,48 @@ let: (seq: Sequence) pprint-all do: [
 
 # `each:` should produce #null
 pretty-print: ({ 1; 2; 3 } each: [ it * 10 ])
+
+{ "a"; "b"; "c" } each/index: \i x [
+    print: i >string ~ " -> " ~ x
+]
+
+pretty-print: ({ "abc"; "a"; "shouldn't print this!" } all?: [
+    print: it
+    length > 1
+])
+
+pretty-print: ({ "abc"; "a"; "shouldn't print this!" } any?: [
+    print: it
+    length = 1
+])
+
+pretty-print: ({ "ab"; "cd"; "ef" } contains?: "a")
+pretty-print: ({ "ab"; "cd"; "ef" } contains?: "cd")
+pretty-print: ({ "ab"; "cd"; "ef" } contains?: "cd" starting-at: 1)
+pretty-print: ({ "ab"; "cd"; "ef" } contains?: "cd" starting-at: 2)
+
+pretty-print: (
+    { "abc"; "ab"; "a" } first: [
+        print: it
+        length
+    ] where: [ it = 2 ] else: "nope"
+)
+pretty-print: (
+    { "abc"; "ab"; "cd" } first: [
+        print: it
+        length
+    ] where: [ it = 1 ] else: "nope"
+)
+
+do: [
+    let: v = {}
+    v append: "a"
+    v append: "b"
+    v append: "c"
+    pretty-print: v
+
+    let: w = { "d"; "e" }
+    pretty-print: (v concat: w)
+    pretty-print: v
+    pretty-print: w
+]

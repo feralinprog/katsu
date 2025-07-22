@@ -58,7 +58,13 @@ let: ((s: MutableSequence) unsafe-at: (i: Fixnum) put: v) do: [ s at: i put: v ]
 # This may be a shallow copy, or even point to the same storage.
 # (For instance, this is always allowed to return the provided seq if it is already of the same class as the exemplar.)
 generic: ((seq: Sequence) like: (exemplar: Sequence))
+# Produce a new sequence of the same class as exemplar which can hold n elements,
+# the initial values of which are implementation-defined (but should default to
+# some reasonable value, e.g. #null or 0).
+# This should not share storage with the exemplar.
 generic: (mutable-like: (exemplar: Sequence) length: (n: Fixnum))
+# Produce a new sequence of the same class as exemplar, with initial capacity at least n elements
+# but with zero length. This should not share storage with the exemplar.
 generic: (resizable-like: (exemplar: Sequence) capacity: (n: Fixnum))
 
 # Produce a sequence of the same class as exemplar, holding elements of seq.
@@ -136,7 +142,7 @@ let: ((seq: Sequence) contains?: x) do: [
 let: ((seq: Sequence) contains?: x starting-at: index) do: [
     with-return: [
         mut: i = index
-        while: [ i < seq ] do: [
+        while: [ i < seq length ] do: [
             if: (seq at: i) = x then: [ return: #t ]
             i: i + 1
         ]

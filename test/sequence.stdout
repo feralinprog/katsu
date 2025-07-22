@@ -38,3 +38,50 @@ length = 4
 *string: "b"
 *string: "f"
 null
+0 -> a
+1 -> b
+2 -> c
+abc
+a
+bool false
+abc
+a
+bool true
+bool false
+bool true
+bool true
+bool false
+abc
+ab
+fixnum 2
+abc
+ab
+cd
+*string: "nope"
+*vector: length=3 [
+  v_array = *array: length=4
+    0 = *string: "a"
+    1 = *string: "b"
+    2 = *string: "c"
+    3 = null
+]
+*vector: length=5 [
+  v_array = *array: length=5
+    0 = *string: "a"
+    1 = *string: "b"
+    2 = *string: "c"
+    3 = *string: "d"
+    4 = *string: "e"
+]
+*vector: length=3 [
+  v_array = *array: length=4
+    0 = *string: "a"
+    1 = *string: "b"
+    2 = *string: "c"
+    3 = null
+]
+*vector: length=2 [
+  v_array = *array: length=2
+    0 = *string: "d"
+    1 = *string: "e"
+]
