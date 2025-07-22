@@ -198,3 +198,17 @@ let: ((seq: Sequence) keep: good? like: (exemplar: Sequence)) do: [
 let: ((seq: Sequence) keep: good?) do: [
     seq keep: good? like: seq
 ]
+
+let: ((seq: ResizableSequence) keep!: good?) do: [
+    mut: dst = 0
+    seq each: [
+        if: (good? call: it) then: [
+            seq unsafe-at: dst put: it
+            dst: dst + 1
+        ]
+    ]
+    seq length: dst
+]
+let: ((seq: ResizableSequence) remove!: value) do: [
+    seq keep!: [ it != value ]
+]

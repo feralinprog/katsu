@@ -1,0 +1,64 @@
+use: {
+    "core.builtin.misc"
+    "core.combinator"
+    "core.fiber"
+}
+
+let: initial fiber-body do: [
+    print: "provided value: " ~ initial >string
+    let: input = yield
+    print: "got input: " ~ input >string
+    "test-fiber:result"
+]
+
+with-fibers: [
+    print: "starting fiber:"
+    let: f = ("test-fiber" run-fiber: [fiber-body] with: "test-fiber:initial" )
+    mut: i = 0
+    while: [f .result = #null] do: [
+        print: "test-fiber doesn't have result yet, yielding"
+        f arg: "test-fiber:input"
+        yield
+    ]
+    print: "got result: " ~ f .result >string
+]
+
+with-fibers: [
+    print: "about to run iterator"
+    "iterator" run-fiber: \n [
+        n times: [
+            print: "iter " ~ it >string
+            yield
+        ]
+    ] with: 10
+    print: "starting running iterator"
+]
+
+with-fibers: [
+    mut: n = 0
+    "generator A" run-fiber: [
+        5 times: [
+            n: n + 1
+            print: "A: " ~ n >string
+            yield
+        ]
+    ]
+    "generator B" run-fiber: [
+        5 times: [
+            n: n + 1
+            print: "B: " ~ n >string
+            yield
+        ]
+    ]
+    let: consumer = ("consumer" run-fiber: [
+        let: input = suspend
+        print: "got input: " ~ input
+        print: "got to 10"
+    ])
+    "watcher" run-fiber: [
+        while: [n < 10] do: [ yield ]
+        consumer unsuspend: "an input"
+        while: [not consumer done?] do: [ yield ]
+        print: "consumer is done!"
+    ]
+]

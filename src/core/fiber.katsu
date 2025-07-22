@@ -1,0 +1,98 @@
+use: {
+    "core.builtin.misc"
+    "core.sentinel"
+    "core.sequence"
+}
+
+let: *fiber-mark* = (new-sentinel: "fiber-mark")
+
+data: Fiber has: { name; body; continuation; ready?; arg; done?; result }
+
+let: (fiber: Fiber) ready? do: [ fiber .ready? ]
+let: (fiber: Fiber) done? do: [ fiber .done? ]
+let: (fiber: Fiber) suspended? do: [ not fiber ready? and not fiber done? ]
+
+# TODO: mutable module level variables
+# (or maybe just use a dynamic-variable here)
+data: Box has: { value }
+let: @current-fiber = (Box value: #null)
+let: current-fiber do: [ @current-fiber .value ]
+let: (current-fiber: (f: Fiber)) do: [ @current-fiber value: f ]
+
+let: ready-fibers = {} # TODO: this should be a dequeue
+let: suspended-fibers = {} # TODO: this should be a set
+
+let: yield do: [
+    assert: current-fiber ready?
+    \cont [
+        current-fiber continuation: cont
+        ready-fibers append: current-fiber
+    ] call/dc: *fiber-mark*
+]
+let: suspend do: [
+    assert: current-fiber ready?
+    \cont [
+        current-fiber continuation: cont
+        current-fiber ready?: #f
+        suspended-fibers append: current-fiber
+    ] call/dc: *fiber-mark*
+]
+
+let: ((name: String) run-fiber: body with: arg) do: [
+    let: fiber = (
+        Fiber name: name body: body continuation: #null ready?: #t arg: arg done?: #f result: #null
+    )
+    ready-fibers append: fiber
+    # We could yield here, but leave it up to the caller.
+    fiber
+]
+let: ((name: String) run-fiber: body) do: [ name run-fiber: body with: #null ]
+
+# Make a suspended fiber become ready again.
+let: ((fiber: Fiber) unsuspend: arg) do: [
+    assert: fiber suspended?
+    suspended-fibers remove!: fiber
+    ready-fibers append: fiber
+    fiber ready?: #t
+    fiber arg: arg
+]
+let: (fiber: Fiber) unsuspend do: [ fiber unsuspend: #null ]
+
+# Remove a selected ready fiber from fibers (which is nonempty) and return it.
+let: (fibers: Vector) select-ready-fiber do: [
+    let: f = (fibers at: 0)
+    assert: f ready?
+    fibers remove-first
+    f
+]
+
+let: (x with-fibers: f) do: [
+    assert: ready-fibers empty?
+    assert: suspended-fibers empty?
+    ready-fibers append: (
+        Fiber name: "top-level" body: f continuation: #null ready?: #t arg: x done?: #f result: #null
+    )
+    while: [not ready-fibers empty?] do: [
+        let: fiber = ready-fibers select-ready-fiber
+        [
+            current-fiber: fiber
+            let: arg = fiber .arg
+            fiber arg: #null
+            if: fiber .continuation = #null then: [
+                # Kick off the fiber.
+                let: result = (fiber .body call: arg)
+                # Fiber terminated.
+                fiber ready?: #f
+                fiber done?: #t
+                fiber result: result
+            ] else: [
+                # Continue where the fiber left off.
+                fiber .continuation call: arg
+            ]
+        ] call/marked: *fiber-mark*
+    ]
+    @current-fiber value: #null
+    if: not suspended-fibers empty? then: [
+        (Condition condition: "no-ready-fibers" message: "all fibers are suspended and cannot clean up" stack: #null) signal
+    ]
+]

@@ -1,0 +1,31 @@
+starting fiber:
+test-fiber doesn't have result yet, yielding
+provided value: test-fiber:input
+test-fiber doesn't have result yet, yielding
+got input: test-fiber:input
+got result: test-fiber:result
+about to run iterator
+starting running iterator
+iter 0
+iter 1
+iter 2
+iter 3
+iter 4
+iter 5
+iter 6
+iter 7
+iter 8
+iter 9
+A: 1
+B: 2
+A: 3
+B: 4
+A: 5
+B: 6
+A: 7
+B: 8
+A: 9
+B: 10
+got input: an input
+got to 10
+consumer is done!
