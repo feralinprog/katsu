@@ -34,3 +34,6 @@ References for delimited continuations:
 
 Unicode:
 * http://utf8everywhere.org/
+
+Coroutines:
+* https://journal.stuffwithstuff.com/2010/07/13/fibers-coroutines-in-finch/
