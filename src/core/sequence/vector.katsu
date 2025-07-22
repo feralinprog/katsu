@@ -1,7 +1,46 @@
 use: {
+    "core.builtin.misc"
     "core.mixin"
     "core.sequence"
     "core.vector"
 }
 
-Sequence mix-in-to: Vector
+let: (v: Vector) length do: [
+    v unsafe-read-u64-at-offset: 8
+]
+let: (v: Vector) backing do: [
+    v unsafe-read-value-at-offset: 16
+]
+let: ((v: Vector) unsafe-at: (i: Fixnum)) do: [
+    v backing unsafe-at: i
+]
+let: (v: Vector) capacity do: [
+    v backing length
+]
+
+let: ((v: Vector) backing: (b: Array)) do: [
+    v unsafe-write-value-at-offset: 16 value: b
+]
+# Ensure the vector has a capacity of at least n.
+# (Generally this will grow the backing array to 2*n length.)
+let: ((v: Vector) ensure-capacity: (n: Fixnum)) do: [
+    if: v capacity < n then: [
+        let: new-backing = (n * 2) nulls-array
+        new-backing unsafe-copy: new-backing at: 0
+        v backing: new-backing
+    ]
+]
+
+let: ((v: Vector) length: (n: Fixnum)) do: [
+    v ensure-capacity: n
+    v unsafe-write-u64-at-offset: 8 value: n
+]
+
+let: ((v: Vector) at: (i: Fixnum) put: value) do: [
+    if: i >= v length then: [
+        v length: i + 1
+    ]
+    v backing unsafe-at: i put: value
+]
+
+ResizableSequence mix-in-to: Vector

@@ -4,4 +4,4 @@ use: {
     "core.sequence"
 }
 
-Sequence mix-in-to: Array
+MutableSequence mix-in-to: Array

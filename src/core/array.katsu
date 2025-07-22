@@ -6,6 +6,9 @@ let: (a: Array) length do: [
 let: ((a: Array) unsafe-at: (i: Fixnum)) do: [
     a unsafe-read-value-at-offset: 16 + 8 * i
 ]
+let: ((a: Array) unsafe-at: (i: Fixnum) put: value) do: [
+    a unsafe-write-value-at-offset: 16 + 8 * i value: value
+]
 
 let: (a: Array) >vector do: [
     let: v = {}

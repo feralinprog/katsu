@@ -770,6 +770,17 @@ namespace Katsu
         return Value::object(vector_to_array(vm.gc, r_vector));
     }
 
+    Value native__nulls_array(VM& vm, int64_t nargs, Value* args)
+    {
+        // n nulls-array
+        ASSERT(nargs == 1);
+        int64_t n = args[0].fixnum();
+        if (n < 0) {
+            throw condition_error("invalid-argument", "nulls-array must have nonnegative length");
+        }
+        return Value::object(make_array(vm.gc, n));
+    }
+
     struct RunContext
     {
         Lexer lexer;
@@ -1175,6 +1186,8 @@ namespace Katsu
                         &native__add_value_);
 
         register_native("vector>array", r_misc, {matches_type(_Vector)}, &native__vector_to_array);
+
+        register_native("nulls-array", r_misc, {matches_type(_Fixnum)}, &native__nulls_array);
 
         // TODO: this is super hacky. figure out a different way to do this.
         register_native("make-run-context-for-path:contents:",

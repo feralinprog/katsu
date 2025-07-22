@@ -4,19 +4,32 @@ use: {
     "core.dynamic-variable"
 }
 
-# Sequence should support:
+# A sequence must support:
 #   length
 # and at least one of:
 #   at:
 #   unsafe-at:
+# at: should signal out-of-bounds if the index is not in the range [0, seq length); unsafe-at: need not detect such a condition.
 mixin: Sequence
 generic: (seq: Sequence) length
 generic: ((seq: Sequence) at: (index: Fixnum))
 generic: ((seq: Sequence) unsafe-at: (index: Fixnum))
 
+# A mutable sequence must support at least one of:
+#   at:put:
+#   unsafe-at:put:
+# at:put: should signal out-of-bounds if the index is not in the range [0, seq length); unsafe-at:put: need not detect such a condition.
+# However, If the sequence is also resizable, setting an entry beyond the sequence's length should grow the sequence instead.
 mixin: MutableSequence extends: { Sequence }
-generic: ((seq: Sequence) at: (index: Fixnum) put: value)
-generic: ((seq: Sequence) unsafe-at: (index: Fixnum) put: value)
+generic: ((seq: MutableSequence) at: (index: Fixnum) put: value)
+generic: ((seq: MutableSequence) unsafe-at: (index: Fixnum) put: value)
+
+# A resizable sequence must support:
+#   length:
+# It may wish to have a backing fixed-length sequence which is reallocated as necessary to ensure that the total capacity is at least
+# some multiple (e.g. 1.5x or 2x) of the used length.
+mixin: ResizableSequence extends: { MutableSequence }
+generic: ((seq: ResizableSequence) length: (n: Fixnum))
 
 data: OutOfBounds extends: { Condition } has: { seq; index }
 let: (out-of-bounds: seq index: index) do: [ OutOfBounds condition: "out-of-bounds" message: "index out of bounds" stack: #null seq: seq index: index ]
@@ -32,23 +45,65 @@ let: ((s: Sequence) at: (i: Fixnum)) do: [
 ]
 let: ((s: Sequence) unsafe-at: (i: Fixnum)) do: [ s at: i ]
 
-let: ((s: Sequence) at: (i: Fixnum) put: v) do: [
+let: ((s: MutableSequence) at: (i: Fixnum) put: v) do: [
     if: i >= 0 and i < s length then: [
         s unsafe-at: i put: v
     ] else: [
         (out-of-bounds: s index: i) signal 
     ]
 ]
-let: ((s: Sequence) unsafe-at: (i: Fixnum) put: v) do: [ s at: i put: v ]
+let: ((s: MutableSequence) unsafe-at: (i: Fixnum) put: v) do: [ s at: i put: v ]
 
+# Produce a sequence of the same class as exemplar, holding elements of seq.
+# This may be a shallow copy, or even point to the same storage.
+# (For instance, this is always allowed to return the provided seq if it is already of the same class as the exemplar.)
+generic: ((seq: Sequence) like: (exemplar: Sequence))
+generic: (mutable-like: (exemplar: Sequence) length: (n: Fixnum))
+generic: (resizable-like: (exemplar: Sequence) capacity: (n: Fixnum))
 
-let: ((seq: Sequence) each: f) do: [
-    mut: i = 0
-    while: [ i < seq length ] do: [
-        f call: (seq at: i)
-        i: i + 1
-    ]
+# Produce a sequence of the same class as exemplar, holding elements of seq.
+# Any mutation of the returned sequence must not affect the input seq.
+generic: ((seq: Sequence) clone-like: (exemplar: Sequence))
+
+data: Reversed extends: { Sequence } has: { seq }
+let: (r: Reversed) length do: [ r .seq length ]
+let: ((r: Reversed) at: (i: Fixnum)) do: [
+    r .seq at: (r length - 1 - i)
 ]
+let: ((s: Sequence) reversed) do: [ Reversed seq: s ]
+
+data: Slice extends: { Sequence } has: {
+    seq # backing sequence
+    start # starting index, inclusive, in seq
+    end # ending index, exclusive, in seq
+}
+let: (s: Slice) length do: [ s .end - s .start ]
+let: ((s: Slice) unsafe-at: (i: Fixnum)) do: [ s .seq at: i  + s .start ]
+let: ((seq: Sequence) from: start to<: end) do: [
+    Slice seq: seq start: start end: end
+]
+let: ((seq: Sequence) from: start to=: end) do: [
+    Slice seq: seq start: start end: end + 1
+]
+
+data: Subseq extends: { Sequence } has: { seq; indices }
+let: (s: Subseq) length do: [ s .indices length ]
+let: ((s: Subseq) unsafe-at: (i: Fixnum)) do: [ s .seq at: (s .indices at: i) ]
+let: ((seq: Sequence) at: (indices: Sequence)) do: [
+    Subseq seq: seq indices: indices
+]
+
+data: Steps extends: { Sequence } has: { start; step; length }
+let: (s: Steps) length do: [ s .length ]
+let: ((s: Steps) unsafe-at: (i: Fixnum)) do: [ s .start + i * s .step ]
+let: empty-steps do: [ Steps start: 0 step: 0 length: 0 ]
+let: ((a: Fixnum) to<: (b: Fixnum)) do: [
+    if: a <= b then: [
+        Steps start: a step: 1 length: b - a
+    ] else: [ empty-steps ]
+]
+let: ((a: Fixnum) to=: (b: Fixnum)) do: [ a to<: b + 1 ]
+
 let: ((seq: Sequence) each/index: f) do: [
     mut: i = 0
     while: [ i < seq length ] do: [
@@ -56,29 +111,8 @@ let: ((seq: Sequence) each/index: f) do: [
         i: i + 1
     ]
 ]
-
-# generic: ((n: Fixnum) make-like: (exemplar: Sequence))
-generic: (exemplar: Sequence) empty-like
-generic: ((seq: Sequence) append: value)
-
-let: ((seq: Sequence) map: f as: (exemplar: Sequence)) do: [
-    let: mapped = exemplar empty-like
-    seq each: [
-        mapped append: (f call: it)
-    ]
-    mapped
-]
-let: ((seq: Sequence) map: f) do: [
-    seq map: f as: seq
-]
-
-let: ((seq: Sequence) keep: good? as: (exemplar: Sequence)) do: [
-    let: filtered = exemplar empty-like
-    seq each: [ if: (good? call: it) then: [ filtered append: it ] ]
-    filtered
-]
-let: ((seq: Sequence) keep: good?) do: [
-    seq keep: good? as: seq
+let: ((seq: Sequence) each: f) do: [
+    seq each/index: \i x [ f call: x ]
 ]
 
 let: ((seq: Sequence) all?: p?) do: [
@@ -120,41 +154,41 @@ let: ((seq: Sequence) first: project where: accept? else: default) do: [
     ]
 ]
 
-data: Reversed extends: { Sequence } has: { seq }
-let: (r: Reversed) length do: [ r .seq length ]
-let: ((r: Reversed) at: (i: Fixnum)) do: [
-    r .seq at: (r length - 1 - i)
-]
-let: ((s: Sequence) reversed) do: [ Reversed seq: s ]
-
-data: Slice extends: { Sequence } has: {
-    seq # backing sequence
-    start # starting index, inclusive, in seq
-    end # ending index, exclusive, in seq
-}
-let: (s: Slice) length do: [ s .end - s .start ]
-let: ((s: Slice) unsafe-at: (i: Fixnum)) do: [ s .seq at: i  + s .start ]
-let: ((seq: Sequence) from: start to<: end) do: [
-    Slice seq: seq start: start end: end
-]
-let: ((seq: Sequence) from: start to=: end) do: [
-    Slice seq: seq start: start end: end + 1
+let: ((seq: ResizableSequence) append: value) do: [
+    seq at: seq length put: value
 ]
 
-data: Subseq extends: { Sequence } has: { seq; indices }
-let: (s: Subseq) length do: [ s .indices length ]
-let: ((s: Subseq) unsafe-at: (i: Fixnum)) do: [ s .seq at: (s .indices at: i) ]
-let: ((seq: Sequence) at: (indices: Sequence)) do: [
-    Subseq seq: seq indices: indices
+# Guaranteed to copy from left to right, in the case that src is a subsequence of seq.
+let: ((seq: MutableSequence) unsafe-copy: (src: Sequence) at: (start: Fixnum)) do: [
+    src each/index: \i x [ seq unsafe-at: start + i put: x ]
 ]
 
-data: Steps extends: { Sequence } has: { start; step; length }
-let: (s: Steps) length do: [ s .length ]
-let: ((s: Steps) unsafe-at: (i: Fixnum)) do: [ s .start + i * s .step ]
-let: empty-steps do: [ Steps start: 0 step: 0 length: 0 ]
-let: ((a: Fixnum) to<: (b: Fixnum)) do: [
-    if: a <= b then: [
-        Steps start: a step: 1 length: b - a
-    ] else: [ empty-steps ]
+let: ((seq: ResizableSequence) remove-first) do: [
+    seq unsafe-copy: (seq from: 1 to<: seq length) at: 0
+    seq length: seq length - 1
 ]
-let: ((a: Fixnum) to=: (b: Fixnum)) do: [ a to<: b + 1 ]
+
+# TODO: use ~: instead
+let: ((a: Sequence) concat: (b: Sequence) like: (exemplar: Sequence)) do: [
+    let: seq = (mutable-like: exemplar length: a length + b length)
+    seq unsafe-copy: a at: 0
+    seq unsafe-copy: b at: a length
+    seq like: exemplar
+]
+let: ((a: Sequence) concat: (b: Sequence)) do: [ a concat: b like: a ]
+
+let: ((seq: Sequence) map: f like: (exemplar: Sequence)) do: [
+    let: mapped = (mutable-like: exemplar length: seq length)
+    seq each/index: \i x [ mapped at: i put: (f call: x) ]
+    mapped like: exemplar
+]
+let: ((seq: Sequence) map: f) do: [ seq map: f like: seq ]
+
+let: ((seq: Sequence) keep: good? like: (exemplar: Sequence)) do: [
+    let: filtered = (resizable-like: exemplar capacity: seq length)
+    seq each: [ if: (good? call: it) then: [ filtered append: it ] ]
+    filtered like: exemplar
+]
+let: ((seq: Sequence) keep: good?) do: [
+    seq keep: good? like: seq
+]
