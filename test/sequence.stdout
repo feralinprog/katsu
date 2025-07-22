@@ -85,3 +85,34 @@ cd
     0 = *string: "d"
     1 = *string: "e"
 ]
+*array: length=4
+  0 = fixnum 1
+  1 = fixnum 2
+  2 = fixnum 3
+  3 = fixnum 4
+*vector: length=6 [
+  v_array = *array: length=6
+    0 = *string: "a"
+    1 = *string: "c"
+    2 = *string: "d"
+    3 = *string: "e"
+    4 = *string: "e"
+    5 = *string: "f"
+]
+*array: length=2
+  0 = fixnum 4
+  1 = fixnum 5
+*vector: length=2 [
+  v_array = *array: length=4
+    0 = *string: "abcde"
+    1 = *string: "abcd"
+    2 = null
+    3 = null
+]
+*vector: length=3 [
+  v_array = *array: length=4
+    0 = fixnum 2
+    1 = fixnum 3
+    2 = fixnum 4
+    3 = fixnum 4
+]

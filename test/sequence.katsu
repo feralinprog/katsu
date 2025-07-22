@@ -72,3 +72,21 @@ do: [
     pretty-print: v
     pretty-print: w
 ]
+
+pretty-print: ({ 1; 2 } concat: { 3; 4 } like: {} vector>array)
+
+do: [
+    let: v = { "a"; "b"; "c"; "d"; "e"; "f" }
+    v unsafe-copy: (v from: 2 to<: 5) at: 1
+    pretty-print: v
+]
+
+pretty-print: ({ "abcd"; "abcde" } map: [ length ] like: {} vector>array)
+
+pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } keep: [ length > 3 ])
+
+do: [
+    let: v = { 1; 2; 3; 4 }
+    v remove-first
+    pretty-print: v
+]

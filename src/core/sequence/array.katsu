@@ -8,3 +8,4 @@ use: {
 MutableSequence mix-in-to: Array
 
 let: (mutable-like: (_: Array) length: n) do: [ n nulls-array ]
+let: ((seq: Array) like: (_: Array)) do: [ seq ]
