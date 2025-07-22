@@ -4,6 +4,8 @@ use: {
     "core.fiber"
 }
 
+let: (x run-fibers: f) do: [ x run-fibers: f selector: [ select-first-ready-fiber ] ]
+
 let: initial fiber-body do: [
     print: "provided value: " ~ initial >string
     let: input = yield
@@ -11,7 +13,7 @@ let: initial fiber-body do: [
     "test-fiber:result"
 ]
 
-with-fibers: [
+run-fibers: [
     print: "starting fiber:"
     let: f = ("test-fiber" run-fiber: [fiber-body] with: "test-fiber:initial" )
     mut: i = 0
@@ -23,7 +25,7 @@ with-fibers: [
     print: "got result: " ~ f .result >string
 ]
 
-with-fibers: [
+run-fibers: [
     print: "about to run iterator"
     "iterator" run-fiber: \n [
         n times: [
@@ -34,7 +36,7 @@ with-fibers: [
     print: "starting running iterator"
 ]
 
-with-fibers: [
+run-fibers: [
     mut: n = 0
     "generator A" run-fiber: [
         5 times: [

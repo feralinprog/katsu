@@ -58,22 +58,23 @@ let: ((fiber: Fiber) unsuspend: arg) do: [
 ]
 let: (fiber: Fiber) unsuspend do: [ fiber unsuspend: #null ]
 
-# Remove a selected ready fiber from fibers (which is nonempty) and return it.
-let: (fibers: Vector) select-ready-fiber do: [
+# A "default" implementation for a fiber selector.
+let: (fibers: Vector) select-first-ready-fiber do: [
     let: f = (fibers at: 0)
     assert: f ready?
     fibers remove-first
     f
 ]
 
-let: (x with-fibers: f) do: [
+# select-ready-fiber: called with a nonempty sequence of ready fibers. Must remove a selected fiber and return it.
+let: (x run-fibers: f selector: select-ready-fiber) do: [
     assert: ready-fibers empty?
     assert: suspended-fibers empty?
     ready-fibers append: (
         Fiber name: "top-level" body: f continuation: #null ready?: #t arg: x done?: #f result: #null
     )
     while: [not ready-fibers empty?] do: [
-        let: fiber = ready-fibers select-ready-fiber
+        let: fiber = (select-ready-fiber call: ready-fibers)
         [
             current-fiber: fiber
             let: arg = fiber .arg
