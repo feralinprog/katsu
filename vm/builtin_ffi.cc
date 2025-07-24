@@ -10,6 +10,8 @@
 // Dynamic linking:
 #include <dlfcn.h>
 
+#include <errno.h>
+
 namespace Katsu
 {
     Value ffi__malloc_(VM& vm, int64_t nargs, Value* args)
@@ -346,6 +348,13 @@ namespace Katsu
                                reinterpret_cast<char*>(args[1].obj_foreign()->value))));
     }
 
+    Value ffi_errno(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ errno
+        ASSERT(nargs == 1);
+        return Value::fixnum(errno);
+    }
+
     Value ffi__c_string_to_string(VM& vm, int64_t nargs, Value* args)
     {
         // foreign c-string>string
@@ -355,6 +364,17 @@ namespace Katsu
         String* str = make_string_nofill(vm.gc, len);
         memcpy(str->contents(), s, len);
         return Value::object(str);
+    }
+
+    // NOTE: caller must ensure that there is no GC activity while this is handed to foreign
+    // functions.
+    Value ffi__byte_array_to_foreign_offset_(VM& vm, int64_t nargs, Value* args)
+    {
+        // byte-array byte-array>foreign/offset: offset
+        ASSERT(nargs == 2);
+        Value v_foreign = Value::object(make_foreign(vm.gc, nullptr));
+        v_foreign.obj_foreign()->value = args[0].obj_byte_array()->contents() + args[1].fixnum();
+        return v_foreign;
     }
 
     void register_ffi_builtins(VM& vm, Root<Assoc>& r_ffi)
@@ -540,6 +560,148 @@ namespace Katsu
                   {matches_type(_Foreign) /* handle */, matches_type(_Foreign) /* symbol */},
                   &ffi__dlsym);
 
+        _register("errno", {matches_any}, &ffi_errno);
+        // Define each error number: retrieved via `errno -l | cut -d' ' -f1`.
+        // TODO: make this more system independent.
+        register_const("EPERM", Value::fixnum(EPERM));
+        register_const("ENOENT", Value::fixnum(ENOENT));
+        register_const("ESRCH", Value::fixnum(ESRCH));
+        register_const("EINTR", Value::fixnum(EINTR));
+        register_const("EIO", Value::fixnum(EIO));
+        register_const("ENXIO", Value::fixnum(ENXIO));
+        register_const("E2BIG", Value::fixnum(E2BIG));
+        register_const("ENOEXEC", Value::fixnum(ENOEXEC));
+        register_const("EBADF", Value::fixnum(EBADF));
+        register_const("ECHILD", Value::fixnum(ECHILD));
+        register_const("EAGAIN", Value::fixnum(EAGAIN));
+        register_const("ENOMEM", Value::fixnum(ENOMEM));
+        register_const("EACCES", Value::fixnum(EACCES));
+        register_const("EFAULT", Value::fixnum(EFAULT));
+        register_const("ENOTBLK", Value::fixnum(ENOTBLK));
+        register_const("EBUSY", Value::fixnum(EBUSY));
+        register_const("EEXIST", Value::fixnum(EEXIST));
+        register_const("EXDEV", Value::fixnum(EXDEV));
+        register_const("ENODEV", Value::fixnum(ENODEV));
+        register_const("ENOTDIR", Value::fixnum(ENOTDIR));
+        register_const("EISDIR", Value::fixnum(EISDIR));
+        register_const("EINVAL", Value::fixnum(EINVAL));
+        register_const("ENFILE", Value::fixnum(ENFILE));
+        register_const("EMFILE", Value::fixnum(EMFILE));
+        register_const("ENOTTY", Value::fixnum(ENOTTY));
+        register_const("ETXTBSY", Value::fixnum(ETXTBSY));
+        register_const("EFBIG", Value::fixnum(EFBIG));
+        register_const("ENOSPC", Value::fixnum(ENOSPC));
+        register_const("ESPIPE", Value::fixnum(ESPIPE));
+        register_const("EROFS", Value::fixnum(EROFS));
+        register_const("EMLINK", Value::fixnum(EMLINK));
+        register_const("EPIPE", Value::fixnum(EPIPE));
+        register_const("EDOM", Value::fixnum(EDOM));
+        register_const("ERANGE", Value::fixnum(ERANGE));
+        register_const("EDEADLK", Value::fixnum(EDEADLK));
+        register_const("ENAMETOOLONG", Value::fixnum(ENAMETOOLONG));
+        register_const("ENOLCK", Value::fixnum(ENOLCK));
+        register_const("ENOSYS", Value::fixnum(ENOSYS));
+        register_const("ENOTEMPTY", Value::fixnum(ENOTEMPTY));
+        register_const("ELOOP", Value::fixnum(ELOOP));
+        register_const("EWOULDBLOCK", Value::fixnum(EWOULDBLOCK));
+        register_const("ENOMSG", Value::fixnum(ENOMSG));
+        register_const("EIDRM", Value::fixnum(EIDRM));
+        register_const("ECHRNG", Value::fixnum(ECHRNG));
+        register_const("EL2NSYNC", Value::fixnum(EL2NSYNC));
+        register_const("EL3HLT", Value::fixnum(EL3HLT));
+        register_const("EL3RST", Value::fixnum(EL3RST));
+        register_const("ELNRNG", Value::fixnum(ELNRNG));
+        register_const("EUNATCH", Value::fixnum(EUNATCH));
+        register_const("ENOCSI", Value::fixnum(ENOCSI));
+        register_const("EL2HLT", Value::fixnum(EL2HLT));
+        register_const("EBADE", Value::fixnum(EBADE));
+        register_const("EBADR", Value::fixnum(EBADR));
+        register_const("EXFULL", Value::fixnum(EXFULL));
+        register_const("ENOANO", Value::fixnum(ENOANO));
+        register_const("EBADRQC", Value::fixnum(EBADRQC));
+        register_const("EBADSLT", Value::fixnum(EBADSLT));
+        register_const("EDEADLOCK", Value::fixnum(EDEADLOCK));
+        register_const("EBFONT", Value::fixnum(EBFONT));
+        register_const("ENOSTR", Value::fixnum(ENOSTR));
+        register_const("ENODATA", Value::fixnum(ENODATA));
+        register_const("ETIME", Value::fixnum(ETIME));
+        register_const("ENOSR", Value::fixnum(ENOSR));
+        register_const("ENONET", Value::fixnum(ENONET));
+        register_const("ENOPKG", Value::fixnum(ENOPKG));
+        register_const("EREMOTE", Value::fixnum(EREMOTE));
+        register_const("ENOLINK", Value::fixnum(ENOLINK));
+        register_const("EADV", Value::fixnum(EADV));
+        register_const("ESRMNT", Value::fixnum(ESRMNT));
+        register_const("ECOMM", Value::fixnum(ECOMM));
+        register_const("EPROTO", Value::fixnum(EPROTO));
+        register_const("EMULTIHOP", Value::fixnum(EMULTIHOP));
+        register_const("EDOTDOT", Value::fixnum(EDOTDOT));
+        register_const("EBADMSG", Value::fixnum(EBADMSG));
+        register_const("EOVERFLOW", Value::fixnum(EOVERFLOW));
+        register_const("ENOTUNIQ", Value::fixnum(ENOTUNIQ));
+        register_const("EBADFD", Value::fixnum(EBADFD));
+        register_const("EREMCHG", Value::fixnum(EREMCHG));
+        register_const("ELIBACC", Value::fixnum(ELIBACC));
+        register_const("ELIBBAD", Value::fixnum(ELIBBAD));
+        register_const("ELIBSCN", Value::fixnum(ELIBSCN));
+        register_const("ELIBMAX", Value::fixnum(ELIBMAX));
+        register_const("ELIBEXEC", Value::fixnum(ELIBEXEC));
+        register_const("EILSEQ", Value::fixnum(EILSEQ));
+        register_const("ERESTART", Value::fixnum(ERESTART));
+        register_const("ESTRPIPE", Value::fixnum(ESTRPIPE));
+        register_const("EUSERS", Value::fixnum(EUSERS));
+        register_const("ENOTSOCK", Value::fixnum(ENOTSOCK));
+        register_const("EDESTADDRREQ", Value::fixnum(EDESTADDRREQ));
+        register_const("EMSGSIZE", Value::fixnum(EMSGSIZE));
+        register_const("EPROTOTYPE", Value::fixnum(EPROTOTYPE));
+        register_const("ENOPROTOOPT", Value::fixnum(ENOPROTOOPT));
+        register_const("EPROTONOSUPPORT", Value::fixnum(EPROTONOSUPPORT));
+        register_const("ESOCKTNOSUPPORT", Value::fixnum(ESOCKTNOSUPPORT));
+        register_const("EOPNOTSUPP", Value::fixnum(EOPNOTSUPP));
+        register_const("EPFNOSUPPORT", Value::fixnum(EPFNOSUPPORT));
+        register_const("EAFNOSUPPORT", Value::fixnum(EAFNOSUPPORT));
+        register_const("EADDRINUSE", Value::fixnum(EADDRINUSE));
+        register_const("EADDRNOTAVAIL", Value::fixnum(EADDRNOTAVAIL));
+        register_const("ENETDOWN", Value::fixnum(ENETDOWN));
+        register_const("ENETUNREACH", Value::fixnum(ENETUNREACH));
+        register_const("ENETRESET", Value::fixnum(ENETRESET));
+        register_const("ECONNABORTED", Value::fixnum(ECONNABORTED));
+        register_const("ECONNRESET", Value::fixnum(ECONNRESET));
+        register_const("ENOBUFS", Value::fixnum(ENOBUFS));
+        register_const("EISCONN", Value::fixnum(EISCONN));
+        register_const("ENOTCONN", Value::fixnum(ENOTCONN));
+        register_const("ESHUTDOWN", Value::fixnum(ESHUTDOWN));
+        register_const("ETOOMANYREFS", Value::fixnum(ETOOMANYREFS));
+        register_const("ETIMEDOUT", Value::fixnum(ETIMEDOUT));
+        register_const("ECONNREFUSED", Value::fixnum(ECONNREFUSED));
+        register_const("EHOSTDOWN", Value::fixnum(EHOSTDOWN));
+        register_const("EHOSTUNREACH", Value::fixnum(EHOSTUNREACH));
+        register_const("EALREADY", Value::fixnum(EALREADY));
+        register_const("EINPROGRESS", Value::fixnum(EINPROGRESS));
+        register_const("ESTALE", Value::fixnum(ESTALE));
+        register_const("EUCLEAN", Value::fixnum(EUCLEAN));
+        register_const("ENOTNAM", Value::fixnum(ENOTNAM));
+        register_const("ENAVAIL", Value::fixnum(ENAVAIL));
+        register_const("EISNAM", Value::fixnum(EISNAM));
+        register_const("EREMOTEIO", Value::fixnum(EREMOTEIO));
+        register_const("EDQUOT", Value::fixnum(EDQUOT));
+        register_const("ENOMEDIUM", Value::fixnum(ENOMEDIUM));
+        register_const("EMEDIUMTYPE", Value::fixnum(EMEDIUMTYPE));
+        register_const("ECANCELED", Value::fixnum(ECANCELED));
+        register_const("ENOKEY", Value::fixnum(ENOKEY));
+        register_const("EKEYEXPIRED", Value::fixnum(EKEYEXPIRED));
+        register_const("EKEYREVOKED", Value::fixnum(EKEYREVOKED));
+        register_const("EKEYREJECTED", Value::fixnum(EKEYREJECTED));
+        register_const("EOWNERDEAD", Value::fixnum(EOWNERDEAD));
+        register_const("ENOTRECOVERABLE", Value::fixnum(ENOTRECOVERABLE));
+        register_const("ERFKILL", Value::fixnum(ERFKILL));
+        register_const("EHWPOISON", Value::fixnum(EHWPOISON));
+        register_const("ENOTSUP", Value::fixnum(ENOTSUP));
+
+        // TODO: c-string to byte-array?
         _register("c-string>string", {matches_type(_Foreign)}, &ffi__c_string_to_string);
+        _register("byte-array>foreign/offset:",
+                  {matches_type(_ByteArray), matches_type(_Fixnum)},
+                  &ffi__byte_array_to_foreign_offset_);
     }
 };

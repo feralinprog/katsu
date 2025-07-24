@@ -1,0 +1,12 @@
+got IO error: IO error (ENOENT): No such file or directory
+this is a test file
+with some test content
+for a test program
+
+this is a test file
+with some test content
+for a test program
+
+writing to stdout:
+abcde
+writing to stderr:

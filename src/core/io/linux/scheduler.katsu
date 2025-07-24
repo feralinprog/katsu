@@ -1,0 +1,10 @@
+use: {
+    "core.fiber"
+}
+
+# Fiber scheduler for linux IO.
+
+let: (fibers: Vector) io-select-ready-fiber do: [
+    # TODO
+    fibers select-first-ready-fiber
+]

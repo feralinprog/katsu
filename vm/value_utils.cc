@@ -1058,12 +1058,21 @@ namespace Katsu
     bool is_subtype(Type* a, Type* b)
     {
         ASSERT(a->v_linearization.is_obj_array());
-        ASSERT(b->v_linearization.is_obj_array());
+        // ASSERT(b->v_linearization.is_obj_array());
         Array* lin_a = a->v_linearization.obj_array();
-        Array* lin_b = b->v_linearization.obj_array();
-        // Neat, eh?
-        return lin_a->length >= lin_b->length &&
-               lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
+        // Array* lin_b = b->v_linearization.obj_array();
+        // This trick totally doesn't work. TODO: is there a similarly optimized trick that does
+        // work?
+        // // Neat, eh?
+        // return lin_a->length >= lin_b->length &&
+        //        lin_a->components()[lin_a->length - lin_b->length] == lin_b->components()[0];
+        Value v_b = Value::object(b);
+        for (Value v_supertype : lin_a) {
+            if (v_supertype == v_b) {
+                return true;
+            }
+        }
+        return false;
     }
 
     bool is_instance(VM& vm, Value value, Type* type)

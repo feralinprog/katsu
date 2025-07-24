@@ -1,0 +1,401 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+    "core.dynamic-variable"
+    "core.ffi"
+    "core.resource"
+    "core.sequence"
+    "core.io.stream"
+}
+
+data: IOError extends: { Condition } has: { errno }
+
+# =============== libc wrapper functions: ====================
+# Note that these are only valid while within a with-io block;
+# outside, these wrapper functions will refer to uninitialized
+# or already-disposed FFI resources.
+
+data: CIFRef has: {
+    cif     # passed directly to ffi-call
+    fn      # C function pointer
+    rvalue  # passed directly to ffi-call
+    avalues # passed directly to ffi-call
+    args    # for convenience: the contents of avalues as a sequence
+}
+let: new-CIFRef do: [ CIFRef cif: #null fn: #null rvalue: #null avalues: #null args: #null ]
+# Make a libffi ffi_call(), and return the rvalue for convenience.
+let: (r: CIFRef) ffi-call do: [
+    ffi-call: r .cif fn: r .fn rvalue: r .rvalue avalues: r .avalues
+    r .rvalue
+]
+
+# TODO: most of these should be defined instead by baking in the libffi CIF, and also the malloc'ed regions
+# for args and return values.
+
+let: &strerror = new-CIFRef
+let: (errnum: Fixnum) %strerror do: [
+    (&strerror .args at: 0) foreign-write-s32-at-offset: 0 value: errnum
+    # We could handle errors here by clearing errno, calling this function, then checking errno -- but this could
+    # cause an infinite loop of error handling, and this seems unlikely to fail anyway, so ignore the possibility.
+    (&strerror ffi-call foreign-read-foreign-at-offset: 0) c-string>string
+]
+
+let: &strerrorname_np = new-CIFRef
+let: (errnum: Fixnum) %strerrorname_np do: [
+    (&strerrorname_np .args at: 0) foreign-write-s32-at-offset: 0 value: errnum
+    # We could handle errors here by clearing errno, calling this function, then checking errno -- but this could
+    # cause an infinite loop of error handling, and this seems unlikely to fail anyway, so ignore the possibility.
+    (&strerrorname_np ffi-call foreign-read-foreign-at-offset: 0) c-string>string
+]
+
+# Check the result of a syscall; if -1, signal an IO error based
+# on the errno set within libc.
+let: (syscall-result: Fixnum) %check-syscall do: [
+    if: syscall-result = -1 then: [
+        let: message = "IO error (" ~ errno %strerrorname_np ~ "): " ~ errno %strerror
+        (IOError condition: "io-error" message: message stack: #null errno: errno) signal
+    ] else: [ syscall-result ]
+]
+
+let: &close = new-CIFRef
+let: (fd: Fixnum) %close do: [
+    (&close .args at: 0) foreign-write-s32-at-offset: 0 value: fd
+    (&close ffi-call foreign-read-s32-at-offset: 0) %check-syscall
+]
+
+let: &open = new-CIFRef
+let: (%open: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do: [
+    # TODO: somehow get rid of the >c-string ^dispose pattern.
+    with-disposal: [
+        (&open .args at: 0) foreign-write-foreign-at-offset: 0 value: pathname >c-string ^dispose
+        (&open .args at: 1) foreign-write-s32-at-offset: 0 value: flags
+        (&open .args at: 2) foreign-write-u32-at-offset: 0 value: mode
+        (&open ffi-call foreign-read-s32-at-offset: 0) %check-syscall
+    ]
+]
+# Default to mode = 0.
+let: (%open: (pathname: String) flags: (flags: Fixnum)) do: [ %open: pathname flags: flags mode: 0 ]
+
+# TODO: just define builtin to do this properly
+let: (a bit|: b) do: [ a + b ]
+
+# TODO: hex / octal integers
+
+# Access modes:
+let: O_RDONLY = 0
+let: O_WRONLY = 1
+let: O_RDWR   = 2
+
+# File creation flags:
+let: O_CLOEXEC   = 524288 # 02000000
+let: O_CREAT     = 64 # 0100
+let: O_DIRECTORY = 65536 # 0200000
+let: O_EXCL      = 128 # 0200
+let: O_NOCTTY    = 256 # 0400
+let: O_NOFOLLOW  = 131072 # 0400000
+let: O_TMPFILE   = (4194304 bit|: O_DIRECTORY) # 020000000 | O_DIRECTORY
+let: O_TRUNC     = 512 # 01000
+
+# File status flags:
+let: O_APPEND    = 1024 # 02000
+let: O_ASYNC     = 8192 # 020000
+let: O_DIRECT    = 16384 # 040000
+let: O_DSYNC     = 4096 # 010000
+# let: O_LARGEFILE = 0
+let: O_NOATIME   = 262144 # 01000000
+let: O_NONBLOCK  = 2048 # 04000
+let: O_NDELAY    = 2048 # 04000
+let: O_PATH      = 2097152 # 010000000
+let: O_SYNC      = 1052672 # 04010000
+
+# TODO: define the mode bits
+# let: S_IXOTH = 
+# let: S_IWOTH = 
+# let: S_IROTH = 
+# let: S_IRWXO = 
+# let: S_IXGRP = 
+# let: S_IWGRP = 
+# let: S_IRGRP = 
+# let: S_IRWXG = 
+# let: S_IXUSR = 
+# let: S_IWUSR = 
+# let: S_IRUSR = 
+# let: S_IRWXU = 
+# let: S_ISVTX = 
+# let: S_ISGID = 
+# let: S_ISUID = 
+
+let: &read = new-CIFRef
+let: ((fd: Fixnum) %read: (buf: ByteArray) count: (count: Fixnum) at: (offset: Fixnum)) do: [
+    (&read .args at: 0) foreign-write-s32-at-offset: 0 value: fd
+    (&read .args at: 2) foreign-write-u64-at-offset: 0 value: count
+    # Set the `buf` arg late, since we must avoid GC moving the underlying byte array in memory.
+    let: _buf = (&read .args at: 1)
+    _buf foreign-write-foreign-at-offset: 0 value: (buf byte-array>foreign/offset: offset)
+    (&read ffi-call foreign-read-s64-at-offset: 0) %check-syscall
+]
+
+let: &write = new-CIFRef
+let: ((fd: Fixnum) %write: (buf: ByteArray) count: (count: Fixnum) at: (offset: Fixnum)) do: [
+    (&write .args at: 0) foreign-write-s32-at-offset: 0 value: fd
+    (&write .args at: 2) foreign-write-u64-at-offset: 0 value: count
+    # Set the `buf` arg late, since we must avoid GC moving the underlying byte array in memory.
+    let: _buf = (&write .args at: 1)
+    _buf foreign-write-foreign-at-offset: 0 value: (buf byte-array>foreign/offset: offset)
+    (&write ffi-call foreign-read-s64-at-offset: 0) %check-syscall
+]
+
+# Must be called from within a with-disposal: block.
+let: setup-io-syscalls do: [
+    let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
+
+    # Prepare a libffi call interface for:
+    #   const char *strerror(int errnum)
+    &strerror fn: (libc dlsym: "strerror")
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
+            &ffi_type_pointer
+        ) atypes: (
+            (malloc-foreign-array: { &ffi_type_sint }) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    &strerror cif: cif
+    &strerror args: {
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    }
+    &strerror avalues: (malloc-foreign-array: &strerror .args) ^dispose
+    &strerror rvalue: (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+
+    # Prepare a libffi call interface for:
+    #   const char *strerrorname_np(int errnum)
+    &strerrorname_np fn: (libc dlsym: "strerrorname_np")
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
+            &ffi_type_pointer
+        ) atypes: (
+            (malloc-foreign-array: { &ffi_type_sint }) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    &strerrorname_np cif: cif
+    &strerrorname_np args: {
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    }
+    &strerrorname_np avalues: (malloc-foreign-array: &strerrorname_np .args) ^dispose
+    &strerrorname_np rvalue: (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+
+    # Prepare a libffi call interface for:
+    #   int close(int fd)
+    &close fn: (libc dlsym: "close")
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
+            &ffi_type_sint
+        ) atypes: (
+            (malloc-foreign-array: { &ffi_type_sint }) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    &close cif: cif
+    &close args: {
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    }
+    &close avalues: (malloc-foreign-array: &close .args) ^dispose
+    &close rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+
+    # Prepare a libffi call interface for:
+    #   int open(const char *pathname, int flags, [optional] mode_t mode);
+    #   (mode_t = unsigned int)
+    &open fn: (libc dlsym: "open")
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
+            &ffi_type_sint
+        ) atypes: (
+            (malloc-foreign-array: { &ffi_type_pointer; &ffi_type_sint; &ffi_type_uint }) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    &open cif: cif
+    &open args: {
+        # TODO: don't hardcode sizeof(const char*) = 8
+        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment on &? maybe need to pull this from the `cif`
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    }
+    &open avalues: (malloc-foreign-array: &open .args) ^dispose
+    &open rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+
+    # Prepare a libffi call interface for:
+    #   ssize_t read(int fd, void *buf, size_t count);
+    &read fn: (libc dlsym: "read")
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        # TODO: don't hard-code that size_t = ulong (and ssize_t = slong)
+        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
+            &ffi_type_slong
+        ) atypes: (
+            (malloc-foreign-array: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_ulong }) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    &read cif: cif
+    &read args: {
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        # TODO: don't hardcode sizeof(void*) = 8
+        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        # TODO: don't hard-code that size_t = unsigned long = u64
+        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    }
+    &read avalues: (malloc-foreign-array: &read .args) ^dispose
+    &read rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+
+    # Prepare a libffi call interface for:
+    #   ssize_t write(int fd, const void *buf, size_t count);
+    &write fn: (libc dlsym: "write")
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        # TODO: don't hard-code that size_t = ulong (and ssize_t = slong)
+        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
+            &ffi_type_slong
+        ) atypes: (
+            (malloc-foreign-array: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_ulong }) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    &write cif: cif
+    &write args: {
+        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        # TODO: don't hardcode sizeof(const void*) = 8
+        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        # TODO: don't hard-code that size_t = unsigned long = u64
+        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    }
+    &write avalues: (malloc-foreign-array: &write .args) ^dispose
+    &write rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+]
+
+# =================================================================================================
+
+data: FileHandle extends: { Disposable } has: { fd }
+data: AutoCloseFileHandle extends: { FileHandle } has: {}
+
+let: (handle: FileHandle) dispose do: [ handle fd: #null ]
+let: (handle: AutoCloseFileHandle) dispose do: [
+    handle .fd %close
+    handle fd: #null
+]
+
+# Result must be disposed later.
+let: (open-handle: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do: [
+    AutoCloseFileHandle fd: (%open: pathname flags: flags mode: mode)
+]
+
+let: ((handle: FileHandle) read: (count: Fixnum) into: (buf: ByteArray)) do: [
+    assert: count <= buf length
+    buf from: 0 to<: (handle .fd %read: buf count: count at: 0)
+]
+# TODO: ensure this is a MutableSlice of a ByteArray specifically
+let: ((handle: FileHandle) read: (count: Fixnum) into: (buf: MutableSlice)) do: [
+    assert: count <= buf length
+    buf from: 0 to<: (handle .fd %read: buf .seq count: count at: buf .start)
+]
+
+let: ((handle: FileHandle) write: (count: Fixnum) from: (buf: ByteArray)) do: [
+    assert: count <= buf length
+    handle .fd %write: buf count: count at: 0
+]
+
+
+data: FileStream extends: { Disposable } has: { handle; eof? }
+let: (stream: FileStream) dispose do: [
+    # Don't dispose the handle. (TODO: how to handle (heh) this...)
+    stream handle: #null
+]
+
+let: (stream: FileStream) latch-eof do: [
+    stream eof?: #t
+]
+
+# An InputStream built around a nonblocking file handle. Supports both nonblocking and blocking operations.
+data: NonBlockingFileInputStream extends: { FileStream; InputStream } has: {}
+# An InputStream built around a blocking file handle. Does not support nonblocking operations.
+data: BlockingFileInputStream extends: { FileStream; InputStream } has: {}
+
+# An OutputStream built around a nonblocking file handle. Supports both nonblocking and blocking operations.
+data: NonBlockingFileOutputStream extends: { FileStream; OutputStream } has: {}
+# An OutputStream built around a blocking file handle. Does not support nonblocking operations.
+data: BlockingFileOutputStream extends: { FileStream; OutputStream } has: {}
+
+let: (open-input: (pathname: String)) do: [
+    NonBlockingFileInputStream handle: (open-handle: pathname flags: (O_RDONLY bit|: O_NONBLOCK) mode: 0) eof?: #f
+]
+let: (open-input/blocking: (pathname: String)) do: [
+    BlockingFileInputStream handle: (open-handle: pathname flags: O_RDONLY mode: 0) eof?: #f
+]
+
+let: (open-output: (pathname: String)) do: [
+    NonBlockingFileOutputStream handle: (open-handle: pathname flags: (O_WRONLY bit|: O_NONBLOCK) mode: 0) eof?: #f
+]
+let: (open-output/blocking: (pathname: String)) do: [
+    BlockingFileOutputStream handle: (open-handle: pathname flags: O_WRONLY mode: 0) eof?: #f
+]
+
+let: (s: NonBlockingFileInputStream) end-of-stream? do: [ s .eof? ]
+let: (s: BlockingFileInputStream) end-of-stream? do: [ s .eof? ]
+let: ((s: NonBlockingFileInputStream) stream-read-available: (count: Fixnum) into: (buf: MutableSequence)) do: [
+    try: [
+        let: sub-buf = (s .handle read: count into: buf)
+        if: count > 0 and (sub-buf length = 0) then: [ s latch-eof ]
+        sub-buf
+    ] except: {
+        IOError, \e [
+            if: e .errno = EAGAIN or e .errno = EWOULDBLOCK then: [
+                # We don't know if the file position changed, so just assume it did not.
+                buf from: 0 to<: 0
+            ] else: [
+                # Re-raise the error.
+                e signal/no-trace
+            ]
+        ]
+    }
+]
+# TODO: stream-wait-read with epoll
+let: ((s: BlockingFileInputStream) stream-read: (count: Fixnum) into: (buf: MutableSequence)) do: [
+    let: sub-buf = (s .handle read: count into: buf)
+    if: count > 0 and (sub-buf length = 0) then: [ s latch-eof ]
+    sub-buf
+]
+let: (s: NonBlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
+let: (s: BlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
+
+let: ((s: NonBlockingFileOutputStream) stream-write-available: (count: Fixnum) from: (buf: MutableSequence)) do: [
+    s .handle write: count from: buf
+]
+# TODO: stream-wait-write with epoll
+let: ((s: BlockingFileOutputStream) stream-write: (count: Fixnum) from: (buf: MutableSequence)) do: [
+    s .handle write: count from: buf
+]
+
+# =================================================================================================
+
+let: make-input-stream do: [
+    # TODO: nonblocking
+    BlockingFileInputStream handle: (FileHandle fd: 0) eof?: #f
+]
+let: make-output-stream do: [
+    # TODO: nonblocking
+    BlockingFileOutputStream handle: (FileHandle fd: 1) eof?: #f
+]
+let: make-error-stream do: [
+    # TODO: nonblocking
+    BlockingFileOutputStream handle: (FileHandle fd: 2) eof?: #f
+]
+
+let: setup-standard-streams do: [
+    *input-stream* set: make-input-stream
+    *output-stream* set: make-output-stream
+    *error-stream* set: make-error-stream
+]
+
+let: teardown-standard-streams do: [
+    # TODO: set blocking again
+    #null
+]

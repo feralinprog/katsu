@@ -1,0 +1,8 @@
+use: {
+    "core.io"
+    "core.io.stream"
+}
+
+with-io: [
+    write-from: read-all
+]

@@ -1,0 +1,26 @@
+use: {
+    "core.dynamic-variable"
+    "core.fiber"
+    "core.io.linux.file"
+    "core.io.linux.scheduler"
+    "core.io.stream"
+    "core.resource"
+}
+
+let: (x with-io: f) do: [
+    with-disposal: [
+        setup-io-syscalls
+        setup-standard-streams
+
+        run-fibers: [
+            *input-stream* with-scope: [
+            *output-stream* with-scope: [
+            *error-stream* with-scope: [
+                setup-standard-streams
+                f call: x
+            ]]]
+        ] selector: [ io-select-ready-fiber ]
+
+        teardown-standard-streams
+    ]
+]
