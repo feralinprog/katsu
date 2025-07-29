@@ -271,7 +271,7 @@ namespace Katsu
         // _ print: val
         ASSERT(nargs == 2);
         String* s = args[1].obj_string();
-        std::cout.write(reinterpret_cast<char*>(s->contents()), s->length) << "\n";
+        std::cout.write(reinterpret_cast<char*>(s->contents()), s->length) << std::endl;
         return Value::null();
     }
 
