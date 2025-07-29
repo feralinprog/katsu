@@ -90,3 +90,13 @@ do: [
     v remove-first
     pretty-print: v
 ]
+
+do: [
+    mut: v = {}
+    mut: i = 0
+    v until: [length = 5] do: [
+        pretty-print: it
+        append: i
+        i: i + 1
+    ]
+]

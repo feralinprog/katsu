@@ -8,10 +8,10 @@ let: (if: (cond: Bool) then: tbody) do: [
     TAIL-CALL: (if: cond then: tbody else: #null)
 ]
 
-let: (while: (cond: Closure) do: (body: Closure)) do: [
+let: (_it while: (cond: Closure) do: (body: Closure)) do: [
     # TODO: `if:then:else:` should always tail-call -- it just needs to know whether it's tail position or not.
-    TAIL-CALL: (if: (cond call) then: [
-        body call
+    TAIL-CALL: (if: (cond call: _it) then: [
+        body call: _it
         TAIL-CALL: (while: cond do: body)
     ] else: #null)
 ]
