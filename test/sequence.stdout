@@ -116,3 +116,29 @@ cd
     2 = fixnum 4
     3 = fixnum 4
 ]
+*vector: length=0 [
+  v_array = *array: length=0
+]
+*vector: length=1 [
+  v_array = *array: length=1
+    0 = fixnum 0
+]
+*vector: length=2 [
+  v_array = *array: length=2
+    0 = fixnum 0
+    1 = fixnum 1
+]
+*vector: length=3 [
+  v_array = *array: length=4
+    0 = fixnum 0
+    1 = fixnum 1
+    2 = fixnum 2
+    3 = null
+]
+*vector: length=4 [
+  v_array = *array: length=4
+    0 = fixnum 0
+    1 = fixnum 1
+    2 = fixnum 2
+    3 = fixnum 3
+]
