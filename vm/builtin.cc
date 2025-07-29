@@ -770,6 +770,26 @@ namespace Katsu
         return Value::object(vector_to_array(vm.gc, r_vector));
     }
 
+    Value native__byte_array_to_string(VM& vm, int64_t nargs, Value* args)
+    {
+        // byte-array byte-array>string
+        ASSERT(nargs == 1);
+        Root<ByteArray> r_array(vm.gc, args[0].obj_byte_array());
+        String* s = make_string_nofill(vm.gc, r_array->length);
+        memcpy(s->contents(), r_array->contents(), s->length);
+        return Value::object(s);
+    }
+
+    Value native__string_to_byte_array(VM& vm, int64_t nargs, Value* args)
+    {
+        // string string>byte-array
+        ASSERT(nargs == 1);
+        Root<String> r_string(vm.gc, args[0].obj_string());
+        ByteArray* a = make_byte_array_nofill(vm.gc, r_string->length);
+        memcpy(a->contents(), r_string->contents(), a->length);
+        return Value::object(a);
+    }
+
     Value native__nulls_array(VM& vm, int64_t nargs, Value* args)
     {
         // n nulls-array
@@ -779,6 +799,18 @@ namespace Katsu
             throw condition_error("invalid-argument", "nulls-array must have nonnegative length");
         }
         return Value::object(make_array(vm.gc, n));
+    }
+
+    Value native__zeros_byte_array(VM& vm, int64_t nargs, Value* args)
+    {
+        // n zeros-byte-array
+        ASSERT(nargs == 1);
+        int64_t n = args[0].fixnum();
+        if (n < 0) {
+            throw condition_error("invalid-argument",
+                                  "zeros-byte-array must have nonnegative length");
+        }
+        return Value::object(make_byte_array(vm.gc, n));
     }
 
     struct RunContext
@@ -1005,6 +1037,7 @@ namespace Katsu
         register_base_type(BuiltinId::_Type, "Type");
         register_base_type(BuiltinId::_CallSegment, "CallSegment");
         register_base_type(BuiltinId::_Foreign, "Foreign");
+        register_base_type(BuiltinId::_ByteArray, "ByteArray");
 
         // Use shorthand for builtin IDs just to reduce noise and make it easier to read.
         register_native("~:",
@@ -1186,8 +1219,20 @@ namespace Katsu
                         &native__add_value_);
 
         register_native("vector>array", r_misc, {matches_type(_Vector)}, &native__vector_to_array);
+        register_native("byte-array>string",
+                        r_misc,
+                        {matches_type(_ByteArray)},
+                        &native__byte_array_to_string);
+        register_native("string>byte-array",
+                        r_misc,
+                        {matches_type(_String)},
+                        &native__string_to_byte_array);
 
         register_native("nulls-array", r_misc, {matches_type(_Fixnum)}, &native__nulls_array);
+        register_native("zeros-byte-array",
+                        r_misc,
+                        {matches_type(_Fixnum)},
+                        &native__zeros_byte_array);
 
         // TODO: this is super hacky. figure out a different way to do this.
         register_native("make-run-context-for-path:contents:",

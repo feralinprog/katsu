@@ -261,6 +261,20 @@ namespace Katsu
         return foreign;
     }
 
+    ByteArray* make_byte_array(GC& gc, uint64_t length)
+    {
+        ByteArray* array = make_byte_array_nofill(gc, length);
+        memset(array->contents(), 0, length);
+        return array;
+    }
+
+    ByteArray* make_byte_array_nofill(GC& gc, uint64_t length)
+    {
+        ByteArray* array = gc.alloc<ByteArray>(length);
+        array->length = length;
+        return array;
+    }
+
     Vector* append(GC& gc, Root<Vector>& r_vector, ValueRoot& r_value)
     {
         Vector* vector = *r_vector;
@@ -728,6 +742,10 @@ namespace Katsu
             } else if (value.is_obj_foreign()) {
                 ForeignValue* o = value.obj_foreign();
                 std::cout << "*foreign: " << o->value << "\n";
+            } else if (value.is_obj_byte_array()) {
+                ByteArray* o = value.obj_byte_array();
+                std::cout << "*byte-array: length=" << o->length << "\n";
+                // TODO: print contents?
             } else {
                 std::cout << "object: ??? (object tag = " << static_cast<int>(value.object()->tag())
                           << ")\n";
@@ -1028,6 +1046,7 @@ namespace Katsu
                     case ObjectTag::INSTANCE: return obj->object<DataclassInstance*>()->v_type;
                     case ObjectTag::CALL_SEGMENT: return vm.builtin(BuiltinId::_CallSegment);
                     case ObjectTag::FOREIGN: return vm.builtin(BuiltinId::_Foreign);
+                    case ObjectTag::BYTE_ARRAY: return vm.builtin(BuiltinId::_ByteArray);
                     default: ASSERT_MSG(false, "forgot an ObjectTag?");
                 }
             }

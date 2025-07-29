@@ -64,6 +64,11 @@ namespace Katsu
     // Make a foreign value with the specified field.
     ForeignValue* make_foreign(GC& gc, void* value);
 
+    // Make a ByteArray of the given length, filled with zeros.
+    ByteArray* make_byte_array(GC& gc, uint64_t length);
+    // Make a ByteArray of the given length, with contents uninitialized.
+    ByteArray* make_byte_array_nofill(GC& gc, uint64_t length);
+
     // Append a value to a vector, reallocating if necessary to expand the vector.
     // For convenience, this returns a pointer to the resulting Vector (which may have been moved
     // due to reallocation).

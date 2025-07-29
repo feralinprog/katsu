@@ -4,6 +4,8 @@ TODO (VM):
 * allow mut:s at module level
 * handle more errors in C++ and raise as conditions
 * replace let -> let/global and let/local -> let
+* for debug, run GC just before any FFI calls
+* delete String, just have VM use ByteArray?
 
 TODO (in-language):
 * allow for docs everywhere!

@@ -336,6 +336,7 @@ let: (cleanup-and-terminate: message) do: [
 let: *all-core-modules* = {
     "core.array"
     "core.assoc"
+    "core.byte-array"
     "core.cleanup"
     "core.code"
     "core.combinator"
@@ -353,6 +354,7 @@ let: *all-core-modules* = {
     "core.sequence"
     "core.sequence.array"
     "core.sequence.assoc"
+    "core.sequence.byte-array"
     "core.sequence.vector"
     "core.stack-trace"
     "core.string"

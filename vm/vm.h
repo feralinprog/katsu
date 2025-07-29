@@ -229,6 +229,7 @@ namespace Katsu
         _Type,
         _CallSegment,
         _Foreign,
+        _ByteArray,
 
         // Keep this last!
         NUM_BUILTINS,

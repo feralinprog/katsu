@@ -395,6 +395,23 @@ TEST_CASE("GC follows internal references", "[gc]")
         REQUIRE_NOTHROW(obj = v_obj.obj_foreign());
         CHECK(obj->value == value);
     }
+
+    SECTION("ByteArray")
+    {
+        // Set up object.
+        std::string expected = "expected byte array contents";
+        ByteArray* obj = gc.alloc<ByteArray>(expected.size());
+        obj->length = expected.size();
+        memcpy(obj->contents(), expected.c_str(), expected.size());
+
+        Value v_obj = Value::object(obj);
+        single_root_collect(&v_obj);
+
+        // Unpack and verify object.
+        REQUIRE_NOTHROW(obj = v_obj.obj_byte_array());
+        CHECK(obj->length == expected.size());
+        CHECK(memcmp(obj->contents(), expected.c_str(), expected.size()) == 0);
+    }
 }
 
 // TODO: test ValueRoot more (e.g. move semantics, destructor)

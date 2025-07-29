@@ -31,6 +31,7 @@ namespace Katsu
      *   - dataclass instances
      *   - call stack segment (a group of call frames)
      *   - foreign values (i.e. void* pointers as in C)
+     *   - byte arrays (fixed-length)
      *
      * Some small objects (e.g. fixnums, bools, etc.) are stored inline; others are represented as
      * tagged pointers to the actual contents (subclasses of Object) elsewhere in memory that
@@ -117,6 +118,7 @@ namespace Katsu
         INSTANCE,
         CALL_SEGMENT,
         FOREIGN,
+        BYTE_ARRAY,
     };
 
     static const char* object_tag_str(ObjectTag tag)
@@ -136,6 +138,7 @@ namespace Katsu
             case ObjectTag::INSTANCE: return "instance";
             case ObjectTag::CALL_SEGMENT: return "call-segment";
             case ObjectTag::FOREIGN: return "foreign";
+            case ObjectTag::BYTE_ARRAY: return "byte-array";
             default: return "!unknown!";
         }
     }
@@ -156,6 +159,7 @@ namespace Katsu
             case ObjectTag::INSTANCE: return "INSTANCE";
             case ObjectTag::CALL_SEGMENT: return "CALL_SEGMENT";
             case ObjectTag::FOREIGN: return "FOREIGN";
+            case ObjectTag::BYTE_ARRAY: return "BYTE_ARRAY";
             default: return "!UNKNOWN!";
         }
     }
@@ -243,6 +247,7 @@ namespace Katsu
     struct DataclassInstance;
     struct CallSegment;
     struct ForeignValue;
+    struct ByteArray;
 
     // TODO: create related generic types which are guaranteed to have the right tag?
     // Like TaggedValue<int64_t>, guaranteed to be a fixnum.
@@ -367,6 +372,10 @@ namespace Katsu
         {
             return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::FOREIGN;
         }
+        bool is_obj_byte_array() const
+        {
+            return this->tag() == Tag::OBJECT && this->object()->tag() == ObjectTag::BYTE_ARRAY;
+        }
 
         int64_t fixnum() const
         {
@@ -440,6 +449,10 @@ namespace Katsu
         ForeignValue* obj_foreign() const
         {
             return this->object()->object<ForeignValue*>();
+        }
+        ByteArray* obj_byte_array() const
+        {
+            return this->object()->object<ByteArray*>();
         }
 
         static Value fixnum(int64_t num)
@@ -815,6 +828,28 @@ namespace Katsu
         }
     };
 
+    struct ByteArray : public Object
+    {
+        static const ObjectTag CLASS_TAG = ObjectTag::BYTE_ARRAY;
+
+        uint64_t length;
+        inline uint8_t* contents()
+        {
+            return reinterpret_cast<uint8_t*>(&this->length + 1);
+        }
+
+        // Size in bytes.
+        static inline uint64_t size(uint64_t length)
+        {
+            return sizeof(ByteArray) + length /* * sizeof(uint8_t) */;
+        }
+        inline uint64_t size() const
+        {
+            return ByteArray::size(this->length);
+        }
+    };
+
+
     // Specializations for static_value():
     template <> inline int64_t static_value<int64_t>(Value value)
     {
@@ -919,5 +954,10 @@ namespace Katsu
     {
         ASSERT(object.tag() == ObjectTag::FOREIGN);
         return reinterpret_cast<ForeignValue*>(&object);
+    }
+    template <> inline ByteArray* static_object<ByteArray*>(Object& object)
+    {
+        ASSERT(object.tag() == ObjectTag::BYTE_ARRAY);
+        return reinterpret_cast<ByteArray*>(&object);
     }
 };

@@ -1,0 +1,17 @@
+use: {
+    "core.builtin.misc"
+    "core.byte-array"
+    "core.mixin"
+    "core.sequence"
+}
+
+MutableSequence mix-in-to: ByteArray
+
+let: (mutable-like: (_: ByteArray) length: n) do: [ n zeros-byte-array ]
+let: ((seq: ByteArray) like: (_: ByteArray)) do: [ seq ]
+
+let: ((seq: Sequence) like: (_: ByteArray)) do: [
+    let: b = seq length zeros-byte-array
+    b unsafe-copy: seq at: 0
+    b
+]

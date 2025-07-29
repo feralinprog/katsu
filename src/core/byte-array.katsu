@@ -1,0 +1,11 @@
+use: "core.builtin.misc"
+
+let: (a: ByteArray) length do: [
+    a unsafe-read-u64-at-offset: 8
+]
+let: ((a: ByteArray) unsafe-at: (i: Fixnum)) do: [
+    a unsafe-read-u8-at-offset: 16 + i
+]
+let: ((a: ByteArray) unsafe-at: (i: Fixnum) put: (value: Fixnum)) do: [
+    a unsafe-write-u8-at-offset: 16 + i value: value
+]
