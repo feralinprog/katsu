@@ -170,11 +170,17 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         check(Value::fixnum(1234));
     }
 
-    // TODO: negation
-    // SECTION("negative fixnum") {
-    //     input("-1234");
-    //     check(Value::fixnum(-1234));
-    // }
+    SECTION("negative fixnum")
+    {
+        input("-1234");
+        check(Value::fixnum(-1234));
+    }
+
+    SECTION("positive fixnum")
+    {
+        input("+1234");
+        check(Value::fixnum(1234));
+    }
 
     // TODO: floats
 
