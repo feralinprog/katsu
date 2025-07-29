@@ -29,9 +29,15 @@ update_test ()
         exit 1
     fi
 
+    if [ -f "test/$name.stdin" ]; then
+        stdin="test/$name.stdin"
+    else
+        stdin=/dev/null
+    fi
+
     # TODO: why does this put stderr also in stdout?
     # out/katsu test test/$name.katsu > >(tee test/$name.stdout) 2> >(tee test/$name.stderr)
-    out/katsu test test/$name.katsu >test/$name.stdout 2>test/$name.stderr
+    out/katsu test test/$name.katsu <$stdin >test/$name.stdout 2>test/$name.stderr
     exit_code=$?
     echo "------ stdout -------"
     cat test/$name.stdout

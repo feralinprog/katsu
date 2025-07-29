@@ -24,16 +24,23 @@ test_source ()
 {
     module_name="$1"
     source="$2"
+    expected_stdin="${source%.katsu}.stdin"
     expected_stdout="${source%.katsu}.stdout"
     expected_stderr="${source%.katsu}.stderr"
     expected_exitcode="${source%.katsu}.exitcode"
+    if [ -f "$expected_stdin" ]; then
+        stdin="$expected_stdin"
+    else
+        stdin="/dev/null"
+    fi
     stdout=$(mktemp --tmpdir "test-source-stdout.XXXXXXXXXXX")
     stderr=$(mktemp --tmpdir "test-source-stderr.XXXXXXXXXXX")
     exitcode=$(mktemp --tmpdir "test-source-exitcode.XXXXXXXXXXX")
 
     echo "===== testing source: $source ====="
     exit_code=0
-    out/katsu "$module_name" "$source" >$stdout 2>$stderr || exit_code=$?
+    echo out/katsu "$module_name" "$source" <$stdin >$stdout 2>$stderr
+    out/katsu "$module_name" "$source" <$stdin >$stdout 2>$stderr || exit_code=$?
     echo $exit_code > $exitcode
 
     # Check stdout if an expected output is provided.
