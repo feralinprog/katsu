@@ -724,7 +724,8 @@ namespace Katsu
                 pchild(o->v_bases, "v_bases = ");
                 pnative() << "sealed = " << o->sealed << "\n";
                 pchild(o->v_linearization, "v_linearization = ");
-                pchild(o->v_subtypes, "v_subtypes = ");
+                // This causes pretty extreme spaminess.
+                // pchild(o->v_subtypes, "v_subtypes = ");
                 pnative() << "kind = ";
                 switch (o->kind) {
                     case Type::Kind::PRIMITIVE: std::cout << "primitive\n"; break;
