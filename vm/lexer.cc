@@ -177,11 +177,13 @@ namespace Katsu
                 // Integers:
                 // (TODO: different bases, maybe also _ for separation)
                 bool all_digits = true;
+                bool first = true;
                 for (char c : word) {
-                    if (!isdigit(c)) {
+                    if (!(isdigit(c) || (first && (c == '+' || c == '-')))) {
                         all_digits = false;
                         break;
                     }
+                    first = false;
                 }
                 if (all_digits) {
                     return make_token(TokenType::INTEGER, std::stoll(word));
