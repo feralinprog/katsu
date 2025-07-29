@@ -5,13 +5,6 @@ use: {
     "core.sequence"
 }
 
-# TODO: add an operator precedence to parser once it's implemented in-language, delete the _
-let: (f: Foreign) _& do: [
-    let: ptr = (malloc: 8)
-    ptr foreign-write-foreign-at-offset: 0 value: f
-    ptr
-]
-
 with-disposal: [
     # Load DLL and find symbol:
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
