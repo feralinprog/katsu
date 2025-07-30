@@ -802,8 +802,9 @@ TEST_CASE("integration - single top level expression", "[katsu]")
 
 TEST_CASE("integration - whole file", "[katsu]")
 {
-    // 1 MiB GC-managed memory.
-    GC gc(1024 * 1024);
+    // 2 MiB GC-managed memory.
+    // TODO: what's taking so much memory? probably source spans...
+    GC gc(2 * 1024 * 1024);
 
     SourceFile source;
 

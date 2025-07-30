@@ -346,6 +346,7 @@ let: *all-core-modules* = {
     "core.dynamic-variable"
     "core.ffi"
     "core.fiber"
+    "core.io"
     "core.mixin"
     "core.mixin.private"
     "core.optional"

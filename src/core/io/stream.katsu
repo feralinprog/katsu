@@ -1,0 +1,159 @@
+use: {
+    "core.combinator"
+    "core.dynamic-variable"
+    "core.fiber"
+    "core.resource"
+    "core.sequence"
+}
+
+# Must implement:
+#   end-of-stream?
+#   at least one of:
+#     stream-read:into:
+#     stream-read-available:into: AND stream-wait-read (which has a default implementation)
+#   buffer-exemplar
+# stream-read:into: has a default implementation which uses stream-read-available:into: and stream-wait-read.
+mixin: InputStream extends: { Disposable }
+# Must implement:
+#   at least one of:
+#     stream-write:
+#     stream-write-available: AND stream-wait-write (which has a default implementation)
+mixin: OutputStream extends: { Disposable }
+# mixin: IOStream extends: { InputStream; OutputStream }
+
+# Tell whether there are (possibly) more elements in the stream or if the stream is fully exhausted.
+# This should be a quick lookup of internal state which is set by stream-read-into: / stream-read-available:into:.
+generic: (stream: InputStream) end-of-stream?
+
+# Perform a non-blocking read of up to 'count' number of elements from the input stream into the
+# given buffer. This should read as many elements are as immediately available (up to 'count'),
+# which could be zero elements.
+# The 'count' must be at most the buffer's length.
+# This should return a Slice into the buffer indicating which elements were populated.
+# This must set internal state (indicating end-of-stream) if an end of stream condition is detected.
+generic: ((stream: InputStream) stream-read-available: (count: Fixnum) into: (buf: MutableSequence))
+# Yield or suspend the current fiber, only returning once further elements may be available to read.
+# The default implementation simply performs a single yield, which can induce busy-looping. Other
+# implementations may wish to suspend the current fiber instead and mark the current fiber ready
+# again only when input is known to be available (for instance using `epoll` or `select`).
+generic: (stream: InputStream) stream-wait-read
+let: (s: InputStream) stream-wait-read do: [ yield ]
+
+# Read up to 'count' number of elements from the input stream into the given buffer. This should
+# read exactly 'count' elements unless limited by reaching end-of-stream, and may yield while
+# waiting for external input to become available (e.g. from a network socket).
+# The 'count' must be at most the buffer's length.
+# This should return a Slice into the buffer.
+# This must set internal state (indicating end-of-stream) if an end of stream condition is detected.
+generic: ((stream: InputStream) stream-read: (count: Fixnum) into: (buf: MutableSequence))
+
+# Produce an exemplar of a buffer sequence into which this stream can be read.
+generic: (stream: InputStream) buffer-exemplar
+
+let: ((stream: InputStream) stream-read-available-into: (buf: MutableSequence)) do: [
+    stream stream-read-available: buf length into: buf
+]
+
+let: ((stream: InputStream) stream-read: (count: Fixnum) into: (buf: MutableSequence)) do: [
+    assert: count <= buf length
+    mut: spot = 0
+    mut: eos? = #f
+    while: [spot < count and not eos?] do: [
+        spot: spot + (stream stream-read-available-into: (buf from: spot to<: count)) length
+        eos?: stream end-of-stream?
+        if: spot < count and not eos? then: [ stream stream-wait-read ]
+    ]
+    buf from: 0 to<: spot
+]
+
+let: ((stream: InputStream) stream-read-into: (buf: MutableSequence)) do: [
+    stream stream-read: buf length into: buf
+]
+let: ((stream: InputStream) stream-read: (count: Fixnum)) do: [
+    stream stream-read: (mutable-like: stream buffer-exemplar length: count)
+]
+
+let: ((stream: InputStream) stream-read-all/group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [
+    let: buf = (mutable-like: stream buffer-exemplar length: buf-length)
+    let: all = (resizable-like: stream buffer-exemplar capacity: 0)
+    stream until: [end-of-stream?] do: [
+        all extend: (stream-read-into: buf)
+    ]
+    all like: exemplar
+]
+let: ((stream: InputStream) stream-read-all/like: (exemplar: Sequence)) do: [
+    stream stream-read-all/group: 16384 like: exemplar
+]
+let: (stream: InputStream) stream-read-all do: [ stream stream-read-all/like: stream buffer-exemplar ]
+
+# Perform a non-blocking write of up to 'count' number of elements from buffer to the output
+# stream and return the number of elements written. This should write as many elements as the
+# stream immediately has space available for (up to 'count'), which could be zero elements.
+# given buffer. This should read as many elements are as immediately available (up to 'count'),
+# which could be zero elements.
+# The 'count' must be at most the buffer's length.
+generic: ((stream: OutputStream) stream-write-available: (count: Fixnum) from: (buf: Sequence))
+# Yield or suspend the current fiber, only returning once further the stream can support writing
+# more elements.
+# The default implementation simply performs a single yield, which can induce busy-looping. Other
+# implementations may wish to suspend the current fiber instead and mark the current fiber ready
+# again only when output space is known to be available (for instance using `epoll` or `select`).
+generic: (stream: OutputStream) stream-wait-write
+let: (s: OutputStream) stream-wait-write do: [ yield ]
+
+# Write 'count' number of elements from the given buffer into the output stream. This may yield
+# while waiting for stream writing to become available (e.g. to a network socket).
+# The 'count' must be at most the buffer's length.
+# Should return #null.
+generic: ((stream: OutputStream) stream-write: (count: Fixnum) from: (buf: Sequence))
+
+let: ((stream: OutputStream) stream-write-available-from: (buf: Sequence)) do: [
+    stream stream-write-available: buf length from: buf
+]
+
+let: ((stream: OutputStream) stream-write: (count: Fixnum) from: (buf: Sequence)) do: [
+    assert: count <= buf length
+    mut: spot = 0
+    while: [spot < count] do: [
+        spot: spot + (stream stream-write-available-from: (buf from: spot to<: count))
+        if: spot < count then: [ stream stream-wait-write ]
+    ]
+    #null
+]
+let: ((stream: OutputStream) stream-write-from: (buf: Sequence)) do: [
+    stream stream-write: buf length from: buf
+]
+
+# =================================================================================================
+
+let: *input-stream* = (make-dynamic: "input-stream")
+let: *output-stream* = (make-dynamic: "output-stream")
+let: *error-stream* = (make-dynamic: "error-stream")
+
+let: (_it with-input-stream: stream do: body) do: [
+    *input-stream* with-value: stream do: [ body call: _it ]
+]
+let: (_it with-output-stream: stream do: body) do: [
+    *output-stream* with-value: stream do: [ body call: _it ]
+]
+let: (_it with-error-stream: stream do: body) do: [
+    *error-stream* with-value: stream do: [ body call: _it ]
+]
+
+# Variants of the stream-read* / stream-write* methods above which work on the dynamic input/output streams:
+let: end-of-input? do: [ *input-stream* get end-of-stream? ]
+let: (read-available: (count: Fixnum) into: (buf: MutableSequence)) do: [ *input-stream* get stream-read-available: count into: buf ]
+let: (read: (count: Fixnum) into: (buf: MutableSequence)) do: [ *input-stream* get stream-read: count into: buf ]
+let: (read-available-into: (buf: MutableSequence)) do: [ *input-stream* get stream-read-available-into: buf ]
+let: (read: (count: Fixnum) into: (buf: MutableSequence)) do: [ *input-stream* get stream-read: count into: buf ]
+let: (read-into: (buf: MutableSequence)) do: [ *input-stream* get stream-read-into: buf ]
+let: (read: (count: Fixnum)) do: [ *input-stream* get stream-read: count ]
+let: (read-all/group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [ *input-stream* get stream-read-all/group: buf-length like: exemplar ]
+let: (read-all/like: (exemplar: Sequence)) do: [ *input-stream* get stream-read-all/like: exemplar ]
+let: read-all do: [ *input-stream* get stream-read-all ]
+
+let: (write-available: (count: Fixnum) from: (buf: Sequence)) do: [ *output-stream* get stream-write-available: count from: buf ]
+let: (write: (count: Fixnum) from: (buf: Sequence)) do: [ *output-stream* get stream-write: count from: buf ]
+let: (write-available-from: (buf: Sequence)) do: [ *output-stream* get stream-write-available-from: buf ]
+let: (write: (count: Fixnum) from: (buf: Sequence)) do: [ *output-stream* get stream-write: count from: buf ]
+let: (write-from: (buf: Sequence)) do: [ *output-stream* get stream-write-from: buf ]
