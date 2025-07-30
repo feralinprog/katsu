@@ -89,10 +89,16 @@ do: [
     pretty-print: v
 ]
 
+do: [
+    let: v = { 1; 2; 3 }
+    v extend: { "a"; "b"; "c" }
+    pretty-print: v
+]
+
+
 pretty-print: ({ "abcd"; "abcde" } map: [ length ] like: {} vector>array)
 
 pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } keep: [ length > 3 ])
-
 do: [
     let: v = { 1; 2; 3; 4 }
     v remove-first

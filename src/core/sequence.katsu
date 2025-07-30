@@ -183,6 +183,12 @@ let: ((seq: ResizableSequence) remove-first) do: [
     seq length: seq length - 1
 ]
 
+let: ((seq: ResizableSequence) extend: (suffix: Sequence)) do: [
+    let: suffix-start = seq length
+    seq length: suffix-start + suffix length
+    seq unsafe-copy: suffix at: suffix-start
+]
+
 # TODO: use ~: instead
 let: ((a: Sequence) concat: (b: Sequence) like: (exemplar: Sequence)) do: [
     let: seq = (mutable-like: exemplar length: a length + b length)

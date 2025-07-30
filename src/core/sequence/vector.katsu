@@ -26,7 +26,7 @@ let: ((v: Vector) backing: (b: Array)) do: [
 let: ((v: Vector) ensure-capacity: (n: Fixnum)) do: [
     if: v capacity < n then: [
         let: new-backing = (n * 2) nulls-array
-        new-backing unsafe-copy: new-backing at: 0
+        new-backing unsafe-copy: v backing at: 0
         v backing: new-backing
     ]
 ]
