@@ -2,6 +2,25 @@ use: {
     "core.dynamic-variable"
 }
 
+generic: >bool
+
+let: (_it if: cond then: tbody else: fbody) do: [
+    TAIL-CALL: (_it if: cond >bool then: tbody else: fbody)
+]
+let: (_it if: cond then: tbody) do: [
+    TAIL-CALL: (_it if: cond >bool then: tbody else: #null)
+]
+
+let: (_it until: cond do: body) do: [
+    TAIL-CALL: (while: [not (cond call: _it)] do: body)
+]
+
+let: (x do: f) do: [f call: x]
+
+let: (x if-not-null: body) do: [
+    if: x != #null then: [ body call: x ]
+]
+
 data: ReturnMarker has: {}
 let: f with-return-callable do: [
     let: marker = ReturnMarker new
@@ -35,7 +54,7 @@ let: (x with-return: f) do: [
 let: (return: x) do: [
     return-callable get call: x
 ]
-let: (x return-if: (b: Bool)) do: [
+let: (x return-if: b) do: [
     if: b then: [ return: x ]
 ]
 
@@ -45,14 +64,4 @@ let: ((n: Fixnum) times: body) do: [
         body call: i
         i: i + 1
     ]
-]
-
-let: (x do: f) do: [f call: x]
-
-let: (x if-not-null: body) do: [
-    if: x != #null then: [ body call: x ]
-]
-
-let: (_it until: cond do: body) do: [
-    while: [not (cond call: _it)] do: body
 ]

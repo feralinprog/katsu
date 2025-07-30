@@ -1,8 +1,9 @@
 use: {
+    "core.assoc"
+    "core.builtin.misc"
     "core.combinator"
     "core.sentinel"
     "core.sequence.assoc"
-    "core.builtin.misc"
 }
 
 let: *cleanup-key* = (new-sentinel: "cleanup-key")

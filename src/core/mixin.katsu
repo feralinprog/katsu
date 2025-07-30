@@ -53,7 +53,7 @@ let: (linearizations: Vector) c3-merge do: [
             no-linearization signal
         ]
 
-        merged append: head
+        merged vector-append: head
         # Ratchet past this head as the candidate in any linearization.
         cursors each: \c [
             if: c cur = head then: [ c shift ]
@@ -80,7 +80,7 @@ let: ((type: Type) c3-linearization: (bases: Vector)) do: [
     ]
 
     let: linearizations = (bases map: [ .linearization ])
-    linearizations append: bases
+    linearizations vector-append: bases
 
     { type } concat: linearizations c3-merge
 ]
@@ -96,7 +96,7 @@ let: ((mixin: Type) mix-in-to: (type: Type)) do: [
     
     type bases: new-bases vector>array
     type linearization: new-linearization vector>array
-    mixin .subtypes append: type
+    mixin .subtypes vector-append: type
 
     #null
 ]

@@ -3,6 +3,7 @@ fixnum 5
 doing another thing!
 fixnum 10
 *vector: length=1 [
-  v_array = *array: length=1
+  v_array = *array: length=2
     0 = fixnum 15
+    1 = null
 ]

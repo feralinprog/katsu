@@ -23,12 +23,12 @@ let/local: (seq each: f) do: [
 
 let/local: ((v: Vector) map: f) do: [
     let: mapped = {}
-    v each: [ mapped append: (f call: it) ]
+    v each: [ mapped vector-append: (f call: it) ]
     mapped
 ]
 let/local: ((v: Vector) keep: good?) do: [
     let: filtered = {}
-    v each: \x [ if: (good? call: x) then: [ filtered append: x ] ]
+    v each: \x [ if: (good? call: x) then: [ filtered vector-append: x ] ]
     filtered
 ]
 
@@ -65,7 +65,7 @@ let/local: ((v: Vector) empty?) do: [ v ~length = 0 ]
 
 let/local: ((a: Vector) concat: (b: Vector)) do: [
     let: c = {}
-    a each: [ c append: it ]
-    b each: [ c append: it ]
+    a each: [ c vector-append: it ]
+    b each: [ c vector-append: it ]
     c
 ]

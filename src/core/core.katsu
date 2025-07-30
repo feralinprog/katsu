@@ -70,21 +70,22 @@ let: ((v: Vector) ~unsafe-at: (i: Fixnum)) do: [
 ]
 
 data: ~StopIteration has: { value }
-let: ((v: Vector) ~each: f) do: [
+let: ((v: Vector) ~each: f default: x) do: [
     mut: i = 0
-    mut: last = #null
+    mut: last = x
     while: [i < v ~length and not (last instance?: ~StopIteration)] do: [
         last: (f call: (v ~unsafe-at: i))
         i: i + 1
     ]
     if: (last instance?: ~StopIteration) then: [ last .value ] else: [ last ]
 ]
+let: ((v: Vector) ~each: f) do: [ v ~each: f default: #null ]
 
 let: ((v: Vector) ~contains?: x) do: [
-    v ~each: [ if: (it = x) then: [ ~StopIteration value: #t ] else: #f ]
+    v ~each: [ if: (it = x) then: [ ~StopIteration value: #t ] else: #f ] default: #f
 ]
 
-let: ((v: Vector) ~push: x) do: [ v append: x ]
+let: ((v: Vector) ~push: x) do: [ v vector-append: x ]
 let: (v: Vector) ~pop do: [
     assert: v ~length > 0
     let: new-length = v ~length - 1
@@ -254,10 +255,10 @@ let: (use: (module-name: String) path-loader: get-path contents-loader: get-cont
             # TODO: just use a `map` instead on *default-imports*. Need to define standard collections methods...
             let: imports = {}
             *default-imports* ~each: [
-                imports append: (loaded-modules ~at*: it)
+                imports vector-append: (loaded-modules ~at*: it)
             ]
 
-            loaded-modules add: module-name value: new-module
+            loaded-modules assoc-add: module-name value: new-module
             [
                 use-stack ~push: module-name
                 imports-stack ~push: imports
@@ -274,7 +275,7 @@ let: (use: (module-name: String) path-loader: get-path contents-loader: get-cont
             let: new-module = (loaded-modules ~at*: module-name)
             let: imports = imports-stack ~peek
             if: not (imports ~contains?: new-module) then: [
-                imports append: new-module
+                imports vector-append: new-module
             ]
         ]
 
@@ -297,6 +298,8 @@ let: (use: (module-names: Vector)) do: [
 # runs into issues trying to define their own handlers (since 'core' is always imported).
 # TODO: ideally this would just be a private module under core.
 use: "core.condition-handler"
+
+generic: >string
 
 let: (s: String) >string do: [ s ]
 let: (_: Null) >string do: [ "#null" ]

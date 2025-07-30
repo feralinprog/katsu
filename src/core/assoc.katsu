@@ -4,6 +4,10 @@ use: {
     "core.combinator"
 }
 
+let: ((a: Assoc) add: key value: value) do: [
+    a assoc-add: key value: value
+]
+
 let: ((a: Assoc) length) do: [
     a unsafe-read-u64-at-offset: 8
 ]

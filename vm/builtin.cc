@@ -442,7 +442,7 @@ namespace Katsu
     {
         // _ if: cond then: tbody else: fbody
         ASSERT(nargs == 4);
-        Value body = (args[1].is_bool() && args[1]._bool()) ? args[2] : args[3];
+        Value body = args[1]._bool() ? args[2] : args[3];
         call_impl(vm,
                   tail_call,
                   /* v_callable */ body,
@@ -1120,7 +1120,7 @@ namespace Katsu
 
         register_intrinsic("if:then:else:",
                            r_default,
-                           {matches_any, matches_any, matches_any, matches_any},
+                           {matches_any, matches_type(_Bool), matches_any, matches_any},
                            &intrinsic__if_then_else_);
 
         register_intrinsic("call", r_default, {matches_any}, &intrinsic__call);
@@ -1212,8 +1212,11 @@ namespace Katsu
 
         register_native("make-empty-assoc", r_misc, {matches_any}, &native__make_empty_assoc);
 
-        register_native("append:", r_misc, {matches_type(_Vector), matches_any}, &native__append_);
-        register_native("add:value:",
+        register_native("vector-append:",
+                        r_misc,
+                        {matches_type(_Vector), matches_any},
+                        &native__append_);
+        register_native("assoc-add:value:",
                         r_misc,
                         {matches_type(_Assoc), matches_any, matches_any},
                         &native__add_value_);

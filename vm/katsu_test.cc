@@ -650,11 +650,6 @@ TEST_CASE("integration - single top level expression", "[katsu]")
         input(R"(if: #f then: ["true result"] else: ["false result"])");
         check(Value::object(make_string(gc, "false result")));
     }
-    SECTION("if:then:else: - non-bool condition")
-    {
-        input(R"(if: 1234 then: ["true result"] else: ["false result"])");
-        check(Value::object(make_string(gc, "false result")));
-    }
     SECTION("then:else: - body with parameters")
     {
         input(R"(if: #t then: \a b [a + b] else: ["false result"])");

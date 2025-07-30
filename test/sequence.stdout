@@ -66,11 +66,13 @@ ab
 cd
 *string: "nope"
 *vector: length=3 [
-  v_array = *array: length=4
+  v_array = *array: length=6
     0 = *string: "a"
     1 = *string: "b"
     2 = *string: "c"
     3 = null
+    4 = null
+    5 = null
 ]
 *vector: length=5 [
   v_array = *array: length=5
@@ -81,11 +83,13 @@ cd
     4 = *string: "e"
 ]
 *vector: length=3 [
-  v_array = *array: length=4
+  v_array = *array: length=6
     0 = *string: "a"
     1 = *string: "b"
     2 = *string: "c"
     3 = null
+    4 = null
+    5 = null
 ]
 *vector: length=2 [
   v_array = *array: length=2
@@ -142,8 +146,9 @@ cd
   v_array = *array: length=0
 ]
 *vector: length=1 [
-  v_array = *array: length=1
+  v_array = *array: length=2
     0 = fixnum 0
+    1 = null
 ]
 *vector: length=2 [
   v_array = *array: length=2
@@ -151,18 +156,22 @@ cd
     1 = fixnum 1
 ]
 *vector: length=3 [
-  v_array = *array: length=4
+  v_array = *array: length=6
     0 = fixnum 0
     1 = fixnum 1
     2 = fixnum 2
     3 = null
+    4 = null
+    5 = null
 ]
 *vector: length=4 [
-  v_array = *array: length=4
+  v_array = *array: length=6
     0 = fixnum 0
     1 = fixnum 1
     2 = fixnum 2
     3 = fixnum 3
+    4 = null
+    5 = null
 ]
 fixnum 0
 fixnum 3
