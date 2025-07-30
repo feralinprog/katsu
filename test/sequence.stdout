@@ -37,6 +37,13 @@ length = 4
 *string: "c"
 *string: "b"
 *string: "f"
+*vector: length=4 [
+  v_array = *array: length=4
+    0 = fixnum 1
+    1 = fixnum 2
+    2 = *string: "c"
+    3 = fixnum 4
+]
 null
 0 -> a
 1 -> b

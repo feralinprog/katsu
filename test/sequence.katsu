@@ -25,6 +25,14 @@ let: (seq: Sequence) pprint-all do: [
 
 ({ "a"; "b"; "c"; "d"; "e"; "f" } at: { 4; 2; 1; 5 }) pprint-all
 
+do: [
+    let: v = { 1; 2; 3; 4 }
+    let: s = (v from: 1 to=: 2)
+    assert: (s instance?: MutableSlice)
+    s at: 1 put: "c"
+    pretty-print: v
+]
+
 # `each:` should produce #null
 pretty-print: ({ 1; 2; 3 } each: [ it * 10 ])
 
