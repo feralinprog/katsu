@@ -1,0 +1,50 @@
+use: {
+    "core.sequence"
+}
+
+# This module defines generic resizable sequences which are backed by fixed-length mutable sequences
+# which are reallocated on demand.
+data: Resizable extends: { ResizableSequence } has: { backing; used }
+
+let: (r: Resizable) length do: [ r .used ]
+let: (r: Resizable) capacity do: [ r .backing length ]
+
+let: ((r: Resizable) unsafe-at: (i: Fixnum)) do: [ r .backing unsafe-at: i ]
+
+# Ensure the resizable has a capacity of at least n.
+# (Generally this will grow the backing array to 2*n length.)
+let: ((r: Resizable) ensure-capacity: (n: Fixnum)) do: [
+    if: r capacity < n then: [
+        let: new-backing = (mutable-like: r .backing length: n * 2)
+        new-backing unsafe-copy: r .backing at: 0
+        r backing: new-backing
+    ]
+]
+
+let: ((r: Resizable) length: (n: Fixnum)) do: [
+    r ensure-capacity: n
+    r used: n
+]
+
+let: ((r: Resizable) at: (i: Fixnum) put: value) do: [
+    if: i >= r length then: [
+        r length: i + 1
+    ]
+    r .backing unsafe-at: i put: value
+]
+
+let: (mutable-like: (r: Resizable) length: n) do: [
+    mutable-like: r .backing length: n
+]
+let: (resizable-like: (r: Resizable) capacity: n) do: [
+    Resizable backing: (mutable-like: r .backing length: n) used: 0
+]
+
+# Give a default implementation!
+let: (resizable-like: (s: Sequence) capacity: n) do: [
+    Resizable backing: (mutable-like: s length: n) used: 0
+]
+
+
+
+

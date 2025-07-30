@@ -164,3 +164,15 @@ cd
     2 = fixnum 2
     3 = fixnum 3
 ]
+fixnum 0
+fixnum 3
+fixnum 0
+fixnum 0
+fixnum 0
+null
+fixnum 5
+fixnum 0
+fixnum 0
+fixnum 0
+fixnum 0
+fixnum 123

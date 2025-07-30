@@ -355,6 +355,7 @@ let: *all-core-modules* = {
     "core.sequence.array"
     "core.sequence.assoc"
     "core.sequence.byte-array"
+    "core.sequence.resizable"
     "core.sequence.vector"
     "core.stack-trace"
     "core.string"

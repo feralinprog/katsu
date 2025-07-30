@@ -114,3 +114,22 @@ do: [
         i: i + 1
     ]
 ]
+
+do: [
+    let: b = 0 zeros-byte-array
+    assert: not (b instance?: ResizableSequence)
+    let: v = (resizable-like: b capacity: 2)
+    pretty-print: v length
+    v length: 3
+    pretty-print: v length
+    pretty-print: (v at: 0)
+    pretty-print: (v at: 1)
+    pretty-print: (v at: 2)
+    pretty-print: (v at: 4 put: 123)
+    pretty-print: v length
+    pretty-print: (v at: 0)
+    pretty-print: (v at: 1)
+    pretty-print: (v at: 2)
+    pretty-print: (v at: 3)
+    pretty-print: (v at: 4)
+]
