@@ -1,0 +1,14 @@
+# Implements the I/O backend / runtime for Linux.
+
+use: {
+    "core.io.linux.file"
+    "core.io.linux.scheduler"
+}
+
+let: setup-io-syscalls do: [
+    setup-file-syscalls
+]
+
+# setup-standard-streams is implemented in core.io.linux.file.
+# teardown-standard-streams is implemented in core.io.linux.file.
+# io-select-ready-fiber is implemented in core.io.linux.scheduler.

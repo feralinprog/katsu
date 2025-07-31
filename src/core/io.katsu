@@ -1,11 +1,15 @@
 use: {
-    "core.dynamic-variable"
+    "core.dynamic-variable" # TODO: delete, switch to per-fiber dynamic variables from core.fiber
     "core.fiber"
-    "core.io.linux.file"
-    "core.io.linux.scheduler"
     "core.io.stream"
     "core.resource"
 }
+
+# Implemented by the platform I/O runtime.
+defer: setup-io-syscalls
+defer: setup-standard-streams
+defer: teardown-standard-streams
+defer: io-select-ready-fiber
 
 let: (x with-io: f) do: [
     with-disposal: [
@@ -16,7 +20,6 @@ let: (x with-io: f) do: [
             *input-stream* with-scope: [
             *output-stream* with-scope: [
             *error-stream* with-scope: [
-                setup-standard-streams
                 f call: x
             ]]]
         ] selector: [ io-select-ready-fiber ]

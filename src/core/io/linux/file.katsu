@@ -147,7 +147,7 @@ let: ((fd: Fixnum) %write: (buf: ByteArray) count: (count: Fixnum) at: (offset: 
 ]
 
 # Must be called from within a with-disposal: block.
-let: setup-io-syscalls do: [
+let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
 
     # Prepare a libffi call interface for:
