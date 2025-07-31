@@ -169,6 +169,22 @@ namespace Katsu
         return Value::fixnum(a / b);
     }
 
+    Value native__bit_and_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a bit&: b
+        ASSERT(nargs == 2);
+        return Value::fixnum(args[0].fixnum() & args[1].fixnum());
+    }
+
+    Value native__bit_or_(VM& vm, int64_t nargs, Value* args)
+    {
+        // a bit|: b
+        ASSERT(nargs == 2);
+        return Value::fixnum(args[0].fixnum() | args[1].fixnum());
+    }
+
+    // TODO: bit-not
+
     Value native__id_eq_(VM& vm, int64_t nargs, Value* args)
     {
         // a id= b
@@ -1062,6 +1078,16 @@ namespace Katsu
                         r_default,
                         {matches_type(_Fixnum), matches_type(_Fixnum)},
                         &native__div_);
+
+        register_native("bit&:",
+                        r_default,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__bit_and_);
+        register_native("bit|:",
+                        r_default,
+                        {matches_type(_Fixnum), matches_type(_Fixnum)},
+                        &native__bit_or_);
+        // register_native("bit-not", r_default, {matches_type(_Fixnum)}, &native__bit_not);
 
         // By default, = and id= are the same.
         register_native("id=:", r_default, {matches_any, matches_any}, &native__id_eq_);

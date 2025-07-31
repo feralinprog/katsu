@@ -394,6 +394,25 @@ TEST_CASE("integration - single top level expression", "[katsu]")
                              Message("divide-by-zero: cannot divide by integer 0"));
     }
 
+    SECTION("fixnum bit&:")
+    {
+        input("5 bit&: 6");
+        check(Value::fixnum(4));
+    }
+
+    SECTION("fixnum bit|:")
+    {
+        input("3 bit|: 5");
+        check(Value::fixnum(7));
+    }
+
+    // TODO: bit-not
+    // SECTION("fixnum bit-not")
+    // {
+    //     input("0 bit-not");
+    //     check(Value::fixnum(-1));
+    // }
+
     // TODO: add id!= as an operator
     SECTION("fixnum id=: positive case")
     {

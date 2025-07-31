@@ -77,9 +77,6 @@ let: (%open: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do:
 # Default to mode = 0.
 let: (%open: (pathname: String) flags: (flags: Fixnum)) do: [ %open: pathname flags: flags mode: 0 ]
 
-# TODO: just define builtin to do this properly
-let: (a bit|: b) do: [ a + b ]
-
 # TODO: hex / octal integers
 
 # Access modes:
