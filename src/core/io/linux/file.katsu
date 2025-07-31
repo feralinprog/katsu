@@ -3,9 +3,10 @@ use: {
     "core.builtin.misc"
     "core.dynamic-variable"
     "core.ffi"
+    "core.io.linux.errno"
+    "core.io.stream"
     "core.resource"
     "core.sequence"
-    "core.io.stream"
 }
 
 data: IOError extends: { Condition } has: { errno }
