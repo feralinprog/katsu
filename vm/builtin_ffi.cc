@@ -418,9 +418,29 @@ namespace Katsu
                   {matches_any, matches_type(_Vector), matches_type(_Fixnum)},
                   &ffi__malloc_foreign_array_aligned_);
 
+        register_const("sizeof-float", Value::fixnum(sizeof(float)));
+        register_const("sizeof-double", Value::fixnum(sizeof(double)));
+        register_const("sizeof-uchar", Value::fixnum(sizeof(unsigned char)));
+        register_const("sizeof-schar", Value::fixnum(sizeof(signed char)));
+        register_const("sizeof-ushort", Value::fixnum(sizeof(unsigned short)));
+        register_const("sizeof-sshort", Value::fixnum(sizeof(short)));
+        register_const("sizeof-uint", Value::fixnum(sizeof(unsigned int)));
+        register_const("sizeof-sint", Value::fixnum(sizeof(int)));
+        register_const("sizeof-ulong", Value::fixnum(sizeof(unsigned long)));
+        register_const("sizeof-slong", Value::fixnum(sizeof(long)));
+        register_const("sizeof-longdouble", Value::fixnum(sizeof(long double)));
+        register_const("sizeof-pointer", Value::fixnum(sizeof(void*)));
+
+        register_const("sizeof-size_t", Value::fixnum(sizeof(size_t)));
+        register_const("sizeof-ssize_t", Value::fixnum(sizeof(ssize_t)));
+
         register_const("sizeof-ffi_type", Value::fixnum(sizeof(ffi_type)));
         register_const("sizeof-ffi_cif", Value::fixnum(sizeof(ffi_cif)));
         register_const("sizeof-ffi_arg", Value::fixnum(sizeof(ffi_arg)));
+        register_const("offsetof-ffi_type.size", Value::fixnum(offsetof(ffi_type, size)));
+        register_const("offsetof-ffi_type.alignment", Value::fixnum(offsetof(ffi_type, alignment)));
+        register_const("offsetof-ffi_type.type", Value::fixnum(offsetof(ffi_type, type)));
+        register_const("offsetof-ffi_type.elements", Value::fixnum(offsetof(ffi_type, elements)));
 
         // TODO: how to make this more platform-independent? (not like anything about this language
         // is platform-independent right now...)

@@ -159,11 +159,9 @@ let: setup-file-syscalls do: [
         )
     ) = ffi_status.FFI_OK
     &strerror cif: cif
-    &strerror args: {
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-    }
+    &strerror args: { (malloc: sizeof-sint) ^dispose }
     &strerror avalues: (malloc-foreign-array: &strerror .args) ^dispose
-    &strerror rvalue: (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    &strerror rvalue: (malloc: sizeof-ffi_arg) ^dispose
 
     # Prepare a libffi call interface for:
     #   const char *strerrorname_np(int errnum)
@@ -177,11 +175,9 @@ let: setup-file-syscalls do: [
         )
     ) = ffi_status.FFI_OK
     &strerrorname_np cif: cif
-    &strerrorname_np args: {
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-    }
+    &strerrorname_np args: { (malloc: sizeof-sint) ^dispose }
     &strerrorname_np avalues: (malloc-foreign-array: &strerrorname_np .args) ^dispose
-    &strerrorname_np rvalue: (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    &strerrorname_np rvalue: (malloc: sizeof-ffi_arg) ^dispose
 
     # Prepare a libffi call interface for:
     #   int close(int fd)
@@ -195,11 +191,9 @@ let: setup-file-syscalls do: [
         )
     ) = ffi_status.FFI_OK
     &close cif: cif
-    &close args: {
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-    }
+    &close args: { (malloc: sizeof-sint) ^dispose }
     &close avalues: (malloc-foreign-array: &close .args) ^dispose
-    &close rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    &close rvalue: (malloc: sizeof-ffi_arg) ^dispose
 
     # Prepare a libffi call interface for:
     #   int open(const char *pathname, int flags, [optional] mode_t mode);
@@ -215,20 +209,20 @@ let: setup-file-syscalls do: [
     ) = ffi_status.FFI_OK
     &open cif: cif
     &open args: {
-        # TODO: don't hardcode sizeof(const char*) = 8
-        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment on &? maybe need to pull this from the `cif`
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        (malloc: sizeof-pointer) ^dispose
+        (malloc: sizeof-sint) ^dispose
+        (malloc: sizeof-uint) ^dispose
     }
     &open avalues: (malloc-foreign-array: &open .args) ^dispose
-    &open rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    &open rvalue: (malloc: sizeof-ffi_arg) ^dispose
 
     # Prepare a libffi call interface for:
     #   ssize_t read(int fd, void *buf, size_t count);
     &read fn: (libc dlsym: "read")
     let: cif = (malloc: sizeof-ffi_cif) ^dispose
     assert: (
-        # TODO: don't hard-code that size_t = ulong (and ssize_t = slong)
+        assert: sizeof-size_t = sizeof-ulong
+        assert: sizeof-ssize_t = sizeof-slong
         ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
             &ffi_type_slong
         ) atypes: (
@@ -237,21 +231,20 @@ let: setup-file-syscalls do: [
     ) = ffi_status.FFI_OK
     &read cif: cif
     &read args: {
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-        # TODO: don't hardcode sizeof(void*) = 8
-        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-        # TODO: don't hard-code that size_t = unsigned long = u64
-        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        (malloc: sizeof-sint) ^dispose
+        (malloc: sizeof-pointer) ^dispose
+        (malloc: sizeof-size_t) ^dispose
     }
     &read avalues: (malloc-foreign-array: &read .args) ^dispose
-    &read rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    &read rvalue: (malloc: sizeof-ffi_arg) ^dispose
 
     # Prepare a libffi call interface for:
     #   ssize_t write(int fd, const void *buf, size_t count);
     &write fn: (libc dlsym: "write")
     let: cif = (malloc: sizeof-ffi_cif) ^dispose
     assert: (
-        # TODO: don't hard-code that size_t = ulong (and ssize_t = slong)
+        assert: sizeof-size_t = sizeof-ulong
+        assert: sizeof-ssize_t = sizeof-slong
         ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
             &ffi_type_slong
         ) atypes: (
@@ -260,14 +253,12 @@ let: setup-file-syscalls do: [
     ) = ffi_status.FFI_OK
     &write cif: cif
     &write args: {
-        (malloc: 4 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-        # TODO: don't hardcode sizeof(const void*) = 8
-        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-        # TODO: don't hard-code that size_t = unsigned long = u64
-        (malloc: 8 aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+        (malloc: sizeof-sint) ^dispose
+        (malloc: sizeof-pointer) ^dispose
+        (malloc: sizeof-size_t) ^dispose
     }
     &write avalues: (malloc-foreign-array: &write .args) ^dispose
-    &write rvalue: (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
+    &write rvalue: (malloc: sizeof-ffi_arg) ^dispose
 ]
 
 # =================================================================================================

@@ -74,8 +74,7 @@ let: ((dll: DLL) dlsym: (symbol: String)) do: [
 
 # TODO: add an operator precedence to parser once it's implemented in-language, delete the _
 let: (f: Foreign) _& do: [
-    # TODO: don't hard-code sizeof(void*) = 8
-    let: ptr = (malloc: 8)
+    let: ptr = (malloc: sizeof-pointer)
     ptr foreign-write-foreign-at-offset: 0 value: f
     ptr
 ]
