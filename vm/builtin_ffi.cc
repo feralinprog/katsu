@@ -520,6 +520,12 @@ namespace Katsu
         _register("foreign-write-u8-at-offset:value:",
                   {matches_type(_Foreign), matches_type(_Fixnum), matches_type(_Fixnum)},
                   &ffi__foreign_write_u8_at_offset_value_);
+        _register("foreign-read-u16-at-offset:",
+                  {matches_type(_Foreign), matches_type(_Fixnum)},
+                  &ffi__foreign_read_u16_at_offset_);
+        _register("foreign-write-u16-at-offset:value:",
+                  {matches_type(_Foreign), matches_type(_Fixnum), matches_type(_Fixnum)},
+                  &ffi__foreign_write_u16_at_offset_value_);
         _register("foreign-read-u32-at-offset:",
                   {matches_type(_Foreign), matches_type(_Fixnum)},
                   &ffi__foreign_read_u32_at_offset_);
@@ -538,6 +544,12 @@ namespace Katsu
         _register("foreign-write-s8-at-offset:value:",
                   {matches_type(_Foreign), matches_type(_Fixnum), matches_type(_Fixnum)},
                   &ffi__foreign_write_s8_at_offset_value_);
+        _register("foreign-read-s16-at-offset:",
+                  {matches_type(_Foreign), matches_type(_Fixnum)},
+                  &ffi__foreign_read_s16_at_offset_);
+        _register("foreign-write-s16-at-offset:value:",
+                  {matches_type(_Foreign), matches_type(_Fixnum), matches_type(_Fixnum)},
+                  &ffi__foreign_write_s16_at_offset_value_);
         _register("foreign-read-s32-at-offset:",
                   {matches_type(_Foreign), matches_type(_Fixnum)},
                   &ffi__foreign_read_s32_at_offset_);

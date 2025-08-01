@@ -16,26 +16,12 @@ data: IOError extends: { Condition } has: { errno }
 # outside, these wrapper functions will refer to uninitialized
 # or already-disposed FFI resources.
 
-data: CIFRef has: {
-    cif     # passed directly to ffi-call
-    fn      # C function pointer
-    rvalue  # passed directly to ffi-call
-    avalues # passed directly to ffi-call
-    args    # for convenience: the contents of avalues as a sequence
-}
-let: new-CIFRef do: [ CIFRef cif: #null fn: #null rvalue: #null avalues: #null args: #null ]
-# Make a libffi ffi_call(), and return the rvalue for convenience.
-let: (r: CIFRef) ffi-call do: [
-    ffi-call: r .cif fn: r .fn rvalue: r .rvalue avalues: r .avalues
-    r .rvalue
-]
-
 # TODO: most of these should be defined instead by baking in the libffi CIF, and also the malloc'ed regions
 # for args and return values.
 
 let: &strerror = new-CIFRef
 let: (errnum: Fixnum) %strerror do: [
-    (&strerror .args at: 0) foreign-write-s32-at-offset: 0 value: errnum
+    (&strerror .args at: 0) foreign-write-sint-at-offset: 0 value: errnum
     # We could handle errors here by clearing errno, calling this function, then checking errno -- but this could
     # cause an infinite loop of error handling, and this seems unlikely to fail anyway, so ignore the possibility.
     (&strerror ffi-call foreign-read-foreign-at-offset: 0) c-string>string
@@ -43,7 +29,7 @@ let: (errnum: Fixnum) %strerror do: [
 
 let: &strerrorname_np = new-CIFRef
 let: (errnum: Fixnum) %strerrorname_np do: [
-    (&strerrorname_np .args at: 0) foreign-write-s32-at-offset: 0 value: errnum
+    (&strerrorname_np .args at: 0) foreign-write-sint-at-offset: 0 value: errnum
     # We could handle errors here by clearing errno, calling this function, then checking errno -- but this could
     # cause an infinite loop of error handling, and this seems unlikely to fail anyway, so ignore the possibility.
     (&strerrorname_np ffi-call foreign-read-foreign-at-offset: 0) c-string>string
@@ -60,8 +46,8 @@ let: (syscall-result: Fixnum) %check-syscall do: [
 
 let: &close = new-CIFRef
 let: (fd: Fixnum) %close do: [
-    (&close .args at: 0) foreign-write-s32-at-offset: 0 value: fd
-    (&close ffi-call foreign-read-s32-at-offset: 0) %check-syscall
+    (&close .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&close ffi-call foreign-read-sint-at-offset: 0) %check-syscall
 ]
 
 let: &open = new-CIFRef
@@ -69,9 +55,9 @@ let: (%open: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do:
     # TODO: somehow get rid of the >c-string ^dispose pattern.
     with-disposal: [
         (&open .args at: 0) foreign-write-foreign-at-offset: 0 value: pathname >c-string ^dispose
-        (&open .args at: 1) foreign-write-s32-at-offset: 0 value: flags
-        (&open .args at: 2) foreign-write-u32-at-offset: 0 value: mode
-        (&open ffi-call foreign-read-s32-at-offset: 0) %check-syscall
+        (&open .args at: 1) foreign-write-sint-at-offset: 0 value: flags
+        (&open .args at: 2) foreign-write-uint-at-offset: 0 value: mode
+        (&open ffi-call foreign-read-sint-at-offset: 0) %check-syscall
     ]
 ]
 # Default to mode = 0.
@@ -125,140 +111,50 @@ let: O_SYNC      = 1052672 # 04010000
 
 let: &read = new-CIFRef
 let: ((fd: Fixnum) %read: (buf: ByteArray) count: (count: Fixnum) at: (offset: Fixnum)) do: [
-    (&read .args at: 0) foreign-write-s32-at-offset: 0 value: fd
-    (&read .args at: 2) foreign-write-u64-at-offset: 0 value: count
+    (&read .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&read .args at: 2) foreign-write-size_t-at-offset: 0 value: count
     # Set the `buf` arg late, since we must avoid GC moving the underlying byte array in memory.
     let: _buf = (&read .args at: 1)
     _buf foreign-write-foreign-at-offset: 0 value: (buf byte-array>foreign/offset: offset)
-    (&read ffi-call foreign-read-s64-at-offset: 0) %check-syscall
+    (&read ffi-call foreign-read-ssize_t-at-offset: 0) %check-syscall
 ]
 
 let: &write = new-CIFRef
 let: ((fd: Fixnum) %write: (buf: ByteArray) count: (count: Fixnum) at: (offset: Fixnum)) do: [
-    (&write .args at: 0) foreign-write-s32-at-offset: 0 value: fd
-    (&write .args at: 2) foreign-write-u64-at-offset: 0 value: count
+    (&write .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&write .args at: 2) foreign-write-size_t-at-offset: 0 value: count
     # Set the `buf` arg late, since we must avoid GC moving the underlying byte array in memory.
     let: _buf = (&write .args at: 1)
     _buf foreign-write-foreign-at-offset: 0 value: (buf byte-array>foreign/offset: offset)
-    (&write ffi-call foreign-read-s64-at-offset: 0) %check-syscall
+    (&write ffi-call foreign-read-ssize_t-at-offset: 0) %check-syscall
 ]
 
 # Must be called from within a with-disposal: block.
 let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
 
-    # Prepare a libffi call interface for:
-    #   const char *strerror(int errnum)
-    &strerror fn: (libc dlsym: "strerror")
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
-            &ffi_type_pointer
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_sint }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
-    &strerror cif: cif
-    &strerror args: { (malloc: sizeof-sint) ^dispose }
-    &strerror avalues: (malloc-foreign-array: &strerror .args) ^dispose
-    &strerror rvalue: (malloc: sizeof-ffi_arg) ^dispose
+    # const char *strerror(int errnum)
+    &strerror prep-ffi-call: libc symbol: "strerror" atypes: { &ffi_type_sint } rtype: &ffi_type_pointer
 
-    # Prepare a libffi call interface for:
-    #   const char *strerrorname_np(int errnum)
-    &strerrorname_np fn: (libc dlsym: "strerrorname_np")
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
-            &ffi_type_pointer
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_sint }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
-    &strerrorname_np cif: cif
-    &strerrorname_np args: { (malloc: sizeof-sint) ^dispose }
-    &strerrorname_np avalues: (malloc-foreign-array: &strerrorname_np .args) ^dispose
-    &strerrorname_np rvalue: (malloc: sizeof-ffi_arg) ^dispose
+    # const char *strerrorname_np(int errnum)
+    &strerrorname_np prep-ffi-call: libc symbol: "strerrorname_np" atypes: { &ffi_type_sint } rtype: &ffi_type_pointer
 
-    # Prepare a libffi call interface for:
-    #   int close(int fd)
-    &close fn: (libc dlsym: "close")
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
-            &ffi_type_sint
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_sint }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
-    &close cif: cif
-    &close args: { (malloc: sizeof-sint) ^dispose }
-    &close avalues: (malloc-foreign-array: &close .args) ^dispose
-    &close rvalue: (malloc: sizeof-ffi_arg) ^dispose
+    # int close(int fd)
+    &close prep-ffi-call: libc symbol: "close" atypes: { &ffi_type_sint } rtype: &ffi_type_sint
 
-    # Prepare a libffi call interface for:
-    #   int open(const char *pathname, int flags, [optional] mode_t mode);
-    #   (mode_t = unsigned int)
-    &open fn: (libc dlsym: "open")
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
-            &ffi_type_sint
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_pointer; &ffi_type_sint; &ffi_type_uint }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
-    &open cif: cif
-    &open args: {
-        (malloc: sizeof-pointer) ^dispose
-        (malloc: sizeof-sint) ^dispose
-        (malloc: sizeof-uint) ^dispose
-    }
-    &open avalues: (malloc-foreign-array: &open .args) ^dispose
-    &open rvalue: (malloc: sizeof-ffi_arg) ^dispose
+    # int open(const char *pathname, int flags, [optional] mode_t mode)
+    #   (where mode_t = unsigned int)
+    let: &mode_t = &ffi_type_uint # TODO: should be able to generate foreign read/write functions based on a typedef
+    &open prep-ffi-call: libc symbol: "open" atypes: { &ffi_type_pointer; &ffi_type_sint; &mode_t } rtype: &ffi_type_sint
 
-    # Prepare a libffi call interface for:
-    #   ssize_t read(int fd, void *buf, size_t count);
-    &read fn: (libc dlsym: "read")
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        assert: sizeof-size_t = sizeof-ulong
-        assert: sizeof-ssize_t = sizeof-slong
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
-            &ffi_type_slong
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_ulong }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
-    &read cif: cif
-    &read args: {
-        (malloc: sizeof-sint) ^dispose
-        (malloc: sizeof-pointer) ^dispose
-        (malloc: sizeof-size_t) ^dispose
-    }
-    &read avalues: (malloc-foreign-array: &read .args) ^dispose
-    &read rvalue: (malloc: sizeof-ffi_arg) ^dispose
+    # ssize_t read(int fd, void *buf, size_t count)
+    &read prep-ffi-call: libc symbol: "read" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t } rtype: &ssize_t
 
-    # Prepare a libffi call interface for:
-    #   ssize_t write(int fd, const void *buf, size_t count);
-    &write fn: (libc dlsym: "write")
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        assert: sizeof-size_t = sizeof-ulong
-        assert: sizeof-ssize_t = sizeof-slong
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 3 rtype: (
-            &ffi_type_slong
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_ulong }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
-    &write cif: cif
-    &write args: {
-        (malloc: sizeof-sint) ^dispose
-        (malloc: sizeof-pointer) ^dispose
-        (malloc: sizeof-size_t) ^dispose
-    }
-    &write avalues: (malloc-foreign-array: &write .args) ^dispose
-    &write rvalue: (malloc: sizeof-ffi_arg) ^dispose
+    # ssize_t write(int fd, const void *buf, size_t count)
+    &write prep-ffi-call: libc symbol: "write" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t } rtype: &ssize_t
+
+    # TODO: fcntl
+    # TODO: ioctl
 ]
 
 # =================================================================================================

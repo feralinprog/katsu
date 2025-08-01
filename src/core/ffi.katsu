@@ -79,6 +79,151 @@ let: (f: Foreign) _& do: [
     ptr
 ]
 
+# Convenience class which wraps allocated argument / return value space and a libffi CIF.
+data: CIFRef has: {
+    cif     # passed directly to ffi-call
+    fn      # C function pointer
+    rvalue  # passed directly to ffi-call
+    avalues # passed directly to ffi-call
+    args    # for convenience: the contents of avalues as a sequence
+}
+let: new-CIFRef do: [ CIFRef cif: #null fn: #null rvalue: #null avalues: #null args: #null ]
+# Make a libffi ffi_call(), and return the rvalue for convenience.
+let: (r: CIFRef) ffi-call do: [
+    ffi-call: r .cif fn: r .fn rvalue: r .rvalue avalues: r .avalues
+    r .rvalue
+]
+
+let: (ffi-type: Foreign) ffi_type.size do: [
+    assert: sizeof-size_t = 8
+    ffi-type foreign-read-u64-at-offset: offsetof-ffi_type.size
+]
+let: (ffi-type: Foreign) ffi_type.alignment do: [
+    assert: sizeof-ushort = 2
+    ffi-type foreign-read-u16-at-offset: offsetof-ffi_type.alignment
+]
+let: (ffi-type: Foreign) ffi_type.type do: [
+    assert: sizeof-ushort = 2
+    ffi-type foreign-read-u16-at-offset: offsetof-ffi_type.type
+]
+let: FFI_TYPE_STRUCT = 10
+let: (ffi-type: Foreign) integral? do: [
+    ffi-type ffi_type.type != FFI_TYPE_STRUCT
+]
+
+let: (ffi-type: Foreign) malloc-arg do: [
+    malloc: ffi-type ffi_type.size aligned: ffi-type ffi_type.alignment
+]
+let: (ffi-type: Foreign) malloc-ret do: [
+    # TODO: just use max function
+    mut: size = ffi-type ffi_type.size
+    if: ffi-type integral? and size < sizeof-ffi_arg then: [
+        size: sizeof-ffi_arg
+    ]
+    malloc: size aligned: ffi-type ffi_type.alignment
+]
+
+# Must be called from within a with-disposal: block.
+let: ((ref: CIFRef) prep-ffi-call: (dll: DLL) symbol: (symbol: String) abi: (abi: Fixnum) atypes: (atypes: Sequence) rtype: (rtype: Foreign)) do: [
+    ref fn: (dll dlsym: symbol)
+    let: cif = (malloc: sizeof-ffi_cif) ^dispose
+    assert: (
+        ffi-prep-cif: cif abi: abi nargs: atypes length rtype: rtype atypes: (
+            (malloc-foreign-array: atypes) ^dispose
+        )
+    ) = ffi_status.FFI_OK
+    ref cif: cif
+    ref args: (atypes map: [ malloc-arg ^dispose ] like: {})
+    ref avalues: (malloc-foreign-array: ref .args) ^dispose
+    ref rvalue: rtype malloc-ret ^dispose
+]
+let: ((ref: CIFRef) prep-ffi-call: (dll: DLL) symbol: (symbol: String) atypes: (atypes: Sequence) rtype: (rtype: Foreign)) do: [
+    ref prep-ffi-call: dll symbol: symbol abi: ffi_abi.FFI_DEFAULT_ABI atypes: atypes rtype: rtype
+]
+
+# TODO: generate these based on some sort of typedef macro
+# --------------------------------------------------------
+# typedef: uchar = u8
+assert: sizeof-uchar = 1
+let: &uchar = &ffi_type_uchar
+let: ((foreign: Foreign) foreign-read-uchar-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-u8-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-uchar-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-u8-at-offset: offset value: value
+]
+
+# typedef: schar = s8
+assert: sizeof-schar = 1
+let: &schar = &ffi_type_schar
+let: ((foreign: Foreign) foreign-read-schar-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-s8-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-schar-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-s8-at-offset: offset value: value
+]
+
+# typedef: ushort = u16
+assert: sizeof-ushort = 2
+let: &ushort = &ffi_type_ushort
+let: ((foreign: Foreign) foreign-read-ushort-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-u16-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-ushort-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-u16-at-offset: offset value: value
+]
+
+# typedef: sshort = s16
+assert: sizeof-sshort = 2
+let: &sshort = &ffi_type_sshort
+let: ((foreign: Foreign) foreign-read-sshort-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-s16-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-sshort-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-s16-at-offset: offset value: value
+]
+
+# typedef: uint = u32
+assert: sizeof-uint = 4
+let: &uint = &ffi_type_uint
+let: ((foreign: Foreign) foreign-read-uint-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-u32-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-uint-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-u32-at-offset: offset value: value
+]
+
+# typedef: sint = s32
+assert: sizeof-sint = 4
+let: &sint = &ffi_type_sint
+let: ((foreign: Foreign) foreign-read-sint-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-s32-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-sint-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-s32-at-offset: offset value: value
+]
+
+# typedef: ulong = u64
+assert: sizeof-ulong = 8
+let: &ulong = &ffi_type_ulong
+let: ((foreign: Foreign) foreign-read-ulong-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-u64-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-ulong-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-u64-at-offset: offset value: value
+]
+
+# typedef: slong = s64
+assert: sizeof-slong = 8
+let: &slong = &ffi_type_slong
+let: ((foreign: Foreign) foreign-read-slong-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-s64-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-slong-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-s64-at-offset: offset value: value
+]
+
+# typedef: size_t = unsigned long
+assert: sizeof-size_t = sizeof-ulong
+let: &size_t = &ulong
+let: ((foreign: Foreign) foreign-read-size_t-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-ulong-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-size_t-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-ulong-at-offset: offset value: value
+]
+
+# typedef: ssize_t = signed long
+assert: sizeof-ssize_t = sizeof-slong
+let: &ssize_t = &slong
+let: ((foreign: Foreign) foreign-read-ssize_t-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-slong-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-ssize_t-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-slong-at-offset: offset value: value
+]
+# --------------------------------------------------------
+
 let: to-dispose = {}
 let: (f: Disposable) dispose-on-cleanup do: [
     to-dispose append: f
