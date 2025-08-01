@@ -6,30 +6,19 @@ use: {
 }
 
 with-disposal: [
-    # Load DLL and find symbol:
+    # Load DLL:
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
-    let: &puts = (libc dlsym: "puts")
 
     # Prepare a libffi call interface for:
     #   int puts(const char*)
-    let: cif = (malloc: sizeof-ffi_cif) ^dispose
-    assert: (
-        ffi-prep-cif: cif abi: ffi_abi.FFI_DEFAULT_ABI nargs: 1 rtype: (
-            &ffi_type_sint
-        ) atypes: (
-            (malloc-foreign-array: { &ffi_type_pointer }) ^dispose
-        )
-    ) = ffi_status.FFI_OK
+    let: &puts = new-CIFRef
+    &puts prep-ffi-call: libc symbol: "puts" atypes: { &ffi_type_pointer } rtype: &ffi_type_sint
 
     let: s = "hello, world! -sent from my FFI"
 
     # Call 'puts' and decode the result.
-    let: rvalue = (malloc: sizeof-ffi_arg aligned: 4) ^dispose # TODO: correct alignment? maybe need to pull this from the `cif`
-    ffi-call: cif fn: &puts rvalue: rvalue avalues: (malloc-foreign-array: {
-        s >c-string ^dispose _& ^dispose # TODO: correct alignment on &? maybe need to pull this from the `cif`
-    }) ^dispose
-    let: result = (rvalue foreign-read-s32-at-offset: 0)
-
+    (&puts .args at: 0) foreign-write-foreign-at-offset: 0 value: s >c-string ^dispose
+    let: result = (&puts ffi-call foreign-read-sint-at-offset: 0)
     assert: result = (s length + 1)
 ]
 
