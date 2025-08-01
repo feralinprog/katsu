@@ -135,6 +135,9 @@ cd
     2 = null
     3 = null
 ]
+*string: "abcdefghi"
+fixnum 10
+fixnum 30
 *vector: length=3 [
   v_array = *array: length=4
     0 = fixnum 2

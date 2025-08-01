@@ -115,11 +115,13 @@ let: (ffi-type: Foreign) malloc-arg do: [
     malloc: ffi-type ffi_type.size aligned: ffi-type ffi_type.alignment
 ]
 let: (ffi-type: Foreign) malloc-ret do: [
-    # TODO: just use max function
-    mut: size = ffi-type ffi_type.size
-    if: ffi-type integral? and size < sizeof-ffi_arg then: [
-        size: sizeof-ffi_arg
-    ]
+    let: size = (
+        if: ffi-type integral? then: [
+            { ffi-type ffi_type.size; sizeof-ffi_arg } max
+        ] else: [
+            ffi-type ffi_type.size
+        ]
+    )
     malloc: size aligned: ffi-type ffi_type.alignment
 ]
 

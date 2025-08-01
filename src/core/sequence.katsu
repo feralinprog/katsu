@@ -214,6 +214,25 @@ let: ((seq: Sequence) keep: good?) do: [
     seq keep: good? like: seq
 ]
 
+let: ((seq: Sequence) reduce: accumulate initial: initial-value) do: [
+    mut: reduced = initial-value
+    seq each: [ reduced: (accumulate call*: reduced, it) ]
+    reduced
+]
+let: ((seq: Sequence) reduce: accumulate) do: [
+    assert: seq length > 0
+    mut: reduced = (seq at: 0)
+    (seq from: 1 to<: seq length) each: [ reduced: (accumulate call*: reduced, it) ]
+    reduced
+]
+
+let: ((seq: Sequence) max) do: [
+    seq reduce: \a b [ if: a >= b then: [ a ] else: [ b ] ]
+]
+let: ((seq: Sequence) min) do: [
+    seq reduce: \a b [ if: a <= b then: [ a ] else: [ b ] ]
+]
+
 let: ((seq: ResizableSequence) keep!: good?) do: [
     mut: dst = 0
     seq each: [

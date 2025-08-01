@@ -99,6 +99,12 @@ do: [
 pretty-print: ({ "abcd"; "abcde" } map: [ length ] like: {} vector>array)
 
 pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } keep: [ length > 3 ])
+
+pretty-print: ({ "abc"; "def"; "ghi" } reduce: \a b [ a ~ b ] initial: "")
+
+pretty-print: { 10; 30; 20 } min
+pretty-print: { 10; 30; 20 } max
+
 do: [
     let: v = { 1; 2; 3; 4 }
     v remove-first
