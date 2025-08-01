@@ -142,6 +142,7 @@ let: ((ref: CIFRef) prep-ffi-call: (dll: DLL) symbol: (symbol: String) atypes: (
 ]
 
 # TODO: generate these based on some sort of typedef macro
+# (and also this is platform-specific)
 # --------------------------------------------------------
 # typedef: uchar = u8
 assert: sizeof-uchar = 1
