@@ -1192,6 +1192,14 @@ namespace Katsu
             LookupResult lookup = lookup_name(*r_module, *r_imports, *r_name, &existing);
             if (lookup == SUCCESS) {
                 if (existing.is_obj_multimethod()) {
+                    // Ensure that the multimethod definition is added to the module (effectively a
+                    // reexport, in this case).
+                    if (!assoc_lookup(*r_module, *r_name)) {
+                        ValueRoot r_existing(gc, std::move(existing));
+                        ValueRoot r_key(gc, r_name.value());
+                        append(gc, r_module, r_key, r_existing);
+                        existing = *r_existing;
+                    }
                     return existing.obj_multimethod();
                 } else {
                     std::stringstream ss;
