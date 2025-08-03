@@ -34,7 +34,7 @@ with-io: [
     write-from: ("abcde" ~ nl) string>byte-array
 
     print: "writing to stderr:"
-    with-output-stream: *error-stream* get do: [
+    with-output-stream*: *error-stream* get do: [
         write-from: ("fake-err" ~ nl) string>byte-array
     ]
 ]

@@ -159,18 +159,34 @@ let: setup-file-syscalls do: [
 
 # =================================================================================================
 
-data: FileHandle extends: { Disposable } has: { fd }
+data: FileHandle extends: { Disposable } has: { fd; refcnt }
 data: AutoCloseFileHandle extends: { FileHandle } has: {}
 
-let: (handle: FileHandle) dispose do: [ handle fd: #null ]
+let: (handle: FileHandle) dispose do: [
+    assert: handle .refcnt = 0
+    handle fd: #null
+    handle refcnt: #null
+]
 let: (handle: AutoCloseFileHandle) dispose do: [
+    assert: handle .refcnt = 0
     handle .fd %close
     handle fd: #null
+    handle refcnt: #null
+]
+
+let: (handle: FileHandle) add-ref do: [
+    handle refcnt: handle .refcnt + 1
+    handle
+]
+let: (handle: FileHandle) remove-ref do: [
+    assert: handle .refcnt > 0
+    handle refcnt: handle .refcnt - 1
+    if: handle .refcnt = 0 then: [ handle dispose ]
 ]
 
 # Result must be disposed later.
 let: (open-handle: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do: [
-    AutoCloseFileHandle fd: (%open: pathname flags: flags mode: mode)
+    AutoCloseFileHandle fd: (%open: pathname flags: flags mode: mode) refcnt: 0
 ]
 
 let: ((handle: FileHandle) read: (count: Fixnum) into: (buf: ByteArray)) do: [
@@ -191,7 +207,9 @@ let: ((handle: FileHandle) write: (count: Fixnum) from: (buf: ByteArray)) do: [
 
 data: FileStream extends: { Disposable } has: { handle; eof? }
 let: (stream: FileStream) dispose do: [
-    # Don't dispose the handle. (TODO: how to handle (heh) this...)
+    # Check if already disposed.
+    assert: stream .handle != #null
+    stream .handle remove-ref
     stream handle: #null
 ]
 
@@ -210,17 +228,17 @@ data: NonBlockingFileOutputStream extends: { FileStream; OutputStream } has: {}
 data: BlockingFileOutputStream extends: { FileStream; OutputStream } has: {}
 
 let: (open-input: (pathname: String)) do: [
-    NonBlockingFileInputStream handle: (open-handle: pathname flags: (O_RDONLY bit|: O_NONBLOCK) mode: 0) eof?: #f
+    NonBlockingFileInputStream handle: (open-handle: pathname flags: (O_RDONLY bit|: O_NONBLOCK) mode: 0) add-ref eof?: #f
 ]
 let: (open-input/blocking: (pathname: String)) do: [
-    BlockingFileInputStream handle: (open-handle: pathname flags: O_RDONLY mode: 0) eof?: #f
+    BlockingFileInputStream handle: (open-handle: pathname flags: O_RDONLY mode: 0) add-ref eof?: #f
 ]
 
 let: (open-output: (pathname: String)) do: [
-    NonBlockingFileOutputStream handle: (open-handle: pathname flags: (O_WRONLY bit|: O_NONBLOCK) mode: 0) eof?: #f
+    NonBlockingFileOutputStream handle: (open-handle: pathname flags: (O_WRONLY bit|: O_NONBLOCK) mode: 0) add-ref eof?: #f
 ]
 let: (open-output/blocking: (pathname: String)) do: [
-    BlockingFileOutputStream handle: (open-handle: pathname flags: O_WRONLY mode: 0) eof?: #f
+    BlockingFileOutputStream handle: (open-handle: pathname flags: O_WRONLY mode: 0) add-ref eof?: #f
 ]
 
 let: (s: NonBlockingFileInputStream) end-of-stream? do: [ s .eof? ]
@@ -263,15 +281,15 @@ let: ((s: BlockingFileOutputStream) stream-write: (count: Fixnum) from: (buf: Mu
 
 let: make-input-stream do: [
     # TODO: nonblocking
-    BlockingFileInputStream handle: (FileHandle fd: 0) eof?: #f
+    BlockingFileInputStream handle: (FileHandle fd: 0 refcnt: 0) add-ref eof?: #f
 ]
 let: make-output-stream do: [
     # TODO: nonblocking
-    BlockingFileOutputStream handle: (FileHandle fd: 1) eof?: #f
+    BlockingFileOutputStream handle: (FileHandle fd: 1 refcnt: 0) add-ref eof?: #f
 ]
 let: make-error-stream do: [
     # TODO: nonblocking
-    BlockingFileOutputStream handle: (FileHandle fd: 2) eof?: #f
+    BlockingFileOutputStream handle: (FileHandle fd: 2 refcnt: 0) add-ref eof?: #f
 ]
 
 let: setup-standard-streams do: [

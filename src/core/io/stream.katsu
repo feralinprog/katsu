@@ -130,14 +130,25 @@ let: *input-stream* = (make-dynamic: "input-stream")
 let: *output-stream* = (make-dynamic: "output-stream")
 let: *error-stream* = (make-dynamic: "error-stream")
 
-let: (_it with-input-stream: stream do: body) do: [
+# Do not dispose the stream afterwards.
+let: (_it with-input-stream*: stream do: body) do: [
     *input-stream* with-value: stream do: [ body call: _it ]
 ]
-let: (_it with-output-stream: stream do: body) do: [
+let: (_it with-output-stream*: stream do: body) do: [
     *output-stream* with-value: stream do: [ body call: _it ]
 ]
-let: (_it with-error-stream: stream do: body) do: [
+let: (_it with-error-stream*: stream do: body) do: [
     *error-stream* with-value: stream do: [ body call: _it ]
+]
+# Dispose the stream afterwards.
+let: (_it with-input-stream: stream do: body) do: [
+    with-disposal: [ stream ^dispose; _it with-input-stream*: stream do: body ]
+]
+let: (_it with-output-stream: stream do: body) do: [
+    with-disposal: [ stream ^dispose; _it with-output-stream*: stream do: body ]
+]
+let: (_it with-error-stream: stream do: body) do: [
+    with-disposal: [ stream ^dispose; _it with-error-stream*: stream do: body ]
 ]
 
 # Variants of the stream-read* / stream-write* methods above which work on the dynamic input/output streams:
