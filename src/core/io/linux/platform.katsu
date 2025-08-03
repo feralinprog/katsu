@@ -3,10 +3,12 @@
 use: {
     "core.io.linux.file"
     "core.io.linux.scheduler"
+    "core.io.linux.socket"
 }
 
 let: setup-io-syscalls do: [
     setup-file-syscalls
+    setup-socket-syscalls
 ]
 
 # setup-standard-streams is implemented in core.io.linux.file.

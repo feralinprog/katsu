@@ -1,1 +1,509 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+    "core.condition"
+    "core.ffi"
+    "core.resource"
+    "core.sequence"
+    "core.sequence.vector"
+}
+
+# TODO: refactor -- this is just needed for %check-syscall, really
+use: "core.io.linux.file"
+
+# typedef: socklen_t = u32
+# TODO: do this with macro instead
+let: ((foreign: Foreign) foreign-read-socklen_t-at-offset: (offset: Fixnum)) do: [ foreign foreign-read-u32-at-offset: offset ]
+let: ((foreign: Foreign) foreign-write-socklen_t-at-offset: (offset: Fixnum) value: (value: Fixnum)) do: [
+    foreign foreign-write-u32-at-offset: offset value: value
+]
+
+let: &socket = new-CIFRef
+let: (%socket: (domain: Fixnum) type: (type: Fixnum) protocol: (protocol: Fixnum)) do: [
+    (&socket .args at: 0) foreign-write-sint-at-offset: 0 value: domain
+    (&socket .args at: 1) foreign-write-sint-at-offset: 0 value: type
+    (&socket .args at: 2) foreign-write-sint-at-offset: 0 value: protocol
+    (&socket ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+# Domains:
+let: AF_UNSPEC = 0
+let: AF_LOCAL = 1
+let: AF_UNIX = AF_LOCAL
+let: AF_INET = 2
+let: AF_INET6 = 10
+# TODO: define other address families
+
+# Types:
+let: SOCK_STREAM = 1
+let: SOCK_DGRAM = 2
+let: SOCK_RAW = 3
+let: SOCK_RDM = 4
+let: SOCK_SEQPACKET = 5
+let: SOCK_DCCP = 6
+let: SOCK_PACKET = 10
+
+# Extra ORed flags for `type`:
+# TODO: octal literals
+let: SOCK_NONBLOCK = 2048 # 00004000
+let: SOCK_CLOEXEC = 524288 # 02000000
+
+# Protocols:
+let: IPPROTO_IP = 0         # Dummy protocol for TCP.
+let: IPPROTO_ICMP = 1       # Internet Control Message Protocol.
+let: IPPROTO_IGMP = 2       # Internet Group Management Protocol.
+let: IPPROTO_IPIP = 4       # IPIP tunnels (older KA9Q tunnels use 94).
+let: IPPROTO_TCP = 6        # Transmission Control Protocol.
+let: IPPROTO_EGP = 8        # Exterior Gateway Protocol.
+let: IPPROTO_PUP = 12       # PUP protocol.
+let: IPPROTO_UDP = 17       # User Datagram Protocol.
+let: IPPROTO_IDP = 22       # XNS IDP protocol.
+let: IPPROTO_TP = 29        # SO Transport Protocol Class 4.
+let: IPPROTO_DCCP = 33      # Datagram Congestion Control Protocol.
+let: IPPROTO_IPV6 = 41      # IPv6 header.
+let: IPPROTO_RSVP = 46      # Reservation Protocol.
+let: IPPROTO_GRE = 47       # General Routing Encapsulation.
+let: IPPROTO_ESP = 50       # encapsulating security payload.
+let: IPPROTO_AH = 51        # authentication header.
+let: IPPROTO_MTP = 92       # Multicast Transport Protocol.
+let: IPPROTO_BEETPH = 94    # IP option pseudo header for BEET.
+let: IPPROTO_ENCAP = 98     # Encapsulation Header.
+let: IPPROTO_PIM = 103      # Protocol Independent Multicast.
+let: IPPROTO_COMP = 108     # Compression Header Protocol.
+let: IPPROTO_SCTP = 132     # Stream Control Transmission Protocol.
+let: IPPROTO_UDPLITE = 136  # UDP-Lite protocol.
+let: IPPROTO_MPLS = 137     # MPLS in IP.
+let: IPPROTO_ETHERNET = 143 # Ethernet-within-IPv6 Encapsulation.
+let: IPPROTO_RAW = 255      # Raw IP packets.
+let: IPPROTO_MPTCP = 262    # Multipath TCP connection.
+
+let: &accept4 = new-CIFRef
+let: ((sockfd: Fixnum) accept4: (addr: Foreign) addrlen: (addrlen: Foreign) flags: (flags: Fixnum)) do: [
+    (&accept4 .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&accept4 .args at: 1) foreign-write-foreign-at-offset: 0 value: addr
+    (&accept4 .args at: 2) foreign-write-foreign-at-offset: 0 value: addrlen
+    (&accept4 .args at: 3) foreign-write-sint-at-offset: 0 value: flags
+    (&accept4 ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+let: ((sockfd: Fixnum) %accept: (addr: Foreign) addrlen: (addrlen: Foreign)) do: [
+    sockfd accept4: addr addrlen: addrlen flags: 0
+]
+
+let: &bind = new-CIFRef
+let: ((sockfd: Fixnum) %bind: (addr: Foreign) addrlen: (addrlen: Fixnum)) do: [
+    (&bind .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&bind .args at: 1) foreign-write-foreign-at-offset: 0 value: addr
+    (&bind .args at: 2) foreign-write-socklen_t-at-offset: 0 value: addrlen
+    (&bind ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+
+let: &connect = new-CIFRef
+let: ((sockfd: Fixnum) %connect: (addr: Foreign) addrlen: (addrlen: Fixnum)) do: [
+    (&connect .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&connect .args at: 1) foreign-write-foreign-at-offset: 0 value: addr
+    (&connect .args at: 2) foreign-write-socklen_t-at-offset: 0 value: addrlen
+    (&connect ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+
+let: &getpeername = new-CIFRef
+let: ((sockfd: Fixnum) %getpeername: (addr: Foreign) addrlen: (addrlen: Foreign)) do: [
+    (&getpeername .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&getpeername .args at: 1) foreign-write-foreign-at-offset: 0 value: addr
+    (&getpeername .args at: 2) foreign-write-foreign-at-offset: 0 value: addrlen
+    (&getpeername ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+
+let: &getsockname = new-CIFRef
+let: ((sockfd: Fixnum) %getsockname: (addr: Foreign) addrlen: (addrlen: Foreign)) do: [
+    (&getsockname .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&getsockname .args at: 1) foreign-write-foreign-at-offset: 0 value: addr
+    (&getsockname .args at: 2) foreign-write-foreign-at-offset: 0 value: addrlen
+    (&getsockname ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+
+let: SOL_SOCKET = 1
+
+let: SO_DEBUG = 1
+let: SO_REUSEADDR = 2
+let: SO_TYPE = 3
+let: SO_ERROR = 4
+let: SO_DONTROUTE = 5
+let: SO_BROADCAST = 6
+let: SO_SNDBUF = 7
+let: SO_RCVBUF = 8
+let: SO_KEEPALIVE = 9
+let: SO_OOBINLINE = 10
+let: SO_NO_CHECK = 11
+let: SO_PRIORITY = 12
+let: SO_LINGER = 13
+let: SO_BSDCOMPAT = 14
+let: SO_REUSEPORT = 15
+let: SO_PASSCRED = 16
+let: SO_PEERCRED = 17
+let: SO_RCVLOWAT = 18
+let: SO_SNDLOWAT = 19
+let: SO_RCVTIMEO = 20
+let: SO_SNDTIMEO = 21
+let: SO_BINDTODEVICE = 25
+let: SO_ATTACH_FILTER = 26
+let: SO_DETACH_FILTER = 27
+let: SO_DETACH_BPF = SO_DETACH_FILTER
+let: SO_PEERNAME = 28
+let: SO_TIMESTAMP = 29
+let: SO_ACCEPTCONN = 30
+let: SO_PEERSEC = 31
+let: SO_SNDBUFFORCE = 32
+let: SO_RCVBUFFORCE = 33
+let: SO_PASSSEC = 34
+let: SO_TIMESTAMPNS = 35
+let: SO_MARK = 36
+let: SO_TIMESTAMPING = 37
+let: SO_PROTOCOL = 38
+let: SO_DOMAIN = 39
+let: SO_RXQ_OVFL = 40
+let: SO_WIFI_STATUS = 41
+let: SO_PEEK_OFF = 42
+let: SO_NOFCS = 43
+let: SO_LOCK_FILTER = 44
+let: SO_SELECT_ERR_QUEUE = 45
+let: SO_BUSY_POLL = 46
+let: SO_MAX_PACING_RATE = 47
+let: SO_BPF_EXTENSIONS = 48
+let: SO_INCOMING_CPU = 49
+let: SO_ATTACH_BPF = 50
+let: SO_ATTACH_REUSEPORT_CBPF = 51
+let: SO_ATTACH_REUSEPORT_EBPF = 52
+let: SO_CNX_ADVICE = 53
+let: SCM_TIMESTAMPING_OPT_STATS = 54
+let: SO_MEMINFO = 55
+let: SO_INCOMING_NAPI_ID = 56
+let: SO_COOKIE = 57
+let: SCM_TIMESTAMPING_PKTINFO = 58
+let: SO_PEERGROUPS = 59
+let: SO_ZEROCOPY = 60
+let: SO_TXTIME = 61
+let: SCM_TXTIME = SO_TXTIME
+let: SO_BINDTOIFINDEX = 62
+let: SO_TIMESTAMP_NEW = 63
+let: SO_TIMESTAMPNS_NEW = 64
+let: SO_TIMESTAMPING_NEW = 65
+let: SO_RCVTIMEO_NEW = 66
+let: SO_SNDTIMEO_NEW = 67
+let: SO_DETACH_REUSEPORT_BPF = 68
+let: SO_PREFER_BUSY_POLL = 69
+let: SO_BUSY_POLL_BUDGET = 70
+let: SO_NETNS_COOKIE = 71
+let: SO_BUF_LOCK = 72
+let: SO_RESERVE_MEM = 73
+let: SO_TXREHASH = 74
+let: SO_RCVMARK = 75
+
+let: &getsockopt = new-CIFRef
+let: ((sockfd: Fixnum) %getsockopt: (level: Fixnum) optname: (optname: Fixnum) optval: (optval: Foreign) optlen: (optlen: Foreign)) do: [
+    (&getsockopt .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&getsockopt .args at: 1) foreign-write-sint-at-offset: 0 value: level
+    (&getsockopt .args at: 2) foreign-write-sint-at-offset: 0 value: optname
+    (&getsockopt .args at: 3) foreign-write-foreign-at-offset: 0 value: optval
+    (&getsockopt .args at: 4) foreign-write-foreign-at-offset: 0 value: optlen
+    # Custom netfilters can provide nonstandard return values, so just provide the syscall result
+    # instead of #null.
+    (&getsockopt ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+let: &setsockopt = new-CIFRef
+let: ((sockfd: Fixnum) %setsockopt: (level: Fixnum) optname: (optname: Fixnum) optval: (optval: Foreign) optlen: (optlen: Fixnum)) do: [
+    (&setsockopt .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&setsockopt .args at: 1) foreign-write-sint-at-offset: 0 value: level
+    (&setsockopt .args at: 2) foreign-write-sint-at-offset: 0 value: optname
+    (&setsockopt .args at: 3) foreign-write-foreign-at-offset: 0 value: optval
+    (&setsockopt .args at: 4) foreign-write-socklen_t-at-offset: 0 value: optlen
+    # Custom netfilters can provide nonstandard return values, so just provide the syscall result
+    # instead of #null.
+    (&setsockopt ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+let: &listen = new-CIFRef
+let: ((sockfd: Fixnum) %listen: (backlog: Fixnum)) do: [
+    (&listen .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&listen .args at: 1) foreign-write-sint-at-offset: 0 value: backlog
+    (&listen ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+
+let: &recv = new-CIFRef
 # TODO
+
+let: &recvfrom = new-CIFRef
+# TODO
+
+let: &recvmsg = new-CIFRef
+# TODO
+
+let: &send = new-CIFRef
+# TODO
+
+let: &sendto = new-CIFRef
+# TODO
+
+let: &sendmsg = new-CIFRef
+# TODO
+
+let: &shutdown = new-CIFRef
+let: ((sockfd: Fixnum) %shutdown: (how: Fixnum)) do: [
+    (&shutdown .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
+    (&shutdown .args at: 1) foreign-write-sint-at-offset: 0 value: how
+    (&shutdown ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+let: SHUT_RD = 0
+let: SHUT_WR = 1
+let: SHUT_RDWR = 2
+
+let: &htonl = new-CIFRef
+let: (hostlong: Fixnum) %htonl do: [
+    (&htonl .args at: 0) foreign-write-u32-at-offset: 0 value: hostlong
+    &htonl ffi-call foreign-read-u32-at-offset: 0
+]
+
+let: &htons = new-CIFRef
+let: (hostshort: Fixnum) %htons do: [
+    (&htons .args at: 0) foreign-write-u16-at-offset: 0 value: hostshort
+    &htons ffi-call foreign-read-u16-at-offset: 0
+]
+
+let: &ntohl = new-CIFRef
+let: (netlong: Fixnum) %ntohl do: [
+    (&ntohl .args at: 0) foreign-write-u32-at-offset: 0 value: netlong
+    &ntohl ffi-call foreign-read-u32-at-offset: 0
+]
+
+let: &ntohs = new-CIFRef
+let: (netshort: Fixnum) %ntohs do: [
+    (&ntohs .args at: 0) foreign-write-u16-at-offset: 0 value: netshort
+    &ntohs ffi-call foreign-read-u16-at-offset: 0
+]
+
+let: &inet_pton = new-CIFRef
+let: ((af: Fixnum) %inet_pton: (src: Foreign) dst: (dst: Foreign)) do: [
+    (&inet_pton .args at: 0) foreign-write-sint-at-offset: 0 value: af
+    (&inet_pton .args at: 1) foreign-write-foreign-at-offset: 0 value: src
+    (&inet_pton .args at: 2) foreign-write-foreign-at-offset: 0 value: dst
+    # Not actually a syscall, but it conforms to the usual protocol where a retval of -1
+    # indicates that an issue has occured (and been noted in errno).
+    # Return value of 1 indicates success, and 0 is failure.
+    (&inet_pton ffi-call foreign-read-sint-at-offset: 0) %check-syscall = 1
+]
+
+let: (src: String) >in_addr do: [
+    with-disposal: [
+        let: &in_addr = (malloc: 4) ^dispose
+        let: converted = (AF_INET %inet_pton: src >c-string ^dispose dst: &in_addr)
+        if: not converted then: [
+            (invalid-argument: "could not convert IPv4 address: " ~ src) signal
+        ]
+        &in_addr >byte-array/length: 4
+    ]
+]
+let: (src: String) >in6_addr do: [
+    with-disposal: [
+        let: &in6_addr = (malloc: 16) ^dispose
+        let: converted = (AF_INET6 %inet_pton: src >c-string ^dispose dst: &in6_addr)
+        if: not converted then: [
+            (invalid-argument: "could not convert IPv6 address: " ~ src) signal
+        ]
+        &in6_addr >byte-array/length: 16
+    ]
+]
+
+# C struct definitions:
+# -----------------------------
+# typedef: sa_family_t = ushort
+# struct sockaddr {
+#     sa_family_t sa_family;
+#     char sa_data[14];
+# };
+# struct sockaddr_storage {
+#     sa_family_t ss_family;
+#     char __ss_padding[128 - sizeof(sa_family_t) - sizeof(unsigned long int)];
+#     unsigned long int __ss_align;
+# };
+# typedef: socklen_t = u32
+
+# Internet domain sockets:
+# typedef: in_addr_t = u32
+# typedef: in_port_t = u16
+# struct sockaddr_in {
+#     sa_family_t sin_family;
+#     in_port_t sin_port;
+#     struct in_addr sin_addr;
+# };
+# struct sockaddr_in6 {
+#     sa_family_t sin6_family;
+#     in_port_t sin6_port;
+#     uint32_t sin6_flowinfo;
+#     struct in6_addr sin6_addr;
+#     uint32_t sin6_scope_id;
+# };
+# struct in_addr {
+#     in_addr_t s_addr;
+# };
+# struct in6_addr {
+#     uint8_t s6_addr[16];
+# };
+
+# UNIX domain sockets:
+# struct sockaddr_un {
+#     sa_family_t sun_family;
+#     char sun_path[108];
+# };
+
+# Send/receive:
+# struct msghdr {
+#     void         *msg_name;
+#     socklen_t     msg_namelen;
+#     struct iovec *msg_iov;
+#     size_t        msg_iovlen;
+#     void         *msg_control;
+#     size_t        msg_controllen;
+#     int           msg_flags;
+# };
+
+# TODO: typedef macro
+let: &socklen_t = &ffi_type_uint32
+let: c-socklen_t = ("socklen_t" integral-type: &socklen_t)
+
+let: c-sa_family_t = ("s_family_t" integral-type: &ffi_type_ushort)
+let: c-sockaddr = ("sockaddr" struct-type: {
+    "sa_family" struct-field: c-sa_family_t
+    "sa_data" struct-field: (array-type: c-schar length: 14)
+})
+let: c-sockaddr_storage = ("sockaddr_storage" struct-type: {
+    "ss_family" struct-field: c-sa_family_t
+    "__ss_padding" struct-field: (array-type: c-schar length: 128 - c-sa_family_t .size - c-ulong .size)
+    "__ss_align" struct-field: c-ulong
+})
+
+let: c-in_addr_t = ("in_addr_t" integral-type: &ffi_type_uint32)
+let: c-in_port_t = ("in_port_t" integral-type: &ffi_type_uint16)
+let: c-in_addr = ("in_addr" struct-type: {
+    "s_addr" struct-field: c-in_addr_t
+})
+let: c-sockaddr_in = ("sockaddr_in" struct-type: {
+    "sin_family" struct-field: c-sa_family_t
+    "sin_port" struct-field: c-in_port_t
+    "sin_addr" struct-field: c-in_addr
+})
+let: c-in6_addr = ("in_addr6" struct-type: {
+    "s_addr" struct-field: (array-type: c-uint8 length: 16)
+})
+let: c-sockaddr_in6 = ("sockaddr_in6" struct-type: {
+    "sin6_family" struct-field: c-sa_family_t
+    "sin6_port" struct-field: c-in_port_t
+    "sin6_flowinfo" struct-field: c-uint32
+    "sin6_addr" struct-field: c-in6_addr
+    "sin6_scopeid" struct-field: c-uint32
+})
+
+let: c-sockaddr_un = ("sockaddr_un" struct-type: {
+    "sun_family" struct-field: c-sa_family_t
+    "sun_path" struct-field: (array-type: c-schar length: 108)
+})
+
+let: c-msghdr = ("msghdr" struct-type: {
+    "msg_name" struct-field: ("void*" integral-type: &ffi_type_pointer)
+    "msg_namelen" struct-field: c-socklen_t
+    "msg_iov" struct-field: ("struct iovec*" integral-type: &ffi_type_pointer)
+    "msg_iovlen" struct-field: c-size_t
+    "msg_control" struct-field: ("void*" integral-type: &ffi_type_pointer)
+    "msg_controllen" struct-field: c-size_t
+    "msg_flags" struct-field: c-sint
+})
+
+# -----------------------------
+
+# Must be called from within a with-disposal: block.
+let: setup-socket-syscalls do: [
+    let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
+
+    # int socket(int domain, int type, int protocol)
+    &socket prep-ffi-call: libc symbol: "socket" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
+
+    # int accept4(int sockfd, struct sockaddr *addr, socklen_t *addrlen, int flags);
+    &accept4 prep-ffi-call: libc symbol: "accept4" atypes: {
+        &ffi_type_sint; &ffi_type_pointer; &ffi_type_pointer; &ffi_type_sint
+    } rtype: &ffi_type_sint
+
+    # int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+    &bind prep-ffi-call: libc symbol: "bind" atypes: { &ffi_type_sint; &ffi_type_pointer; &socklen_t } rtype: &ffi_type_sint
+
+    # int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+    &connect prep-ffi-call: libc symbol: "connect" atypes: { &ffi_type_sint; &ffi_type_pointer; &socklen_t } rtype: &ffi_type_sint
+
+    # int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+    &getpeername prep-ffi-call: libc symbol: "getpeername" atypes: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_pointer } rtype: &ffi_type_sint
+
+    # int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+    &getsockname prep-ffi-call: libc symbol: "getsockname" atypes: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_pointer } rtype: &ffi_type_sint
+
+    # int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen);
+    &getsockopt prep-ffi-call: libc symbol: "getsockopt" atypes: {
+        &ffi_type_sint; &ffi_type_sint; &ffi_type_sint; &ffi_type_pointer; &ffi_type_pointer
+    } rtype: &ffi_type_sint
+
+    # int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
+    &setsockopt prep-ffi-call: libc symbol: "setsockopt" atypes: {
+        &ffi_type_sint; &ffi_type_sint; &ffi_type_sint; &ffi_type_pointer; &socklen_t
+    } rtype: &ffi_type_sint
+
+    # int listen(int sockfd, int backlog);
+    &listen prep-ffi-call: libc symbol: "listen" atypes: { &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
+
+    # ssize_t recv(int sockfd, void *buf, size_t size, int flags);
+    &recv prep-ffi-call: libc symbol: "recv" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t; &ffi_type_sint } rtype: &ssize_t
+
+    # ssize_t recvfrom(int sockfd, void *buf, size_t size, int flags, struct sockaddr *src_addr, socklen_t *addrlen);
+    &recvfrom prep-ffi-call: libc symbol: "recvfrom" atypes: {
+        &ffi_type_sint; &ffi_type_pointer; &size_t; &ffi_type_sint; &ffi_type_pointer; &ffi_type_pointer
+    } rtype: &ssize_t
+
+    # ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
+    &recvmsg prep-ffi-call: libc symbol: "recvmsg" atypes: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_sint } rtype: &ssize_t
+
+    # ssize_t send(int sockfd, const void *buf, size_t size, int flags);
+    &send prep-ffi-call: libc symbol: "send" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t; &ffi_type_sint } rtype: &ssize_t
+
+    # ssize_t sendto(int sockfd, const void *buf, size_t size, int flags, const struct sockaddr *dest_addr, socklen_t addrlen);
+    &sendto prep-ffi-call: libc symbol: "sendto" atypes: {
+        &ffi_type_sint; &ffi_type_pointer; &size_t; &ffi_type_sint; &ffi_type_pointer; &socklen_t
+    } rtype: &ssize_t
+
+    # ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags);
+    &sendmsg prep-ffi-call: libc symbol: "sendmsg" atypes: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_sint } rtype: &ssize_t
+
+    # int shutdown(int sockfd, int how);
+    &shutdown prep-ffi-call: libc symbol: "shutdown" atypes: { &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
+
+    # uint32_t htonl(uint32_t hostlong);
+    &htonl prep-ffi-call: libc symbol: "htonl" atypes: { &ffi_type_uint32 } rtype: &ffi_type_uint32
+
+    # uint16_t htons(uint16_t hostshort);
+    &htons prep-ffi-call: libc symbol: "htons" atypes: { &ffi_type_uint16 } rtype: &ffi_type_uint16
+
+    # uint32_t ntohl(uint32_t netlong);
+    &ntohl prep-ffi-call: libc symbol: "ntohl" atypes: { &ffi_type_uint32 } rtype: &ffi_type_uint32
+
+    # uint16_t ntohs(uint16_t netshort);
+    &ntohs prep-ffi-call: libc symbol: "ntohs" atypes: { &ffi_type_uint16 } rtype: &ffi_type_uint16
+
+    # int inet_pton(int af, const char *restrict src, void *restrict dst);
+    &inet_pton prep-ffi-call: libc symbol: "inet_pton" atypes: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_pointer } rtype: &ffi_type_sint
+
+    # TODO: getaddrinfo
+    # TODO: getnameinfo
+
+    # TODO: socketpair (eventually)
+]

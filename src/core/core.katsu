@@ -310,7 +310,9 @@ let: (n: Fixnum) digit>string do: [
     digit-strings ~unsafe-at: n
 ]
 
+# TODO: move to builtin
 let: ((a: Fixnum) mod: (n: Fixnum)) do: [ a - (a / n) * n ]
+let: ((a: Fixnum) multiple-of?: (b: Fixnum)) do: [ (a mod: b) = 0 ]
 
 let: (n: Fixnum) >string do: [
     if: n < 0 then: ["-" ~ (- n) >string] else: [
