@@ -73,18 +73,28 @@ let: ((stream: InputStream) stream-read: (count: Fixnum)) do: [
     stream stream-read: (mutable-like: stream buffer-exemplar length: count)
 ]
 
-let: ((stream: InputStream) stream-read-all/group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [
+let: ((stream: InputStream) stream-read-until: pred group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [
     let: buf = (mutable-like: stream buffer-exemplar length: buf-length)
     let: all = (resizable-like: stream buffer-exemplar capacity: 0)
-    stream until: [end-of-stream?] do: [
+    until: [pred call: all] do: [
         all extend: (stream-read-into: buf)
     ]
     all like: exemplar
 ]
-let: ((stream: InputStream) stream-read-all/like: (exemplar: Sequence)) do: [
-    stream stream-read-all/group: 16384 like: exemplar
+let: ((stream: InputStream) stream-read-until: pred like: (exemplar: Sequence)) do: [
+    stream stream-read-until: pred group: 16384 like: exemplar
 ]
-let: (stream: InputStream) stream-read-all do: [ stream stream-read-all/like: stream buffer-exemplar ]
+let: ((stream: InputStream) stream-read-until: pred) do: [ stream stream-read-until: pred like: stream buffer-exemplar ]
+
+let: ((stream: InputStream) stream-read-all/group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [
+    stream stream-read-until: [stream end-of-stream?] group: buf-length like: exemplar
+]
+let: ((stream: InputStream) stream-read-all/like: (exemplar: Sequence)) do: [
+    stream stream-read-until: [stream end-of-stream?] like: exemplar
+]
+let: (stream: InputStream) stream-read-all do: [
+    stream stream-read-until: [stream end-of-stream?]
+]
 
 # Perform a non-blocking write of up to 'count' number of elements from buffer to the output
 # stream and return the number of elements written. This should write as many elements as the
@@ -159,6 +169,9 @@ let: (read-available-into: (buf: MutableSequence)) do: [ *input-stream* get stre
 let: (read: (count: Fixnum) into: (buf: MutableSequence)) do: [ *input-stream* get stream-read: count into: buf ]
 let: (read-into: (buf: MutableSequence)) do: [ *input-stream* get stream-read-into: buf ]
 let: (read: (count: Fixnum)) do: [ *input-stream* get stream-read: count ]
+let: (read-until: pred group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [ *input-stream* get stream-read-until: pred group: buf-length like: exemplar ]
+let: (read-until: pred like: (exemplar: Sequence)) do: [ *input-stream* get stream-read-until: pred like: exemplar ]
+let: (read-until: pred) do: [ *input-stream* get stream-read-until: pred ]
 let: (read-all/group: (buf-length: Fixnum) like: (exemplar: Sequence)) do: [ *input-stream* get stream-read-all/group: buf-length like: exemplar ]
 let: (read-all/like: (exemplar: Sequence)) do: [ *input-stream* get stream-read-all/like: exemplar ]
 let: read-all do: [ *input-stream* get stream-read-all ]
