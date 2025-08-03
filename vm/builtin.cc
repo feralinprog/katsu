@@ -291,6 +291,17 @@ namespace Katsu
         return Value::null();
     }
 
+    Value native__print_end_(VM& vm, int64_t nargs, Value* args)
+    {
+        // _ print: val end: val
+        ASSERT(nargs == 3);
+        String* s = args[1].obj_string();
+        String* e = args[2].obj_string();
+        std::cout.write(reinterpret_cast<char*>(s->contents()), s->length);
+        std::cout.write(reinterpret_cast<char*>(e->contents()), s->length);
+        return Value::null();
+    }
+
     Value native__pr(VM& vm, int64_t nargs, Value* args)
     {
         // val pr
@@ -1139,6 +1150,10 @@ namespace Katsu
         register_native("not", r_default, {matches_type(_Bool)}, &native__not);
 
         register_native("print:", r_misc, {matches_any, matches_type(_String)}, &native__print_);
+        register_native("print:end:",
+                        r_misc,
+                        {matches_any, matches_type(_String), matches_type(_String)},
+                        &native__print_end_);
         register_native("pretty-print:",
                         r_misc,
                         {matches_any, matches_any},
