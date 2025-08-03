@@ -189,17 +189,17 @@ let: (open-handle: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum
     AutoCloseFileHandle fd: (%open: pathname flags: flags mode: mode) refcnt: 0
 ]
 
-let: ((handle: FileHandle) read: (count: Fixnum) into: (buf: ByteArray)) do: [
+let: ((handle: FileHandle) handle-read: (count: Fixnum) into: (buf: ByteArray)) do: [
     assert: count <= buf length
     buf from: 0 to<: (handle .fd %read: buf count: count at: 0)
 ]
 # TODO: ensure this is a MutableSlice of a ByteArray specifically
-let: ((handle: FileHandle) read: (count: Fixnum) into: (buf: MutableSlice)) do: [
+let: ((handle: FileHandle) handle-read: (count: Fixnum) into: (buf: MutableSlice)) do: [
     assert: count <= buf length
     buf from: 0 to<: (handle .fd %read: buf .seq count: count at: buf .start)
 ]
 
-let: ((handle: FileHandle) write: (count: Fixnum) from: (buf: ByteArray)) do: [
+let: ((handle: FileHandle) handle-write: (count: Fixnum) from: (buf: ByteArray)) do: [
     assert: count <= buf length
     handle .fd %write: buf count: count at: 0
 ]
@@ -245,7 +245,7 @@ let: (s: NonBlockingFileInputStream) end-of-stream? do: [ s .eof? ]
 let: (s: BlockingFileInputStream) end-of-stream? do: [ s .eof? ]
 let: ((s: NonBlockingFileInputStream) stream-read-available: (count: Fixnum) into: (buf: MutableSequence)) do: [
     try: [
-        let: sub-buf = (s .handle read: count into: buf)
+        let: sub-buf = (s .handle handle-read: count into: buf)
         if: count > 0 and (sub-buf length = 0) then: [ s latch-eof ]
         sub-buf
     ] except: {
@@ -262,7 +262,7 @@ let: ((s: NonBlockingFileInputStream) stream-read-available: (count: Fixnum) int
 ]
 # TODO: stream-wait-read with epoll
 let: ((s: BlockingFileInputStream) stream-read: (count: Fixnum) into: (buf: MutableSequence)) do: [
-    let: sub-buf = (s .handle read: count into: buf)
+    let: sub-buf = (s .handle handle-read: count into: buf)
     if: count > 0 and (sub-buf length = 0) then: [ s latch-eof ]
     sub-buf
 ]
@@ -270,11 +270,11 @@ let: (s: NonBlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
 let: (s: BlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
 
 let: ((s: NonBlockingFileOutputStream) stream-write-available: (count: Fixnum) from: (buf: MutableSequence)) do: [
-    s .handle write: count from: buf
+    s .handle handle-write: count from: buf
 ]
 # TODO: stream-wait-write with epoll
 let: ((s: BlockingFileOutputStream) stream-write: (count: Fixnum) from: (buf: MutableSequence)) do: [
-    s .handle write: count from: buf
+    s .handle handle-write: count from: buf
 ]
 
 # =================================================================================================
