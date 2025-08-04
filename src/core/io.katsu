@@ -1,5 +1,5 @@
 use: {
-    "core.dynamic-variable" # TODO: delete, switch to per-fiber dynamic variables from core.fiber
+    "core.dynamic-variable"
     "core.fiber"
     "core.io.stream"
     "core.resource"
