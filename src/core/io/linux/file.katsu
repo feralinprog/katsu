@@ -98,6 +98,37 @@ let: ((fd: Fixnum) %write: (buf: ByteArray) count: (count: Fixnum) at: (offset: 
     (&write ffi-call foreign-read-ssize_t-at-offset: 0) %check-syscall
 ]
 
+# Bit of a special case: the third argument to fcntl can change type depending on the value of the
+# second argument (`op`).
+let: &fcntl<void> = new-CIFRef
+let: &fcntl<int> = new-CIFRef
+let: &fcntl<ptr> = new-CIFRef
+let: ((fd: Fixnum) %fcntl: (op: Fixnum)) do: [
+    (&fcntl<void> .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&fcntl<void> .args at: 1) foreign-write-sint-at-offset: 0 value: op
+    (&fcntl<void> ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+let: ((fd: Fixnum) %fcntl: (op: Fixnum) arg: (arg: Fixnum)) do: [
+    (&fcntl<int> .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&fcntl<int> .args at: 1) foreign-write-sint-at-offset: 0 value: op
+    (&fcntl<int> .args at: 2) foreign-write-sint-at-offset: 0 value: arg
+    (&fcntl<int> ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+let: ((fd: Fixnum) %fcntl: (op: Fixnum) arg: (arg: Foreign)) do: [
+    (&fcntl<ptr> .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&fcntl<ptr> .args at: 1) foreign-write-sint-at-offset: 0 value: op
+    (&fcntl<ptr> .args at: 2) foreign-write-foreign-at-offset: 0 value: arg
+    (&fcntl<ptr> ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+# TODO: there are a bunch more -- add support for other fcntl ops.
+let: F_DUPFD = 0
+let: F_GETFD = 1
+let: F_SETFD = 2
+let: F_GETFL = 3
+let: F_SETFL = 4
+let: F_DUPFD_CLOEXEC = 1030
+
 # Must be called from within a with-disposal: block.
 let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
@@ -113,7 +144,10 @@ let: setup-file-syscalls do: [
     # ssize_t write(int fd, const void *buf, size_t count)
     &write prep-ffi-call: libc symbol: "write" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t } rtype: &ssize_t
 
-    # TODO: fcntl
+    &fcntl<void> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
+    &fcntl<int> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
+    &fcntl<ptr> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_pointer } rtype: &ffi_type_sint
+
     # TODO: ioctl
 ]
 
