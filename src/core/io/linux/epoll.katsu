@@ -1,0 +1,191 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+    "core.combinator"
+    "core.ffi"
+    "core.io.linux.error"
+    "core.io.linux.handle"
+    "core.resource"
+    "core.sequence"
+    "core.sequence.vector"
+}
+
+# =============== libc wrapper functions: ====================
+# Note that these are only valid while within a with-io block;
+# outside, these wrapper functions will refer to uninitialized
+# or already-disposed FFI resources.
+
+# TODO: most of these should be defined instead by baking in the libffi CIF, and also the malloc'ed regions
+# for args and return values.
+
+# C struct definitions:
+# ---------------------
+# struct epoll_event {
+#     uint32_t      events;  /* Epoll events */
+#     epoll_data_t  data;    /* User data variable */
+# };
+#
+# union epoll_data {
+#     void     *ptr;
+#     int       fd;
+#     uint32_t  u32;
+#     uint64_t  u64;
+# };
+#
+# typedef union epoll_data  epoll_data_t;
+# ---------------------
+
+let: c-epoll_data = ("epoll_data" union-type: {
+    "void*" integral-type: &ffi_type_pointer
+    c-sint
+    c-uint32
+    c-uint64
+})
+let: c-epoll_event = ("epoll_event" struct-type: {
+    "events" struct-field: c-uint32
+    "data" struct-field: c-epoll_data
+})
+
+let: &epoll_create1 = new-CIFRef
+let: (flags: Fixnum) %epoll_create1 do: [
+    (&epoll_create1 .args at: 0) foreign-write-sint-at-offset: 0 value: flags
+    (&epoll_create1 ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+# TODO: octal
+let: EPOLL_CLOEXEC = 524288 # 02000000
+
+let: &epoll_ctl = new-CIFRef
+let: ((epfd: Fixnum) %epoll_ctl: (op: Fixnum) fd: (fd: Fixnum) event: (event: Foreign)) do: [
+    (&epoll_ctl .args at: 0) foreign-write-sint-at-offset: 0 value: epfd
+    (&epoll_ctl .args at: 1) foreign-write-sint-at-offset: 0 value: op
+    (&epoll_ctl .args at: 2) foreign-write-sint-at-offset: 0 value: fd
+    (&epoll_ctl .args at: 3) foreign-write-foreign-at-offset: 0 value: event
+    (&epoll_ctl ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+    #null
+]
+
+let: EPOLL_CTL_ADD = 1
+let: EPOLL_CTL_DEL = 2
+let: EPOLL_CTL_MOD = 3
+
+# TODO: hex / bitshifts
+let: EPOLLIN = 1 # 0x001
+let: EPOLLPRI = 2 # 0x002
+let: EPOLLOUT = 4 # 0x004
+let: EPOLLRDNORM = 64 # 0x040
+let: EPOLLRDBAND = 128 # 0x080
+let: EPOLLWRNORM = 256 # 0x100
+let: EPOLLWRBAND = 512 # 0x200
+let: EPOLLMSG = 104 # 0x400
+let: EPOLLERR = 8 # 0x008
+let: EPOLLHUP = 16 # 0x010
+let: EPOLLRDHUP = 8192 # 0x2000
+let: EPOLLEXCLUSIVE = 268435456 # 1u << 28
+let: EPOLLWAKEUP = 536870912 # 1u << 29
+let: EPOLLONESHOT = 1073741824 # 1u << 30
+let: EPOLLET = 2147483648 # 1u << 31
+
+let: &epoll_wait = new-CIFRef
+let: ((epfd: Fixnum) %epoll_wait: (events: Foreign) maxevents: (maxevents: Fixnum) timeout: (timeout: Fixnum)) do: [
+    (&epoll_wait .args at: 0) foreign-write-sint-at-offset: 0 value: epfd
+    (&epoll_wait .args at: 1) foreign-write-foreign-at-offset: 0 value: events
+    (&epoll_wait .args at: 2) foreign-write-sint-at-offset: 0 value: maxevents
+    (&epoll_wait .args at: 3) foreign-write-sint-at-offset: 0 value: timeout
+    (&epoll_wait ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+# TODO: epoll_pwait / epoll_pwait2
+
+# Must be called from within a with-disposal: block.
+let: setup-epoll-syscalls do: [
+    let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
+
+    # int epoll_create1(int flags);
+    &epoll_create1 prep-ffi-call: libc symbol: "epoll_create1" atypes: { &ffi_type_sint } rtype: &ffi_type_sint
+
+    # int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
+    &epoll_ctl prep-ffi-call: libc symbol: "epoll_ctl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_sint; &ffi_type_pointer } rtype: &ffi_type_sint
+
+    # int epoll_wait(int epfd, struct epoll_event events[.maxevents], int maxevents, int timeout);
+    &epoll_wait prep-ffi-call: libc symbol: "epoll_wait" atypes: { &ffi_type_sint; &ffi_type_pointer; &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
+]
+
+# ============================================================
+
+# Handle which keeps track of an underlying epoll file descriptor as well as separate buffers for
+# epoll_ctl and epoll_wait operations. (Those buffers should be disposed separately.)
+data: EPollHandle extends: { Disposable } has: {
+    epfd-handle # FileHandle
+    event # Foreign -- holds a single `struct epoll_event`
+    events # Foreign -- holds maxevents number of `struct epoll_event`s
+    maxevents # Fixnum, positive
+}
+
+let: (ep: EPollHandle) dispose do: [
+    ep .epfd-handle dispose
+    ep .event dispose
+    ep .events dispose
+]
+
+# Result must be disposed.
+let: ((maxevents: Fixnum) epoll-handle: (flags: Fixnum)) do: [
+    assert: maxevents > 0
+    EPollHandle epfd-handle: (
+        AutoCloseFileHandle fd: flags %epoll_create1 refcnt: 0
+    ) event: (
+        c-epoll_event alloc
+    ) events: (
+        (array-type: c-epoll_event length: maxevents) alloc
+    ) maxevents: maxevents
+]
+let: (maxevents: Fixnum) epoll-handle do: [ maxevents epoll-handle: 0 ]
+
+# Note that while epoll_data_t allows specifying a void* or full u64, this only allows specifying a Fixnum of opaque user data
+# to epoll_ctl (to be returned later from epoll_wait).
+let: ((ep: EPollHandle) epoll-ctl: (op: Fixnum) fd: (fd: Fixnum) events: (events: Fixnum) data: (data: Fixnum)) do: [
+    ep .event foreign-write-u32-at-offset: (c-epoll_event .fields at: 0) .offset value: events
+    ep .event foreign-write-u64-at-offset: (c-epoll_event .fields at: 1) .offset value: data
+    ep .epfd-handle .fd %epoll_ctl: op fd: fd event: ep .event
+]
+
+# Call epoll_ctl with EPOLL_CTL_ADD, specifying the given events (bitmask; see EPOLL* fields) along with data to provide from epoll_wait.
+let: ((ep: EPollHandle) epoll-add: (fd: Fixnum) events: (events: Fixnum) data: (data: Fixnum)) do: [
+    ep epoll-ctl: EPOLL_CTL_ADD fd: fd events: events data: data
+]
+# Call epoll_ctl with EPOLL_CTL_DEL.
+let: ((ep: EPollHandle) epoll-del: (fd: Fixnum)) do: [
+    ep .epfd-handle .fd %epoll_ctl: EPOLL_CTL_DEL fd: fd event: NULL
+]
+# Call epoll_ctl with EPOLL_CTL_MOD, specifying the given events (bitmask; see EPOLL* fields) along with data to provide from epoll_wait.
+let: ((ep: EPollHandle) epoll-mod: (fd: Fixnum) events: (events: Fixnum) data: (data: Fixnum)) do: [
+    ep epoll-ctl: EPOLL_CTL_MOD fd: fd events: events data: data
+]
+
+# Timeout value to use to block forever waiting for a file descriptor event or a signal.
+let: WAIT_FOREVER = -1
+
+data: EPollEvent has: { events; data }
+
+# These variations on epoll_wait all return an array of EPollEvent.
+let: ((ep: EPollHandle) epoll-wait: (maxevents: Fixnum) timeout: (timeout: Fixnum)) do: [
+    assert: maxevents > 0 and maxevents <= ep .maxevents
+    let: num-events = (ep .epfd-handle .fd %epoll_wait: ep .events maxevents: maxevents timeout: timeout)
+    let: events = (mutable-like: 0 nulls-array length: num-events)
+    events length times: \i [
+        events at: i put: (
+            EPollEvent events: (
+                ep .events foreign-read-u32-at-offset: c-epoll_event .size * i + (c-epoll_event .fields at: 0) .offset
+            ) data: (
+                ep .events foreign-read-u64-at-offset: c-epoll_event .size * i + (c-epoll_event .fields at: 1) .offset
+            )
+        )
+    ]
+    events
+]
+let: ((ep: EPollHandle) epoll-wait/timeout: (timeout: Fixnum)) do: [
+    ep epoll-wait: ep .maxevents timeout: timeout
+]
+let: (ep: EPollHandle) epoll-wait do: [
+    ep epoll-wait: ep .maxevents timeout: WAIT_FOREVER
+]

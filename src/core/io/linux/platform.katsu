@@ -1,6 +1,7 @@
 # Implements the I/O backend / runtime for Linux.
 
 use: {
+    "core.io.linux.epoll"
     "core.io.linux.error"
     "core.io.linux.file"
     "core.io.linux.handle"
@@ -11,6 +12,7 @@ use: {
 let: setup-io-syscalls do: [
     setup-error-syscalls
     setup-handle-syscalls
+    setup-epoll-syscalls
     setup-file-syscalls
     setup-socket-syscalls
 ]

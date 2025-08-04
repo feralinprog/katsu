@@ -376,6 +376,7 @@ with-namestack: [
         "core.ffi"
         "core.fiber"
         "core.io"
+        "core.io.linux.epoll"
         "core.io.linux.errno"
         "core.io.linux.error"
         "core.io.linux.file"
