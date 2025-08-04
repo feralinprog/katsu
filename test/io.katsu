@@ -55,7 +55,7 @@ with-io: [
     # let: port = 1234 %htons
 
     # let: s = (%socket: AF_INET type: SOCK_STREAM protocol: 0)
-    # let: sockaddr = (malloc: c-sockaddr_in .size aligned: c-sockaddr_in .alignment) ^dispose
+    # let: sockaddr = c-sockaddr_in alloc ^dispose
     # sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
     # sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: port
     # # TODO: memcpy
@@ -99,7 +99,7 @@ with-io: [
     # let: INADDR_ANY = 4 zeros-byte-array
     # let: bind-addr = INADDR_ANY
     # let: bind-port = 1235 %htons
-    # let: sockaddr = (malloc: c-sockaddr_in .size aligned: c-sockaddr_in .alignment) ^dispose
+    # let: sockaddr = c-sockaddr_in alloc ^dispose
     # sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
     # sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: bind-port
     # # TODO: memcpy

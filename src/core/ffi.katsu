@@ -258,6 +258,10 @@ data: CUnionType extends: { CType } has: {
 }
 data: CField has: { name; type; offset }
 
+let: (t: CType) alloc do: [
+    malloc: t .size aligned: t .alignment
+]
+
 let: (t: CType) check-alignment do: [
     assert: (t .size multiple-of?: t .alignment)
 ]
