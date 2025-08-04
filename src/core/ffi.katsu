@@ -253,6 +253,9 @@ data: CFixedArrayType extends: { CType } has: {
 data: CStructType extends: { CType } has: {
     fields # Sequence of CField
 }
+data: CUnionType extends: { CType } has: {
+    variants # Sequence of CType
+}
 data: CField has: { name; type; offset }
 
 let: (t: CType) check-alignment do: [
@@ -300,6 +303,14 @@ let: (t: CStructType) calc-packing do: [
     t check-alignment
     t
 ]
+let: (t: CUnionType) calc-packing do: [
+    # Alignment of a union is max alignment of any variant.
+    # Size of a union is max size of any variant, with any extra padding to meet union alignment.
+    t alignment: (t .variants map: [ .alignment ]) max
+    t size: ((t .variants map: [ .size ]) max align-up: t .alignment)
+    t check-alignment
+    t
+]
 
 let: ((name: String) integral-type: (ffi-type: Foreign)) do: [
     (CIntegralType name: name size: #null alignment: #null ffi-type: ffi-type) calc-packing
@@ -313,6 +324,11 @@ let: ((name: String) struct-type: (fields: Sequence)) do: [
     assert: not fields empty?
     assert: (fields all?: [ CField? ])
     (CStructType name: name size: #null alignment: #null fields: fields) calc-packing
+]
+let: ((name: String) union-type: (variants: Sequence)) do: [
+    assert: not variants empty?
+    assert: (variants all?: [ CType? ])
+    (CUnionType name: name size: #null alignment: #null variants: variants) calc-packing
 ]
 let: ((name: String) struct-field: (type: CType)) do: [
     CField name: name type: type offset: #null
