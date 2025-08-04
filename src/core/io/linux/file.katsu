@@ -172,6 +172,11 @@ let: ((handle: FileHandle) handle-write: (count: Fixnum) from: (buf: ByteArray))
     assert: count <= buf length
     handle .fd %write: buf count: count at: 0
 ]
+# TODO: ensure this is a Slice of a ByteArray specifically
+let: ((handle: FileHandle) handle-write: (count: Fixnum) from: (buf: Slice)) do: [
+    assert: count <= buf length
+    handle .fd %write: buf .seq count: count at: buf .start
+]
 
 
 data: FileStream extends: { Disposable } has: { handle; eof? }
@@ -231,11 +236,11 @@ let: ((s: BlockingFileInputStream) stream-read: (count: Fixnum) into: (buf: Muta
 let: (s: NonBlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
 let: (s: BlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
 
-let: ((s: NonBlockingFileOutputStream) stream-write-available: (count: Fixnum) from: (buf: MutableSequence)) do: [
+let: ((s: NonBlockingFileOutputStream) stream-write-available: (count: Fixnum) from: (buf: Sequence)) do: [
     s .handle handle-write: count from: buf
 ]
 # TODO: stream-wait-write with epoll
-let: ((s: BlockingFileOutputStream) stream-write: (count: Fixnum) from: (buf: MutableSequence)) do: [
+let: ((s: BlockingFileOutputStream) stream-write: (count: Fixnum) from: (buf: Sequence)) do: [
     s .handle handle-write: count from: buf
 ]
 
