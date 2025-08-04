@@ -379,6 +379,7 @@ with-namestack: [
         "core.io.linux.errno"
         "core.io.linux.error"
         "core.io.linux.file"
+        "core.io.linux.handle"
         "core.io.linux.platform"
         "core.io.linux.scheduler"
         "core.io.linux.socket"

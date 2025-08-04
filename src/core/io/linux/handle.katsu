@@ -1,0 +1,56 @@
+use: {
+    "core.builtin.ffi"
+    "core.ffi"
+    "core.io.linux.error"
+    "core.resource"
+    "core.sequence"
+}
+
+# =============== libc wrapper functions: ====================
+# Note that these are only valid while within a with-io block;
+# outside, these wrapper functions will refer to uninitialized
+# or already-disposed FFI resources.
+
+# TODO: most of these should be defined instead by baking in the libffi CIF, and also the malloc'ed regions
+# for args and return values.
+
+let: &close = new-CIFRef
+let: (fd: Fixnum) %close do: [
+    (&close .args at: 0) foreign-write-sint-at-offset: 0 value: fd
+    (&close ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+]
+
+# Must be called from within a with-disposal: block.
+let: setup-handle-syscalls do: [
+    let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
+
+    # int close(int fd)
+    &close prep-ffi-call: libc symbol: "close" atypes: { &ffi_type_sint } rtype: &ffi_type_sint
+]
+
+# =================================================================================================
+
+data: FileHandle extends: { Disposable } has: { fd; refcnt }
+data: AutoCloseFileHandle extends: { FileHandle } has: {}
+
+let: (handle: FileHandle) dispose do: [
+    assert: handle .refcnt = 0
+    handle fd: #null
+    handle refcnt: #null
+]
+let: (handle: AutoCloseFileHandle) dispose do: [
+    assert: handle .refcnt = 0
+    handle .fd %close
+    handle fd: #null
+    handle refcnt: #null
+]
+
+let: (handle: FileHandle) add-ref do: [
+    handle refcnt: handle .refcnt + 1
+    handle
+]
+let: (handle: FileHandle) remove-ref do: [
+    assert: handle .refcnt > 0
+    handle refcnt: handle .refcnt - 1
+    if: handle .refcnt = 0 then: [ handle dispose ]
+]

@@ -3,12 +3,14 @@
 use: {
     "core.io.linux.error"
     "core.io.linux.file"
+    "core.io.linux.handle"
     "core.io.linux.scheduler"
     "core.io.linux.socket"
 }
 
 let: setup-io-syscalls do: [
     setup-error-syscalls
+    setup-handle-syscalls
     setup-file-syscalls
     setup-socket-syscalls
 ]

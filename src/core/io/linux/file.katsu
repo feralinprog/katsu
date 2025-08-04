@@ -5,6 +5,7 @@ use: {
     "core.ffi"
     "core.io.linux.errno"
     "core.io.linux.error"
+    "core.io.linux.handle"
     "core.io.stream"
     "core.resource"
     "core.sequence"
@@ -17,12 +18,6 @@ use: {
 
 # TODO: most of these should be defined instead by baking in the libffi CIF, and also the malloc'ed regions
 # for args and return values.
-
-let: &close = new-CIFRef
-let: (fd: Fixnum) %close do: [
-    (&close .args at: 0) foreign-write-sint-at-offset: 0 value: fd
-    (&close ffi-call foreign-read-sint-at-offset: 0) %check-syscall
-]
 
 let: &open = new-CIFRef
 let: (%open: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do: [
@@ -107,9 +102,6 @@ let: ((fd: Fixnum) %write: (buf: ByteArray) count: (count: Fixnum) at: (offset: 
 let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
 
-    # int close(int fd)
-    &close prep-ffi-call: libc symbol: "close" atypes: { &ffi_type_sint } rtype: &ffi_type_sint
-
     # int open(const char *pathname, int flags, [optional] mode_t mode)
     #   (where mode_t = unsigned int)
     let: &mode_t = &ffi_type_uint # TODO: should be able to generate foreign read/write functions based on a typedef
@@ -126,31 +118,6 @@ let: setup-file-syscalls do: [
 ]
 
 # =================================================================================================
-
-data: FileHandle extends: { Disposable } has: { fd; refcnt }
-data: AutoCloseFileHandle extends: { FileHandle } has: {}
-
-let: (handle: FileHandle) dispose do: [
-    assert: handle .refcnt = 0
-    handle fd: #null
-    handle refcnt: #null
-]
-let: (handle: AutoCloseFileHandle) dispose do: [
-    assert: handle .refcnt = 0
-    handle .fd %close
-    handle fd: #null
-    handle refcnt: #null
-]
-
-let: (handle: FileHandle) add-ref do: [
-    handle refcnt: handle .refcnt + 1
-    handle
-]
-let: (handle: FileHandle) remove-ref do: [
-    assert: handle .refcnt > 0
-    handle refcnt: handle .refcnt - 1
-    if: handle .refcnt = 0 then: [ handle dispose ]
-]
 
 # Result must be disposed later.
 let: (open-handle: (pathname: String) flags: (flags: Fixnum) mode: (mode: Fixnum)) do: [
