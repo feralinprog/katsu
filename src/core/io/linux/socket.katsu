@@ -3,13 +3,11 @@ use: {
     "core.builtin.misc"
     "core.condition"
     "core.ffi"
+    "core.io.linux.error"
     "core.resource"
     "core.sequence"
     "core.sequence.vector"
 }
-
-# TODO: refactor -- this is just needed for %check-syscall, really
-use: "core.io.linux.file"
 
 # typedef: socklen_t = u32
 # TODO: do this with macro instead

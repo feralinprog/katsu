@@ -4,6 +4,7 @@ use: {
     "core.dynamic-variable"
     "core.ffi"
     "core.io"
+    "core.io.linux.error"
     "core.io.linux.file"
     "core.io.linux.socket"
     "core.io.stream"

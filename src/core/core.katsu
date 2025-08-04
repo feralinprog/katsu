@@ -377,6 +377,7 @@ with-namestack: [
         "core.fiber"
         "core.io"
         "core.io.linux.errno"
+        "core.io.linux.error"
         "core.io.linux.file"
         "core.io.linux.platform"
         "core.io.linux.scheduler"

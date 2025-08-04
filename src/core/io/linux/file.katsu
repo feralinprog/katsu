@@ -4,12 +4,11 @@ use: {
     "core.dynamic-variable"
     "core.ffi"
     "core.io.linux.errno"
+    "core.io.linux.error"
     "core.io.stream"
     "core.resource"
     "core.sequence"
 }
-
-data: IOError extends: { Condition } has: { errno }
 
 # =============== libc wrapper functions: ====================
 # Note that these are only valid while within a with-io block;
@@ -18,31 +17,6 @@ data: IOError extends: { Condition } has: { errno }
 
 # TODO: most of these should be defined instead by baking in the libffi CIF, and also the malloc'ed regions
 # for args and return values.
-
-let: &strerror = new-CIFRef
-let: (errnum: Fixnum) %strerror do: [
-    (&strerror .args at: 0) foreign-write-sint-at-offset: 0 value: errnum
-    # We could handle errors here by clearing errno, calling this function, then checking errno -- but this could
-    # cause an infinite loop of error handling, and this seems unlikely to fail anyway, so ignore the possibility.
-    (&strerror ffi-call foreign-read-foreign-at-offset: 0) c-string>string
-]
-
-let: &strerrorname_np = new-CIFRef
-let: (errnum: Fixnum) %strerrorname_np do: [
-    (&strerrorname_np .args at: 0) foreign-write-sint-at-offset: 0 value: errnum
-    # We could handle errors here by clearing errno, calling this function, then checking errno -- but this could
-    # cause an infinite loop of error handling, and this seems unlikely to fail anyway, so ignore the possibility.
-    (&strerrorname_np ffi-call foreign-read-foreign-at-offset: 0) c-string>string
-]
-
-# Check the result of a syscall; if -1, signal an IO error based
-# on the errno set within libc.
-let: (syscall-result: Fixnum) %check-syscall do: [
-    if: syscall-result = -1 then: [
-        let: message = "IO error (" ~ errno %strerrorname_np ~ "): " ~ errno %strerror
-        (IOError condition: "io-error" message: message stack: #null errno: errno) signal
-    ] else: [ syscall-result ]
-]
 
 let: &close = new-CIFRef
 let: (fd: Fixnum) %close do: [
@@ -132,12 +106,6 @@ let: ((fd: Fixnum) %write: (buf: ByteArray) count: (count: Fixnum) at: (offset: 
 # Must be called from within a with-disposal: block.
 let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
-
-    # const char *strerror(int errnum)
-    &strerror prep-ffi-call: libc symbol: "strerror" atypes: { &ffi_type_sint } rtype: &ffi_type_pointer
-
-    # const char *strerrorname_np(int errnum)
-    &strerrorname_np prep-ffi-call: libc symbol: "strerrorname_np" atypes: { &ffi_type_sint } rtype: &ffi_type_pointer
 
     # int close(int fd)
     &close prep-ffi-call: libc symbol: "close" atypes: { &ffi_type_sint } rtype: &ffi_type_sint

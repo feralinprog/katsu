@@ -1,12 +1,14 @@
 # Implements the I/O backend / runtime for Linux.
 
 use: {
+    "core.io.linux.error"
     "core.io.linux.file"
     "core.io.linux.scheduler"
     "core.io.linux.socket"
 }
 
 let: setup-io-syscalls do: [
+    setup-error-syscalls
     setup-file-syscalls
     setup-socket-syscalls
 ]
