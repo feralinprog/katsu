@@ -1059,9 +1059,9 @@ namespace Katsu
     }
 
     // receiver, extends are optional
-    void compile_dataclass(GC& gc, Root<Assoc>& r_module, Root<Vector>& r_imports,
-                           const std::string& message, SourceSpan& span, Expr* receiver, Expr& name,
-                           Expr* extends, Expr& has)
+    void compile_dataclass(GC& gc, Value& v_multimethods, Root<Assoc>& r_module,
+                           Root<Vector>& r_imports, const std::string& message, SourceSpan& span,
+                           Expr* receiver, Expr& name, Expr* extends, Expr& has)
     {
         if (receiver) {
             std::stringstream ss;
@@ -1185,9 +1185,9 @@ namespace Katsu
         append(gc, r_module, r_key, rv_type);
 
         const auto lookup_or_create =
-            [&gc, &r_module, &r_imports](Root<String>& r_name,
-                                         uint32_t num_params,
-                                         SourceSpan err_span) -> MultiMethod* {
+            [&gc, &v_multimethods, &r_module, &r_imports](Root<String>& r_name,
+                                                          uint32_t num_params,
+                                                          SourceSpan err_span) -> MultiMethod* {
             Value existing;
             LookupResult lookup = lookup_name(*r_module, *r_imports, *r_name, &existing);
             if (lookup == SUCCESS) {
@@ -1208,12 +1208,28 @@ namespace Katsu
                     throw compile_error(ss.str(), err_span);
                 }
             } else if (lookup == NOT_FOUND) {
-                Root<Vector> r_methods(gc, make_vector(gc, 1));
-                Root<Vector> r_attributes(gc, make_vector(gc, 0));
-                ValueRoot r_multimethod(
-                    gc,
-                    Value::object(
-                        make_multimethod(gc, r_name, num_params, r_methods, r_attributes)));
+                // Ensure it's in v_multimethods (effectively, always make these global).
+                Value* existing_global = assoc_lookup(v_multimethods.obj_assoc(), *r_name);
+                MultiMethod* multimethod;
+                if (existing_global) {
+                    ASSERT(existing_global->is_obj_multimethod());
+                    multimethod = existing_global->obj_multimethod();
+                } else {
+                    Root<Vector> r_methods(gc, make_vector(gc, /* capacity */ 1));
+                    Root<Vector> r_attributes(gc, make_vector(gc, 0));
+                    multimethod = make_multimethod(gc, r_name, num_params, r_methods, r_attributes);
+                    ValueRoot r_multimethod(gc, Value::object(multimethod));
+                    ValueRoot r_key(gc, r_name.value());
+                    {
+                        Root<Assoc> r_multimethods(gc, v_multimethods.obj_assoc());
+                        append(gc, r_multimethods, r_key, r_multimethod);
+                        v_multimethods = r_multimethods.value();
+                    }
+                    multimethod = r_multimethod->obj_multimethod();
+                }
+
+                // Also make sure to add to the current module.
+                ValueRoot r_multimethod(gc, Value::object(multimethod));
                 ValueRoot r_key(gc, r_name.value());
                 append(gc, r_module, r_key, r_multimethod);
                 return r_multimethod->obj_multimethod();
@@ -1733,6 +1749,7 @@ namespace Katsu
                            std::get<std::string>(expr->messages[0].value) == "data" &&
                            std::get<std::string>(expr->messages[1].value) == "has") {
                     compile_dataclass(gc,
+                                      vm.v_multimethods,
                                       r_module,
                                       r_imports,
                                       "data:extends:has:",
@@ -1747,6 +1764,7 @@ namespace Katsu
                            std::get<std::string>(expr->messages[1].value) == "extends" &&
                            std::get<std::string>(expr->messages[2].value) == "has") {
                     compile_dataclass(gc,
+                                      vm.v_multimethods,
                                       r_module,
                                       r_imports,
                                       "data:extends:has:",
