@@ -1,21 +1,54 @@
-data: DynamicVariable has: { name; value }
+use: {
+    "core.assoc"
+    "core.builtin.misc"
+}
 
-let: (make-dynamic: (name: String) initial: value) do: [
-    DynamicVariable name: name value: value
-]
+data: DynamicVariable has: { name }
+
+# TODO: symbol instead of string
 let: (make-dynamic: (name: String)) do: [
-    DynamicVariable name: name value: #null
+    DynamicVariable name: name
 ]
 
-let: ((d: DynamicVariable) set: value) do: [ d value: value ]
-let: ((d: DynamicVariable) get) do: [ d .value ]
-let: ((d: DynamicVariable) with-scope: body) do: [
-    let: saved-value = d get
-    [
-        body call: d get
-    ] finally: [
-        d set: saved-value
+# Quick and dirty linked list stack.
+# TODO: build this in core.sequence.* instead.
+data: NameStack has: { vars; next }
+let: ((ns: NameStack) namestack-at*: key) do: [
+    ns .vars if-has: key then: [
+        it
+    ] else: [
+        TAIL-CALL: (ns .next namestack-at*: key)
     ]
+]
+let: ((_: Null) namestack-at*: key) do: [ #null ]
+
+# Core must `frame-set-dynamic` this initial namestack in order to bootstrap the process.
+let: initial-namestack do: [ NameStack vars: make-empty-assoc next: #null ]
+
+let: get-namestack do: [
+    let: ns = frame-search-dynamic
+    assert: ns NameStack?
+    ns
+]
+
+let: ((d: DynamicVariable) get) do: [
+    get-namestack namestack-at*: d .name
+]
+
+let: ((d: DynamicVariable) set: value) do: [
+    get-namestack .vars at: d .name put: value
+    value
+]
+
+let: ((scope: Assoc) in-scope: body) do: [
+    frame-set-dynamic: (NameStack vars: scope next: get-namestack)
+    body call
+]
+
+let: ((d: DynamicVariable) with-scope: body) do: [
+    let: scope = make-empty-assoc
+    scope at: d .name put: d get
+    scope in-scope: [ body call: d get ]
 ]
 
 let: ((d: DynamicVariable) with-value: value do: body) do: [

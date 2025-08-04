@@ -1,5 +1,6 @@
 use: {
     "core.builtin.misc"
+    "core.dynamic-variable"
     "core.sentinel"
     "core.sequence"
 }
@@ -81,7 +82,7 @@ let: (x run-fibers: f selector: select-ready-fiber) do: [
             fiber arg: #null
             if: fiber .continuation = #null then: [
                 # Kick off the fiber.
-                let: result = (fiber .body call: arg)
+                let: result = (make-empty-assoc in-scope: [ fiber .body call: arg ])
                 # Fiber terminated.
                 fiber ready?: #f
                 fiber done?: #t

@@ -1,7 +1,6 @@
 use: {
     "core.combinator"
     "core.condition"
-    "core.dynamic-variable"
 }
 
 # A sequence must support:

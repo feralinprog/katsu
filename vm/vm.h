@@ -147,6 +147,9 @@ namespace Katsu
         // Any value, used for delimiting continuations.
         Value v_marker;
 
+        // Any value, generally used for implementing dynamic variables.
+        Value v_dynamic;
+
         // Variable-length array of length `num_regs`.
         inline Value* regs()
         {
@@ -204,7 +207,8 @@ namespace Katsu
         }
     };
     static_assert(sizeof(Frame) % sizeof(Value) == 0);
-    static_assert(sizeof(Frame) == 64);
+    // If this changes, update stack-trace.katsu.
+    static_assert(sizeof(Frame) == 72);
 
     enum BuiltinId
     {
@@ -281,7 +285,7 @@ namespace Katsu
         // data(), in particular before any GC operations. Returns the new frame, which the caller
         // must set as the current_frame if desired. Raises runtime_error on stack overflow.
         Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module,
-                           Value v_marker);
+                           Value v_marker, Value v_dynamic);
 
         // Allocates a region for multiple call frames. The caller must initialize the entire region
         // before further VM or GC operations. Returns just past the top-most frame. Does not update
@@ -335,9 +339,9 @@ namespace Katsu
 
         // See VM::alloc_frame().
         inline Frame* alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code,
-                                  Value v_module, Value v_marker)
+                                  Value v_module, Value v_marker, Value v_dynamic)
         {
-            return this->vm.alloc_frame(num_regs, num_data, v_code, v_module, v_marker);
+            return this->vm.alloc_frame(num_regs, num_data, v_code, v_module, v_marker, v_dynamic);
         }
 
         // See VM::alloc_frames().

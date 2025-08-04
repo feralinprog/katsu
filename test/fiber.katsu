@@ -64,3 +64,25 @@ run-fibers: [
         print: "consumer is done!"
     ]
 ]
+
+# Test dynamic variables across fibers.
+use: "core.dynamic-variable"
+run-fibers: [
+    let: dyn = (make-dynamic: "dyn")
+    "fiber A" run-fiber: [
+        dyn set: "A"
+        5 times: [
+            # Should always print "A"
+            print: dyn get
+            yield
+        ]
+    ]
+    "fiber B" run-fiber: [
+        dyn set: "B"
+        5 times: [
+            # Should always print "B"
+            print: dyn get
+            yield
+        ]
+    ]
+]

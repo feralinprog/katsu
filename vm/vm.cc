@@ -68,6 +68,7 @@ namespace Katsu
             visitor(&frame->v_code);
             visitor(&frame->v_module);
             visitor(&frame->v_marker);
+            visitor(&frame->v_dynamic);
 
             for (uint32_t i = 0; i < frame->num_regs; i++) {
                 visitor(&frame->regs()[i]);
@@ -104,7 +105,8 @@ namespace Katsu
                                          code_num_data,
                                          r_code.value(),
                                          r_code->v_module,
-                                         /* v_marker */ Value::null());
+                                         /* v_marker */ Value::null(),
+                                         /* v_dynamic */ Value::null());
         for (uint32_t i = 0; i < code_num_regs; i++) {
             frame->regs()[i] = Value::null();
         }
@@ -147,6 +149,7 @@ namespace Katsu
             // TODO: show v_module only if folding is possible, otherwise too noisy.
             std::cout << "v_marker: ";
             pprint(frame->v_marker, /* initial_indent */ false);
+            pprint(frame->v_dynamic, /* initial_indent */ false);
 
             std::cout << "regs:\n";
             for (uint32_t i = 0; i < frame->num_regs; i++) {
@@ -424,7 +427,7 @@ namespace Katsu
     }
 
     Frame* VM::alloc_frame(uint32_t num_regs, uint32_t num_data, Value v_code, Value v_module,
-                           Value v_marker)
+                           Value v_marker, Value v_dynamic)
     {
         Frame* frame = this->current_frame ? this->current_frame->next()
                                            : reinterpret_cast<Frame*>(this->call_stack_mem);
@@ -471,6 +474,7 @@ namespace Katsu
         frame->data_depth = 0;
         frame->v_module = v_module;
         frame->v_marker = v_marker;
+        frame->v_dynamic = v_dynamic;
         // regs() / data() is up to caller to initialize as desired.
         return frame;
     }
@@ -670,7 +674,8 @@ namespace Katsu
                                              code->num_data,
                                              method->v_code,
                                              code->v_module,
-                                             /* v_marker */ Value::null());
+                                             /* v_marker */ Value::null(),
+                                             /* v_dynamic */ Value::null());
             for (uint32_t i = 0; i < num_args; i++) {
                 frame->regs()[i] = args[i];
             }

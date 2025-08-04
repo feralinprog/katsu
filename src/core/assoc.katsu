@@ -1,7 +1,6 @@
 use: {
     "core.array"
     "core.builtin.misc"
-    "core.combinator"
 }
 
 let: ((a: Assoc) add: key value: value) do: [
@@ -22,4 +21,40 @@ let: ((a: Assoc) unsafe-at: (i: Fixnum)) do: [
     ) value: (
         a unsafe-backing-array unsafe-at: i * 2 + 1
     )
+]
+
+let: ((a: Assoc) at: key put: value) do: [
+    mut: i = 0
+    mut: found = #f
+    while: [i < a length and not found] do: [
+        let: e = (a unsafe-at: i)
+        if: e .key = key then: [
+            a unsafe-backing-array unsafe-at: i * 2 + 1 put: value
+            found: #t
+        ]
+        i: i + 1
+    ]
+    if: not found then: [
+        a add: key value: value
+    ]
+    a
+]
+
+let: ((a: Assoc) if-has: key then: with-value else: no-value) do: [
+    mut: i = 0
+    mut: found = #f
+    mut: value = #null
+    while: [i < a length and not found] do: [
+        let: e = (a unsafe-at: i)
+        if: e .key = key then: [
+            found: #t
+            value: e .value
+        ]
+        i: i + 1
+    ]
+    if: found then: [
+        with-value call: value
+    ] else: [
+        no-value call
+    ]
 ]

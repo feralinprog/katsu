@@ -330,76 +330,104 @@ let: v pr do: [
 use: "core.stack-trace"
 IMPORT-EXISTING-MODULE: "core.stack-trace"
 
-use: "core.cleanup"
+let: (module-name: String) try-load-core-module do: [
+    try: [
+        use: module-name
+    ] except: {
+        (Condition, \cond [
+            print: "Error: could not load core module " ~ module-name ~ "."
+            print: cond .condition ~ ": " ~ cond .message
+            cond .stack print-trace
+            terminate: "could not load core module"
+        ])
+    }
+]
+
+# Set up the dynamic variable namestack.
+"core.dynamic-variable" try-load-core-module
+IMPORT-EXISTING-MODULE: "core.dynamic-variable"
+# From now on, we must set the dynamic frame value in each frame.
+let: (_it with-namestack: body) do: [
+    frame-set-dynamic: initial-namestack
+    body call: _it
+]
+
+with-namestack: [ "core.cleanup" try-load-core-module ]
+# (IMPORT-EXISTING-MODULE must be top-level.)
 IMPORT-EXISTING-MODULE: "core.cleanup"
 let: (cleanup-and-terminate: message) do: [
     cleanup-all-modules
     terminate: message
 ]
 
-# TODO: consider using everything in core automatically
-let: *all-core-modules* = {
-    "core.array"
-    "core.assoc"
-    "core.byte-array"
-    "core.cleanup"
-    "core.code"
-    "core.combinator"
-    "core.condition"
-    "core.condition-handler"
-    # "core.core" <-- don't do this!
-    "core.dynamic-variable"
-    "core.ffi"
-    "core.fiber"
-    "core.io"
-    "core.io.linux.errno"
-    "core.io.linux.file"
-    "core.io.linux.platform"
-    "core.io.linux.scheduler"
-    "core.io.linux.socket"
-    "core.io.stream"
-    "core.mixin"
-    "core.mixin.private"
-    "core.optional"
-    "core.resource"
-    "core.sentinel"
-    "core.sequence"
-    "core.sequence.array"
-    "core.sequence.assoc"
-    "core.sequence.byte-array"
-    "core.sequence.resizable"
-    "core.sequence.vector"
-    "core.stack-trace"
-    "core.string"
-    "core.tuple"
-    "core.vector"
-}
-
-*all-core-modules* ~each: \m [
-    try: [
-        use: m
-    ] except: {
-        (Condition, \cond [
-            print: "Error: could not load core module " ~ m ~ "."
-            print: cond .condition ~ ": " ~ cond .message
-            cond .stack print-trace
-            cleanup-and-terminate: "could not load core module"
-        ])
+with-namestack: [
+    # TODO: consider using everything in core automatically
+    let: *all-core-modules* = {
+        "core.array"
+        "core.assoc"
+        "core.byte-array"
+        "core.cleanup"
+        "core.code"
+        "core.combinator"
+        "core.condition"
+        "core.condition-handler"
+        # "core.core" <-- don't do this!
+        "core.dynamic-variable"
+        "core.ffi"
+        "core.fiber"
+        "core.io"
+        "core.io.linux.errno"
+        "core.io.linux.file"
+        "core.io.linux.platform"
+        "core.io.linux.scheduler"
+        "core.io.linux.socket"
+        "core.io.stream"
+        "core.mixin"
+        "core.mixin.private"
+        "core.optional"
+        "core.resource"
+        "core.sentinel"
+        "core.sequence"
+        "core.sequence.array"
+        "core.sequence.assoc"
+        "core.sequence.byte-array"
+        "core.sequence.resizable"
+        "core.sequence.vector"
+        "core.stack-trace"
+        "core.string"
+        "core.tuple"
+        "core.vector"
     }
+
+    *all-core-modules* ~each: \m [
+        try: [
+            use: m
+        ] except: {
+            (Condition, \cond [
+                print: "Error: could not load core module " ~ m ~ "."
+                print: cond .condition ~ ": " ~ cond .message
+                cond .stack print-trace
+                cleanup-and-terminate: "could not load core module"
+            ])
+        }
+    ]
 ]
 
+# (IMPORT-EXISTING-MODULE must be top-level.)
 IMPORT-EXISTING-MODULE: "core.bootstrap.load"
-let: user-module-result = (try: [
-    use: user-module-name path-loader: [user-source-path] contents-loader: [user-source-contents]
-] except: {
-    (Condition, \cond [
-        print: "Error: could not load module " ~ user-module-name ~ "."
-        print: cond .condition ~ ": " ~ cond .message
-        cond .stack print-trace
-        cleanup-and-terminate: "could not load module"
-    ])
-})
+with-namestack: [
+    let: user-module-result = (try: [
+        use: user-module-name path-loader: [user-source-path] contents-loader: [user-source-contents]
+    ] except: {
+        (Condition, \cond [
+            print: "Error: could not load module " ~ user-module-name ~ "."
+            print: cond .condition ~ ": " ~ cond .message
+            cond .stack print-trace
+            cleanup-and-terminate: "could not load module"
+        ])
+    })
 
-if: cleanup-all-modules then: [ user-module-result ] else: [
-    terminate: "could not clean up modules"
+    if: cleanup-all-modules then: [ user-module-result ] else: [
+        terminate: "could not clean up modules"
+    ]
 ]

@@ -42,9 +42,12 @@ let: (frame: Frame) .module do: [
 let: (frame: Frame) .marker do: [
     frame unsafe-read-value-at-offset: 56
 ]
+let: (frame: Frame) .dynamic do: [
+    frame unsafe-read-value-at-offset: 64
+]
 let: (frame: Frame) next do: [
     Frame segment: frame .segment offset: (
-        frame .offset + 64 + 8 * (frame .#regs + frame .#data)
+        frame .offset + 72 + 8 * (frame .#regs + frame .#data)
     )
 ]
 

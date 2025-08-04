@@ -320,7 +320,7 @@ namespace Katsu
     }
 
     void call_impl(OpenVM& vm, bool tail_call, Value v_callable, int64_t nargs, Value* args,
-                   Value v_marker = Value::null())
+                   Value v_marker = Value::null(), Value v_dynamic = Value::null())
     {
         // In case of tail-call, we need to temporarily store the args as we unwind the current
         // frame and replace it with a new frame.
@@ -354,7 +354,8 @@ namespace Katsu
                                          code->num_data,
                                          Value::object(code),
                                          code->v_module,
-                                         v_marker);
+                                         v_marker,
+                                         v_dynamic);
 
             // In the closure's frame:
             // - local 0...n are the call arguments (which may just be <null>, in the special case
@@ -429,7 +430,8 @@ namespace Katsu
                                          code->num_data,
                                          Value::object(code),
                                          code->v_module,
-                                         v_marker);
+                                         v_marker,
+                                         v_dynamic);
 
             // In the closure's frame:
             // - local 0...n are the call arguments (which may just be <null>, in the special case
@@ -713,6 +715,29 @@ namespace Katsu
                   /* nargs */ 1,
                   /* args */ &v_segment,
                   /* v_marker */ Value::null());
+    }
+
+    void intrinsic__frame_set_dynamic_(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ frame-set-dynamic: value
+        ASSERT(nargs == 2);
+        vm.frame()->v_dynamic = args[1];
+        vm.frame()->push(Value::null());
+        vm.frame()->inst_spot++;
+    }
+
+    void intrinsic__frame_search_dynamic(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
+    {
+        // _ frame-search-dynamic
+        ASSERT(nargs == 1);
+        // Search call stack (from top) for the first non-null dynamic value, and return it
+        // (or else null).
+        Frame* frame = vm.frame();
+        while (frame && frame->v_dynamic.is_null()) {
+            frame = frame->caller;
+        }
+        vm.frame()->push(frame ? frame->v_dynamic : Value::null());
+        vm.frame()->inst_spot++;
     }
 
     void intrinsic__loaded_modules(OpenVM& vm, bool tail_call, int64_t nargs, Value* args)
@@ -1238,6 +1263,15 @@ namespace Katsu
                            {matches_any, matches_any},
                            &intrinsic__call_marked_);
         register_intrinsic("call/dc:", r_misc, {matches_any, matches_any}, &intrinsic__call_dc_);
+
+        register_intrinsic("frame-set-dynamic:",
+                           r_misc,
+                           {matches_any, matches_any},
+                           &intrinsic__frame_set_dynamic_);
+        register_intrinsic("frame-search-dynamic",
+                           r_misc,
+                           {matches_any},
+                           &intrinsic__frame_search_dynamic);
 
         register_intrinsic("loaded-modules", r_misc, {matches_any}, &intrinsic__loaded_modules);
         register_intrinsic("current-module", r_misc, {matches_any}, &intrinsic__current_module);

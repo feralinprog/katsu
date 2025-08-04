@@ -344,6 +344,7 @@ namespace Katsu
                         move_value(&frame->v_code);
                         move_value(&frame->v_module);
                         move_value(&frame->v_marker);
+                        move_value(&frame->v_dynamic);
 
                         for (uint32_t i = 0; i < frame->num_regs; i++) {
                             move_value(&frame->regs()[i]);
