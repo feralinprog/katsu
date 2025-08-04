@@ -15,7 +15,7 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
-./run b
+./run b || exit 1
 
 update_test ()
 {
