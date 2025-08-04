@@ -1,6 +1,7 @@
 use: {
     "core.builtin.ffi"
     "core.ffi"
+    "core.io.linux.errno"
     "core.resource"
     "core.sequence"
 }
@@ -51,4 +52,19 @@ let: (syscall-result: Fixnum) %check-syscall do: [
         let: message = "IO error (" ~ errno %strerrorname_np ~ "): " ~ errno %strerror
         (IOError condition: "io-error" message: message stack: #null errno: errno) signal
     ] else: [ syscall-result ]
+]
+
+let: (_it do-io: body if-blocked: blocked) do: [
+    try: [
+        body call: _it
+    ] except: {
+        IOError, \e [
+            if: (e .errno = EAGAIN) or (e .errno = EWOULDBLOCK) then: [
+                blocked call: _it
+            ] else: [
+                # Re-raise the error.
+                e signal/no-trace
+            ]
+        ]
+    }
 ]
