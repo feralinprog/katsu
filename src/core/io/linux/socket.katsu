@@ -76,7 +76,7 @@ let: IPPROTO_RAW = 255      # Raw IP packets.
 let: IPPROTO_MPTCP = 262    # Multipath TCP connection.
 
 let: &accept4 = new-CIFRef
-let: ((sockfd: Fixnum) accept4: (addr: Foreign) addrlen: (addrlen: Foreign) flags: (flags: Fixnum)) do: [
+let: ((sockfd: Fixnum) %accept4: (addr: Foreign) addrlen: (addrlen: Foreign) flags: (flags: Fixnum)) do: [
     (&accept4 .args at: 0) foreign-write-sint-at-offset: 0 value: sockfd
     (&accept4 .args at: 1) foreign-write-foreign-at-offset: 0 value: addr
     (&accept4 .args at: 2) foreign-write-foreign-at-offset: 0 value: addrlen
@@ -84,7 +84,7 @@ let: ((sockfd: Fixnum) accept4: (addr: Foreign) addrlen: (addrlen: Foreign) flag
     (&accept4 ffi-call foreign-read-sint-at-offset: 0) %check-syscall
 ]
 let: ((sockfd: Fixnum) %accept: (addr: Foreign) addrlen: (addrlen: Foreign)) do: [
-    sockfd accept4: addr addrlen: addrlen flags: 0
+    sockfd %accept4: addr addrlen: addrlen flags: 0
 ]
 
 let: &bind = new-CIFRef
