@@ -213,6 +213,13 @@ let: ((seq: Sequence) keep: good?) do: [
     seq keep: good? like: seq
 ]
 
+let: ((seq: Sequence) reject: bad? like: (exemplar: Sequence)) do: [
+    seq keep: [not (bad? call: it)] like: exemplar
+]
+let: ((seq: Sequence) reject: bad?) do: [
+    seq reject: bad? like: seq
+]
+
 let: ((seq: Sequence) reduce: accumulate initial: initial-value) do: [
     mut: reduced = initial-value
     seq each: [ reduced: (accumulate call*: reduced, it) ]
@@ -242,6 +249,11 @@ let: ((seq: ResizableSequence) keep!: good?) do: [
     ]
     seq length: dst
 ]
+
+let: ((seq: ResizableSequence) reject!: bad?) do: [
+    seq keep!: [not (bad? call: it)]
+]
+
 let: ((seq: ResizableSequence) remove!: value) do: [
     seq keep!: [ it != value ]
 ]

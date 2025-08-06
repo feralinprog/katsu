@@ -135,6 +135,13 @@ cd
     2 = null
     3 = null
 ]
+*vector: length=2 [
+  v_array = *array: length=4
+    0 = *string: "abc"
+    1 = *string: "def"
+    2 = null
+    3 = null
+]
 *string: "abcdefghi"
 fixnum 10
 fixnum 30
@@ -188,3 +195,10 @@ fixnum 0
 fixnum 0
 fixnum 0
 fixnum 123
+length = 3
+fixnum 5
+fixnum 4
+fixnum 3
+length = 2
+fixnum 1
+fixnum 2
