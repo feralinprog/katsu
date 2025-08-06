@@ -68,3 +68,10 @@ let: (_it do-io: body if-blocked: blocked) do: [
         ]
     }
 ]
+
+let: (_it do-io: body while-blocked: if-blocked) do: [
+    _it do-io: body if-blocked: [
+        if-blocked call: it
+        TAIL-CALL: (_it do-io: body while-blocked: if-blocked)
+    ]
+]

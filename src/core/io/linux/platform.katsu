@@ -18,5 +18,7 @@ let: setup-io-syscalls do: [
 ]
 
 # setup-standard-streams is implemented in core.io.linux.file.
+# setup-scheduler is implemented in core.io.linux.scheduler
+# run-scheduler-fiber is implemented in core.io.linux.scheduler
 # teardown-standard-streams is implemented in core.io.linux.file.
 # io-select-ready-fiber is implemented in core.io.linux.scheduler.

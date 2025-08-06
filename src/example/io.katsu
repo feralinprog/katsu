@@ -1,0 +1,154 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+    "core.combinator"
+    "core.dynamic-variable"
+    "core.ffi"
+    "core.fiber"
+    "core.io"
+    "core.io.linux.epoll"
+    "core.io.linux.error"
+    "core.io.linux.file"
+    "core.io.linux.handle"
+    "core.io.linux.scheduler"
+    "core.io.linux.socket"
+    "core.io.stream"
+    "core.resource"
+    "core.sequence"
+}
+
+# TODO: try to move as much of this as possible to test/. Need some more infra around running
+# tests, though, for instance starting up servers / clients to interact with this code.
+
+with-io: [
+    let: nl = " "
+    nl unsafe-write-u8-at-offset: 16 value: 10
+
+    let: old-fl = (0 %fcntl: F_GETFL)
+    0 %fcntl: F_SETFL arg: (old-fl bit|: O_NONBLOCK)
+
+    # # Make an epoll handle which supports up to 10 events per epoll_wait.
+    # let: ep = 10 epoll-handle ^dispose
+    # ep epoll-add: 0 events: EPOLLIN data: 0
+    # with-input-stream: (NonBlockingFileInputStream handle: (*input-stream* get .handle) add-ref eof?: #f) do: [
+    #     while: [not end-of-input?] do: [
+    #         let: events = (ep epoll-wait/timeout: 1000)
+    #         if: events empty? then: [
+    #             print: "." end: ""
+    #         ] else: [
+    #             write-from: (read-available-into: (10 zeros-byte-array))
+    #         ]
+    #     ]
+    # ]
+
+    # 0 %fcntl: F_SETFL arg: old-fl
+    # write-from: read-all
+
+    # Socket client:
+    # ---------------------------------------------------------------------------------------------
+
+    let: addr = "127.0.0.1" >in_addr
+    let: port = 1234 %htons
+
+    # TODO: also set SOCK_NONBLOCK, but then need to handle connect() EINPROGRESS.
+    let: s = (%socket: AF_INET type: SOCK_STREAM protocol: 0)
+    let: sockaddr = c-sockaddr_in alloc ^dispose
+    sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
+    sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: port
+    # TODO: memcpy
+    addr each/index: \i byte [
+        sockaddr foreign-write-u8-at-offset: (c-sockaddr_in .fields at: 2) .offset + i value: byte
+    ]
+    # Yes, we have to use sockaddr size, not sockaddr_in.
+    s %connect: sockaddr addrlen: c-sockaddr .size
+    s %fcntl: F_SETFL arg: ((s %fcntl: F_GETFL) bit|: O_NONBLOCK)
+    let: handle = (AutoCloseFileHandle fd: s refcnt: 0)
+    let: sock-in = (NonBlockingFileInputStream handle: handle add-ref eof?: #f)
+    let: sock-out = (NonBlockingFileOutputStream handle: handle add-ref eof?: #f)
+
+    print: "sending a GET request to HTTP server:"
+    with-output-stream: sock-out do: [
+        write-from: ("GET /katsu/test/io.katsu HTTP/1.1" ~ nl ~ nl) string>byte-array
+    ]
+    print: "response:"
+    with-input-stream: sock-in do: [
+        mut: done? = #f
+        until: [end-of-input? or done?] do: [
+            let: r = (read-into: 1 zeros-byte-array)
+            write-from: r
+            if: (r like: 0 zeros-byte-array) byte-array>string = "." then: [ done?: #t ]
+        ]
+    ]
+    # Make sure handle was refcounted and disposed properly.
+    assert: handle .fd = #null
+
+
+    # # Socket server:
+    # # ---------------------------------------------------------------------------------------------
+
+    # # 1. Create socket
+    # # 2. Bind
+    # # 3. Listen
+    # # 4. Accept (-> new socket)
+
+    # let: listen-fd = (%socket: AF_INET type: (SOCK_STREAM bit|: SOCK_NONBLOCK) protocol: 0)
+    # (AutoCloseFileHandle fd: listen-fd refcnt: 0) ^dispose
+
+    # # Set SO_REUSEADDR to 1.
+    # let: optval = (malloc: sizeof-sint) ^dispose
+    # optval foreign-write-sint-at-offset: 0 value: 1
+    # listen-fd %setsockopt: SOL_SOCKET optname: SO_REUSEADDR optval: optval optlen: sizeof-sint
+
+    # let: INADDR_ANY = 4 zeros-byte-array
+    # let: bind-addr = INADDR_ANY
+    # let: bind-port = 1235 %htons
+    # let: sockaddr = c-sockaddr_in alloc ^dispose
+    # sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
+    # sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: bind-port
+    # # TODO: memcpy
+    # bind-addr each/index: \i byte [
+    #     sockaddr foreign-write-u8-at-offset: (c-sockaddr_in .fields at: 2) .offset + i value: byte
+    # ]
+    # # Yes, we have to use sockaddr size, not sockaddr_in.
+    # listen-fd %bind: sockaddr addrlen: c-sockaddr .size
+
+    # listen-fd %listen: 32
+
+    # 5 times: [
+    #     print: "(waiting for client)"
+    #     let: sock-fd = (listen-fd perform-nonblocking: [
+    #         %accept4: NULL addrlen: NULL flags: SOCK_NONBLOCK
+    #     ] epoll-fd: listen-fd epoll-events: EPOLLIN)
+    #     print: "(got client)"
+
+    #     "server-fiber-" ~ it >string run-fiber: [
+    #         let: sock-handle = (AutoCloseFileHandle fd: sock-fd refcnt: 0)
+    #         let: sock-in = (NonBlockingFileInputStream handle: sock-handle add-ref eof?: #f)
+    #         let: sock-out = (NonBlockingFileOutputStream handle: sock-handle add-ref eof?: #f)
+    #         with-input-stream: sock-in do: [
+    #             read-until: [
+    #                 # Last four bytes are CR-NL (or we just hit end of input)
+    #                 (if: it length >= 4 then: [
+    #                     ((at: length - 4) = 13) and ((at: length - 3) = 10) and
+    #                     ((at: length - 2) = 13) and ((at: length - 1) = 10)
+    #                 ] else: #f) or end-of-input?
+    #             ] group: 1 like: 0 zeros-byte-array
+    #         ]
+    #         sock-fd %shutdown: SHUT_RD
+    #         with-output-stream: sock-out do: [
+    #             write-from: (
+    #                 "HTTP/1.0 200 OK" ~ nl ~
+    #                 "Content-type: text/html" ~ nl ~
+    #                 nl ~
+    #                 "<html><body><h1>Title</h1><p>Some text: " ~ current-fiber .name ~ ". <a href='more'>a link</a></p>"
+    #             ) string>byte-array
+    #             print: "(reading until EOF to provide to client)"
+    #             with-input-stream: (NonBlockingFileInputStream handle: (*input-stream* get .handle) add-ref eof?: #f) do: [
+    #                 write-from: read-all
+    #             ]
+    #             write-from: "</body></html>" string>byte-array
+    #         ]
+    #     ]
+    #     yield
+    # ]
+]

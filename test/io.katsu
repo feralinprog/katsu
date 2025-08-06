@@ -21,7 +21,7 @@ with-io: [
         ]
     }
 
-    with-input-stream: (open-input: "test/files/file1.txt") do: [
+    with-input-stream: (open-input/blocking: "test/files/file1.txt") do: [
         let: s = read-all byte-array>string
         print: s
     ]
@@ -45,92 +45,5 @@ with-io: [
     ]
 
     # We should've closed other file descriptors automatically.
-    assert: (%socket: AF_INET type: SOCK_STREAM protocol: 0) = 3
-
-
-    # # Socket client:
-    # # ---------------------------------------------------------------------------------------------
-
-    # let: addr = "127.0.0.1" >in_addr
-    # let: port = 1234 %htons
-
-    # let: s = (%socket: AF_INET type: SOCK_STREAM protocol: 0)
-    # let: sockaddr = c-sockaddr_in alloc ^dispose
-    # sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
-    # sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: port
-    # # TODO: memcpy
-    # addr each/index: \i byte [
-    #     sockaddr foreign-write-u8-at-offset: (c-sockaddr_in .fields at: 2) .offset + i value: byte
-    # ]
-    # # Yes, we have to use sockaddr size, not sockaddr_in.
-    # s %connect: sockaddr addrlen: c-sockaddr .size
-    # let: handle = (AutoCloseFileHandle fd: s refcnt: 0)
-    # let: sock-in = (BlockingFileInputStream handle: handle add-ref eof?: #f)
-    # let: sock-out = (BlockingFileOutputStream handle: handle add-ref eof?: #f)
-
-    # print: "sending a GET request to HTTP server:"
-    # with-output-stream: sock-out do: [
-    #     write-from: ("GET /katsu/test/io.katsu HTTP/1.1" ~ nl ~ nl) string>byte-array
-    # ]
-    # print: "response:"
-    # with-input-stream: sock-in do: [
-    #     write-from: read-all
-    # ]
-    # # Make sure handle was refcounted and disposed properly.
-    # assert: handle .fd = #null
-
-
-    # # Socket server:
-    # # ---------------------------------------------------------------------------------------------
-
-    # # 1. Create socket
-    # # 2. Bind
-    # # 3. Listen
-    # # 4. Accept (-> new socket)
-
-    # let: listen-fd = (%socket: AF_INET type: SOCK_STREAM protocol: 0)
-    # (AutoCloseFileHandle fd: listen-fd refcnt: 0) ^dispose
-
-    # # Set SO_REUSEADDR to 1.
-    # let: optval = (malloc: sizeof-sint) ^dispose
-    # optval foreign-write-sint-at-offset: 0 value: 1
-    # listen-fd %setsockopt: SOL_SOCKET optname: SO_REUSEADDR optval: optval optlen: sizeof-sint
-
-    # let: INADDR_ANY = 4 zeros-byte-array
-    # let: bind-addr = INADDR_ANY
-    # let: bind-port = 1235 %htons
-    # let: sockaddr = c-sockaddr_in alloc ^dispose
-    # sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
-    # sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: bind-port
-    # # TODO: memcpy
-    # bind-addr each/index: \i byte [
-    #     sockaddr foreign-write-u8-at-offset: (c-sockaddr_in .fields at: 2) .offset + i value: byte
-    # ]
-    # # Yes, we have to use sockaddr size, not sockaddr_in.
-    # listen-fd %bind: sockaddr addrlen: c-sockaddr .size
-
-    # listen-fd %listen: 32
-
-    # let: sock-fd = (listen-fd %accept: NULL addrlen: NULL)
-    # let: sock-handle = (AutoCloseFileHandle fd: sock-fd refcnt: 0)
-    # let: sock-in = (BlockingFileInputStream handle: sock-handle add-ref eof?: #f)
-    # let: sock-out = (BlockingFileOutputStream handle: sock-handle add-ref eof?: #f)
-    # with-input-stream: sock-in do: [
-    #     write-from: (read-until: [
-    #         # Last four bytes are CR-NL (or we just hit end of input)
-    #         (if: it length >= 4 then: [
-    #             ((at: length - 4) = 13) and ((at: length - 3) = 10) and
-    #             ((at: length - 2) = 13) and ((at: length - 1) = 10)
-    #         ] else: #f) or end-of-input?
-    #     ])
-    # ]
-    # sock-fd %shutdown: SHUT_RD
-    # with-output-stream: sock-out do: [
-    #     write-from: (
-    #         "HTTP/1.0 200 OK" ~ nl ~
-    #         "Content-type: text/html" ~ nl ~
-    #         nl ~
-    #         "<html><body><h1>Title</h1><p>Some text. <a href='more'>a link</a></p></body></html>"
-    #     ) string>byte-array
-    # ]
+    assert: (%socket: AF_INET type: SOCK_STREAM protocol: 0) = 4
 ]

@@ -8,6 +8,8 @@ use: {
 # Implemented by the platform I/O runtime.
 defer: setup-io-syscalls
 defer: setup-standard-streams
+defer: setup-scheduler
+defer: run-scheduler-fiber
 defer: teardown-standard-streams
 defer: io-select-ready-fiber
 
@@ -15,8 +17,10 @@ let: (x with-io: f) do: [
     with-disposal: [
         setup-io-syscalls
         setup-standard-streams
+        setup-scheduler
 
         run-fibers: [
+            run-scheduler-fiber
             *input-stream* with-scope: [
             *output-stream* with-scope: [
             *error-stream* with-scope: [

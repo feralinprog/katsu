@@ -1,10 +1,102 @@
 use: {
+    "core.combinator"
     "core.fiber"
+    "core.io.linux.epoll"
+    "core.io.linux.error"
+    "core.resource"
+    "core.sequence"
 }
 
 # Fiber scheduler for linux IO.
 
 let: (fibers: Vector) io-select-ready-fiber do: [
-    # TODO
     fibers select-first-ready-fiber
+]
+
+data: Scheduler has: {
+    epoll-handle # EPollHandle
+    # TODO: make this a more efficient mapping from fd to <sequence of fiber>
+    blocked-fibers # Vector of (fd, fiber) pairs
+}
+
+let: @scheduler = (Box value: #null)
+let: *scheduler* do: [ @scheduler .value ]
+
+let: setup-scheduler do: [
+    @scheduler value: (
+        Scheduler epoll-handle: (
+            # Accept up to 128 events at a time.
+            # The only real limit is memory usage, with each epoll_event taking 16 bytes.
+            128 epoll-handle ^dispose
+        ) blocked-fibers: {}
+    )
+]
+
+# General pattern for performing <some nonblocking IO syscall>:
+# 1. Attempt the syscall.
+# 2. If it succeeded (at least, didn't produce EAGAIN / EWOULDBLOCK), we're done!
+# 3. Otherwise:
+#    a. Register interest in the scheduler's epoll handle.
+#    b. Until syscall stops reporting EAGAIN / EWOULDBLOCK:
+#       i. Try the syscall.
+#       ii. If EAGAIN, then add to blocked-fibers and suspend; the scheduler will wake us up later.
+#    d. Unregister interest in the scheduler's epoll handle.
+# (Really, steps 1 and 2 are an optimization to avoid registering/deregistering interest if the
+# nonblocking operation is already ready, and using a loop in 3b instead of a loop which contains
+# the epoll registering/deregistering avoids repeated register/deregistering if the operation
+# is repeatedly not ready.)
+let: (_it perform-nonblocking: attempt-syscall epoll-fd: (fd: Fixnum) epoll-events: (events: Fixnum)) do: [
+    _it do-io: attempt-syscall if-blocked: [
+        [
+            *scheduler* .epoll-handle epoll-add: fd events: events data: fd
+            _it do-io: attempt-syscall while-blocked: [
+                *scheduler* .blocked-fibers append: (fd, current-fiber)
+                suspend
+            ]
+        ] finally: [
+            *scheduler* .epoll-handle epoll-del: fd
+        ]
+    ]
+]
+
+# This is effectively step 3 but with repeated registering/deregistering.
+# TODO: consider updating the stream nonblocking protocol to allow registering/deregistering separately
+# from suspending.
+let: (epoll-suspend-fd: (fd: Fixnum) events: (events: Fixnum)) do: [
+    *scheduler* .epoll-handle epoll-add: fd events: events data: fd
+    *scheduler* .blocked-fibers append: (fd, current-fiber)
+    suspend
+    *scheduler* .epoll-handle epoll-del: fd
+]
+
+let: run-scheduler-fiber do: [
+    "(scheduler)" run-fiber: [
+        let: ep = *scheduler* .epoll-handle
+        let: blocked-fibers = *scheduler* .blocked-fibers
+
+        until: [ready-fibers empty? and not *scheduler* .epoll-handle has-fds?] do: [
+            # If no fibers are ready, there must be at least one suspended fibers waiting on I/O.
+            # Don't epoll_wait if there are any other fibers ready, since it'd fully block them.
+            # (They need to also not block the scheduler.)
+            if: ready-fibers empty? then: [
+                ep epoll-wait each: [
+                    let: ready-fd = .data
+                    blocked-fibers reject!: [
+                        \blocked-fd fiber [
+                            if: blocked-fd = ready-fd then: [
+                                fiber unsuspend
+                                #t # remove from blocked-fibers
+                            ] else: [
+                                #f # keep in blocked-fibers
+                            ]
+                        ] call*: it
+                    ]
+                ]
+                yield
+            ] else: [
+                # Hopefully there's some other fiber which is doing some work (and will register interest in the epoll set).
+                yield
+            ]
+        ]
+    ]
 ]

@@ -3,9 +3,11 @@ use: {
     "core.builtin.misc"
     "core.dynamic-variable"
     "core.ffi"
+    "core.io.linux.epoll"
     "core.io.linux.errno"
     "core.io.linux.error"
     "core.io.linux.handle"
+    "core.io.linux.scheduler"
     "core.io.stream"
     "core.resource"
     "core.sequence"
@@ -227,7 +229,9 @@ let: ((s: NonBlockingFileInputStream) stream-read-available: (count: Fixnum) int
         buf from: 0 to<: 0
     ]
 ]
-# TODO: stream-wait-read with epoll
+let: (s: NonBlockingFileInputStream) stream-wait-read do: [
+    epoll-suspend-fd: s .handle .fd events: EPOLLIN
+]
 let: ((s: BlockingFileInputStream) stream-read: (count: Fixnum) into: (buf: MutableSequence)) do: [
     let: sub-buf = (s .handle handle-read: count into: buf)
     if: count > 0 and (sub-buf length = 0) then: [ s latch-eof ]
@@ -239,7 +243,9 @@ let: (s: BlockingFileInputStream) buffer-exemplar do: [ 0 zeros-byte-array ]
 let: ((s: NonBlockingFileOutputStream) stream-write-available: (count: Fixnum) from: (buf: Sequence)) do: [
     s .handle handle-write: count from: buf
 ]
-# TODO: stream-wait-write with epoll
+let: (s: NonBlockingFileOutputStream) stream-wait-write do: [
+    epoll-suspend-fd: s .handle .fd events: EPOLLOUT
+]
 let: ((s: BlockingFileOutputStream) stream-write: (count: Fixnum) from: (buf: Sequence)) do: [
     s .handle handle-write: count from: buf
 ]

@@ -120,6 +120,8 @@ data: EPollHandle extends: { Disposable } has: {
     event # Foreign -- holds a single `struct epoll_event`
     events # Foreign -- holds maxevents number of `struct epoll_event`s
     maxevents # Fixnum, positive
+    # TODO: replace with an epoll-set (which we keep track of similarly?)
+    num-fds # Fixnum -- keeps track of how many fds are registered with the epoll-fd
 }
 
 let: (ep: EPollHandle) dispose do: [
@@ -137,12 +139,15 @@ let: ((maxevents: Fixnum) epoll-handle: (flags: Fixnum)) do: [
         c-epoll_event alloc
     ) events: (
         (array-type: c-epoll_event length: maxevents) alloc
-    ) maxevents: maxevents
+    ) maxevents: maxevents num-fds: 0
 ]
 let: (maxevents: Fixnum) epoll-handle do: [ maxevents epoll-handle: 0 ]
 
+let: (ep: EPollHandle) has-fds? do: [ ep .num-fds > 0 ]
+
 # Note that while epoll_data_t allows specifying a void* or full u64, this only allows specifying a Fixnum of opaque user data
 # to epoll_ctl (to be returned later from epoll_wait).
+# TODO: make this private (it doesn't update num-fds).
 let: ((ep: EPollHandle) epoll-ctl: (op: Fixnum) fd: (fd: Fixnum) events: (events: Fixnum) data: (data: Fixnum)) do: [
     ep .event foreign-write-u32-at-offset: (c-epoll_event .fields at: 0) .offset value: events
     ep .event foreign-write-u64-at-offset: (c-epoll_event .fields at: 1) .offset value: data
@@ -152,10 +157,12 @@ let: ((ep: EPollHandle) epoll-ctl: (op: Fixnum) fd: (fd: Fixnum) events: (events
 # Call epoll_ctl with EPOLL_CTL_ADD, specifying the given events (bitmask; see EPOLL* fields) along with data to provide from epoll_wait.
 let: ((ep: EPollHandle) epoll-add: (fd: Fixnum) events: (events: Fixnum) data: (data: Fixnum)) do: [
     ep epoll-ctl: EPOLL_CTL_ADD fd: fd events: events data: data
+    ep num-fds: ep .num-fds + 1
 ]
 # Call epoll_ctl with EPOLL_CTL_DEL.
 let: ((ep: EPollHandle) epoll-del: (fd: Fixnum)) do: [
     ep .epfd-handle .fd %epoll_ctl: EPOLL_CTL_DEL fd: fd event: NULL
+    ep num-fds: ep .num-fds - 1
 ]
 # Call epoll_ctl with EPOLL_CTL_MOD, specifying the given events (bitmask; see EPOLL* fields) along with data to provide from epoll_wait.
 let: ((ep: EPollHandle) epoll-mod: (fd: Fixnum) events: (events: Fixnum) data: (data: Fixnum)) do: [
