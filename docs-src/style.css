@@ -9,3 +9,31 @@ a:link {
 a:visited {
     color: rgb(191, 96, 255);
 }
+
+body {
+    margin: 0;
+}
+
+header {
+    background-color: rgb(40, 40, 40);
+    padding: 0;
+    font-size: 2em;
+}
+.header-span {
+    margin: 0.5em;
+}
+header #logo {
+    height: 1.5em;
+}
+
+main {
+    margin: auto;
+    width: 65%;
+}
+
+footer {
+    background-color: rgb(40, 40, 40);
+}
+.footer-span {
+    margin: 0.5em;
+}
