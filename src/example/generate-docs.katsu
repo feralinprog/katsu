@@ -1,0 +1,83 @@
+use: {
+    "core.builtin.ffi"
+    "core.builtin.misc"
+    "core.dynamic-variable"
+    "core.ffi"
+    "core.io"
+    "core.io.linux.error"
+    "core.io.linux.file"
+    "core.io.linux.socket"
+    "core.io.stream"
+    "core.resource"
+    "core.sequence"
+    "core.sequence.assoc"
+}
+
+let: nl = " "
+nl unsafe-write-u8-at-offset: 16 value: 10
+
+let: (write: s) do: [ write-from: s string>byte-array ]
+let: (writeln: s) do: [ write: s; write: nl ]
+
+let: ((s: Sequence) bit|) do: [
+    s reduce: \a b [ a bit|: b ] initial: 0
+]
+
+with-io: [
+    print: "Generating index..."
+    with-output-stream: (create-output/blocking: "docs-out/index.html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
+        writeln: "<html>"
+        writeln: "  <head>"
+        writeln: "    <title>Katsu Index</title>"
+        writeln: "  </head>"
+        writeln: "  <body>"
+        writeln: "    <h1>Full Index</h1>"
+        loaded-modules each-entry: \name module [
+            if: module != current-module then: [
+        writeln: "    <h2><a href='" ~ name ~ ".html'>" ~ name ~ "</a></h2>"
+        writeln: "    <ul>"
+                module each-entry: \name value [
+                    if: name type = String then: [
+        writeln: "      <li><pre>" ~ name ~ "</pre></li>"
+                    ] else: [
+        writeln: "      <li>(not a string name)</li>"
+                    ]
+                ]
+            ]
+        writeln: "    </ul>"
+        ]
+        writeln: "  </body>"
+        writeln: "</html>"
+    ]
+
+    mut: i = 0
+    loaded-modules each-entry: \name module [
+        print: "(" ~ (i + 1) >string ~ "/" ~ loaded-modules length >string ~ ") " end: ""
+        if: module = current-module then: [
+            print: "Skipping generating page for " ~ name
+        ] else: [
+            print: "Generating page for " ~ name
+            with-output-stream: (create-output/blocking: "docs-out/" ~ name ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
+                writeln: "<html>"
+                writeln: "  <head>"
+                writeln: "    <title>" ~ name ~ " - Module</title>"
+                writeln: "  </head>"
+                writeln: "  <body>"
+                writeln: "    <h1>Module: " ~ name ~ "</h1>"
+                writeln: "    <h2>Module Contents</h2>"
+                writeln: "    <ul>"
+                    module each-entry: \name value [
+                        if: name type = String then: [
+                writeln: "      <li><pre>" ~ name ~ "</pre></li>"
+                        ] else: [
+                writeln: "      <li>(not a string name)</li>"
+                        ]
+                    ]
+                writeln: "    </ul>"
+                writeln: "  </body>"
+                writeln: "</html>"
+            ]
+        ]
+        i: i + 1
+    ]
+]

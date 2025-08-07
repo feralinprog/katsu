@@ -99,6 +99,12 @@ katsu ()
     out/katsu $@
 }
 
+gen_docs ()
+{
+    echo "============== GENERATING DOCS =============="
+    out/katsu example.generate-docs src/example/generate-docs.katsu
+}
+
 if [ $# -eq 0 ]; then
     build
     test
@@ -113,6 +119,7 @@ case "$1" in
     t|test)         shift; build; test $@ ;;
     v|valgrind)     shift; build; _valgrind $@ ;;
     k|katsu|r|run)  shift; build; katsu $@ ;;
+    d|docs)         shift; build; gen_docs ;;
     "")                    build; katsu ;;
     *)
         echo "not sure what to do with '$1'" >&2
