@@ -63,6 +63,7 @@ with-io: [
         # Yes, we have to use sockaddr size, not sockaddr_in.
         s %connect: sockaddr addrlen: c-sockaddr .size
     ] except-errnos: { EINPROGRESS } then: [
+        print: "waiting for connection..."
         epoll-suspend-fd: s events: EPOLLOUT
         with-disposal: [
             let: optval = (malloc: sizeof-sint) ^dispose
@@ -74,6 +75,7 @@ with-io: [
             if: sock-errno != 0 then: [ sock-errno signal-io-error ]
         ]
     ]
+    print: "connected!"
     let: handle = (AutoCloseFileHandle fd: s refcnt: 0)
     let: sock-in = (NonBlockingFileInputStream handle: handle add-ref eof?: #f)
     let: sock-out = (NonBlockingFileOutputStream handle: handle add-ref eof?: #f)
