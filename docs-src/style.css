@@ -1,6 +1,7 @@
 body {
-    background-color: rgb(30, 30, 30);
+    background-color: rgb(40, 40, 40);
     color: rgb(222, 214, 202);
+    margin: 0;
 }
 
 a:link {
@@ -10,14 +11,12 @@ a:visited {
     color: rgb(191, 96, 255);
 }
 
-body {
-    margin: 0;
-}
-
 header {
     background-color: rgb(40, 40, 40);
-    padding: 0;
+    padding: 0em;
+    padding-bottom: 0.25em;
     font-size: 2em;
+    border-bottom: 2px solid rgb(144, 138, 130);
 }
 .header-span {
     margin: 0.5em;
@@ -27,12 +26,21 @@ header #logo {
 }
 
 main {
-    margin: auto;
+    background-color: rgb(30, 30, 30);
+    margin: 0;
+    padding: 1em;
+}
+.main-div {
+    margin-left: auto;
+    margin-right: auto;
     width: 65%;
 }
 
 footer {
     background-color: rgb(40, 40, 40);
+    padding: 0.5em;
+    border-top: 2px solid rgb(144, 138, 130);
+    text-align: center;
 }
 .footer-span {
     margin: 0.5em;

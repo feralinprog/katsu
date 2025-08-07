@@ -118,21 +118,6 @@ let: (insert-all: vals) do: [
     building get extend: vals
 ]
 
-let: ((title: String) write-page/header: header main: main footer: footer) do: [
-    let: html = ("html" :: {
-        "head" :: {
-            "title" :: title
-            "link" attrs: { "rel='icon'"; "href='/porkchop.webp'" }
-            "link" attrs: { "rel='stylesheet'"; "href='/style.css'" }
-        }
-        "body" :: {
-            "header" :: header
-            "main" :: main
-            "footer" :: footer
-        }
-    })
-    html write/indent: 0
-]
 let: ((title: String) write-page: main) do: [
     let: html = ("html" :: {
         "head" :: {
@@ -148,11 +133,11 @@ let: ((title: String) write-page: main) do: [
                     }
                     "Katsu Language"
                 }
-                "hr" :: #null
             }
-            "main" :: main
+            "main" :: {
+                "div" attrs: { "class='main-div'" } :: main
+            }
             "footer" :: {
-                "hr" :: #null
                 "span" attrs: { "class='footer-span'" } :: {
                     "Katsu Language"
                 }
