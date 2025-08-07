@@ -298,7 +298,7 @@ namespace Katsu
         String* s = args[1].obj_string();
         String* e = args[2].obj_string();
         std::cout.write(reinterpret_cast<char*>(s->contents()), s->length);
-        std::cout.write(reinterpret_cast<char*>(e->contents()), s->length);
+        std::cout.write(reinterpret_cast<char*>(e->contents()), e->length);
         return Value::null();
     }
 
