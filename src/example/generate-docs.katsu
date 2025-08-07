@@ -25,7 +25,7 @@ let: ((s: Sequence) bit|) do: [
 
 with-io: [
     print: "Generating index..."
-    with-output-stream: (create-output/blocking: "docs-out/index.html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
+    with-output-stream: (create-output/blocking: "docs/index.html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
         writeln: "<html>"
         writeln: "  <head>"
         writeln: "    <title>Katsu Index</title>"
@@ -57,7 +57,7 @@ with-io: [
             print: "Skipping generating page for " ~ name
         ] else: [
             print: "Generating page for " ~ name
-            with-output-stream: (create-output/blocking: "docs-out/" ~ name ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
+            with-output-stream: (create-output/blocking: "docs/" ~ name ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
                 writeln: "<html>"
                 writeln: "  <head>"
                 writeln: "    <title>" ~ name ~ " - Module</title>"
