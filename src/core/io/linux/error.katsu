@@ -34,10 +34,10 @@ let: (errnum: Fixnum) %strerrorname_np do: [
 let: setup-error-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
 
-    # const char *strerror(int errnum)
+    # const char *strerror(int errnum);
     &strerror prep-ffi-call: libc symbol: "strerror" atypes: { &ffi_type_sint } rtype: &ffi_type_pointer
 
-    # const char *strerrorname_np(int errnum)
+    # const char *strerrorname_np(int errnum);
     &strerrorname_np prep-ffi-call: libc symbol: "strerrorname_np" atypes: { &ffi_type_sint } rtype: &ffi_type_pointer
 ]
 

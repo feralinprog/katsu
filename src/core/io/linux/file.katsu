@@ -135,17 +135,18 @@ let: F_DUPFD_CLOEXEC = 1030
 let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
 
-    # int open(const char *pathname, int flags, [optional] mode_t mode)
+    # int open(const char *pathname, int flags, [optional] mode_t mode);
     #   (where mode_t = unsigned int)
     let: &mode_t = &ffi_type_uint # TODO: should be able to generate foreign read/write functions based on a typedef
     &open prep-ffi-call: libc symbol: "open" atypes: { &ffi_type_pointer; &ffi_type_sint; &mode_t } rtype: &ffi_type_sint
 
-    # ssize_t read(int fd, void *buf, size_t count)
+    # ssize_t read(int fd, void *buf, size_t count);
     &read prep-ffi-call: libc symbol: "read" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t } rtype: &ssize_t
 
-    # ssize_t write(int fd, const void *buf, size_t count)
+    # ssize_t write(int fd, const void *buf, size_t count);
     &write prep-ffi-call: libc symbol: "write" atypes: { &ffi_type_sint; &ffi_type_pointer; &size_t } rtype: &ssize_t
 
+    # int fcntl(int fd, int op, ... /* arg */ );
     &fcntl<void> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
     &fcntl<int> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
     &fcntl<ptr> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_pointer } rtype: &ffi_type_sint
