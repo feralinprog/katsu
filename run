@@ -102,6 +102,7 @@ katsu ()
 gen_docs ()
 {
     echo "============== GENERATING DOCS =============="
+    rm -rf docs/*
     out/katsu example.generate-docs src/example/generate-docs.katsu
 }
 

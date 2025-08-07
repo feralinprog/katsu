@@ -23,7 +23,18 @@ let: ((s: Sequence) bit|) do: [
     s reduce: \a b [ a bit|: b ] initial: 0
 ]
 
+let: (mkdir: (pathname: String)) do: [
+    %mkdir: pathname mode: {
+        S_IRWXU
+        S_IRGRP; S_IXGRP
+        S_IROTH; S_IXOTH
+    } bit|
+]
+
 with-io: [
+    mkdir: "docs/module/"
+    mkdir: "docs/article/"
+
     print: "Generating index..."
     with-output-stream: (create-output/blocking: "docs/index.html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
         writeln: "<html>"
@@ -32,9 +43,9 @@ with-io: [
         writeln: "  </head>"
         writeln: "  <body>"
         writeln: "    <h1>Full Index</h1>"
-        loaded-modules each-entry: \name module [
+        loaded-modules each-entry: \module-name module [
             if: module != current-module then: [
-        writeln: "    <h2><a href='" ~ name ~ ".html'>" ~ name ~ "</a></h2>"
+        writeln: "    <h2><a href='module/" ~ module-name ~ ".html'>" ~ module-name ~ "</a></h2>"
         writeln: "    <ul>"
                 module each-entry: \name value [
                     if: name type = String then: [
@@ -51,19 +62,19 @@ with-io: [
     ]
 
     mut: i = 0
-    loaded-modules each-entry: \name module [
+    loaded-modules each-entry: \module-name module [
         print: "(" ~ (i + 1) >string ~ "/" ~ loaded-modules length >string ~ ") " end: ""
         if: module = current-module then: [
-            print: "Skipping generating page for " ~ name
+            print: "Skipping generating page for " ~ module-name
         ] else: [
-            print: "Generating page for " ~ name
-            with-output-stream: (create-output/blocking: "docs/" ~ name ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
+            print: "Generating pages for " ~ module-name
+            with-output-stream: (create-output/blocking: "docs/module/" ~ module-name ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
                 writeln: "<html>"
                 writeln: "  <head>"
-                writeln: "    <title>" ~ name ~ " - Module</title>"
+                writeln: "    <title>" ~ module-name ~ " - Module</title>"
                 writeln: "  </head>"
                 writeln: "  <body>"
-                writeln: "    <h1>Module: " ~ name ~ "</h1>"
+                writeln: "    <h1>Module: " ~ module-name ~ "</h1>"
                 writeln: "    <h2>Module Contents</h2>"
                 writeln: "    <ul>"
                     module each-entry: \name value [
