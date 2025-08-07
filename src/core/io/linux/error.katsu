@@ -45,33 +45,30 @@ let: setup-error-syscalls do: [
 
 data: IOError extends: { Condition } has: { errno }
 
+let: errno signal-io-error do: [
+    let: message = "IO error (" ~ errno %strerrorname_np ~ "): " ~ errno %strerror
+    (IOError condition: "io-error" message: message stack: #null errno: errno) signal
+]
+
 # Check the result of a syscall; if -1, signal an IO error based
 # on the errno set within libc.
 let: (syscall-result: Fixnum) %check-syscall do: [
     if: syscall-result = -1 then: [
-        let: message = "IO error (" ~ errno %strerrorname_np ~ "): " ~ errno %strerror
-        (IOError condition: "io-error" message: message stack: #null errno: errno) signal
+        errno signal-io-error
     ] else: [ syscall-result ]
 ]
 
-let: (_it do-io: body if-blocked: blocked) do: [
+let: (_it try-io: body except-errnos: (errnos: Sequence) then: handler) do: [
     try: [
         body call: _it
     ] except: {
         IOError, \e [
-            if: (e .errno = EAGAIN) or (e .errno = EWOULDBLOCK) then: [
-                blocked call: _it
+            if: (errnos contains?: e .errno) then: [
+                handler call: e
             ] else: [
                 # Re-raise the error.
                 e signal/no-trace
             ]
         ]
     }
-]
-
-let: (_it do-io: body while-blocked: if-blocked) do: [
-    _it do-io: body if-blocked: [
-        if-blocked call: it
-        TAIL-CALL: (_it do-io: body while-blocked: if-blocked)
-    ]
 ]

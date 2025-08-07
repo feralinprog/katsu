@@ -32,6 +32,13 @@ let: setup-scheduler do: [
     )
 ]
 
+let: (_it do-io: body blocked-errnos: (errnos: Sequence) while-blocked: if-blocked) do: [
+    _it try-io: body except-errnos: errnos then: [
+        if-blocked call: it
+        TAIL-CALL: (_it do-io: body blocked-errnos: errnos while-blocked: if-blocked)
+    ]
+]
+
 # General pattern for performing <some nonblocking IO syscall>:
 # 1. Attempt the syscall.
 # 2. If it succeeded (at least, didn't produce EAGAIN / EWOULDBLOCK), we're done!
@@ -45,11 +52,11 @@ let: setup-scheduler do: [
 # nonblocking operation is already ready, and using a loop in 3b instead of a loop which contains
 # the epoll registering/deregistering avoids repeated register/deregistering if the operation
 # is repeatedly not ready.)
-let: (_it perform-nonblocking: attempt-syscall epoll-fd: (fd: Fixnum) epoll-events: (events: Fixnum)) do: [
-    _it do-io: attempt-syscall if-blocked: [
+let: (_it perform-nonblocking: attempt-syscall blocked-errnos: (errnos: Sequence) epoll-fd: (fd: Fixnum) epoll-events: (events: Fixnum)) do: [
+    _it try-io: attempt-syscall except-errnos: errnos then: [
         [
             *scheduler* .epoll-handle epoll-add: fd events: events data: fd
-            _it do-io: attempt-syscall while-blocked: [
+            _it do-io: attempt-syscall blocked-errnos: errnos while-blocked: [
                 *scheduler* .blocked-fibers append: (fd, current-fiber)
                 suspend
             ]

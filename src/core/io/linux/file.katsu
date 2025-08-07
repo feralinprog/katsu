@@ -220,11 +220,11 @@ let: (open-output/blocking: (pathname: String)) do: [
 let: (s: NonBlockingFileInputStream) end-of-stream? do: [ s .eof? ]
 let: (s: BlockingFileInputStream) end-of-stream? do: [ s .eof? ]
 let: ((s: NonBlockingFileInputStream) stream-read-available: (count: Fixnum) into: (buf: MutableSequence)) do: [
-    do-io: [
+    try-io: [
         let: sub-buf = (s .handle handle-read: count into: buf)
         if: count > 0 and (sub-buf length = 0) then: [ s latch-eof ]
         sub-buf
-    ] if-blocked: [
+    ] except-errnos: { EAGAIN; EWOULDBLOCK } then: [
         # We don't know if the file position changed, so just assume it did not.
         buf from: 0 to<: 0
     ]

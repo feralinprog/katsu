@@ -7,6 +7,7 @@ use: {
     "core.fiber"
     "core.io"
     "core.io.linux.epoll"
+    "core.io.linux.errno"
     "core.io.linux.error"
     "core.io.linux.file"
     "core.io.linux.handle"
@@ -50,8 +51,7 @@ with-io: [
     let: addr = "127.0.0.1" >in_addr
     let: port = 1234 %htons
 
-    # TODO: also set SOCK_NONBLOCK, but then need to handle connect() EINPROGRESS.
-    let: s = (%socket: AF_INET type: SOCK_STREAM protocol: 0)
+    let: s = (%socket: AF_INET type: (SOCK_STREAM bit|: SOCK_NONBLOCK) protocol: 0)
     let: sockaddr = c-sockaddr_in alloc ^dispose
     sockaddr foreign-write-ushort-at-offset: (c-sockaddr_in .fields at: 0) .offset value: AF_INET
     sockaddr foreign-write-u16-at-offset: (c-sockaddr_in .fields at: 1) .offset value: port
@@ -59,9 +59,21 @@ with-io: [
     addr each/index: \i byte [
         sockaddr foreign-write-u8-at-offset: (c-sockaddr_in .fields at: 2) .offset + i value: byte
     ]
-    # Yes, we have to use sockaddr size, not sockaddr_in.
-    s %connect: sockaddr addrlen: c-sockaddr .size
-    s %fcntl: F_SETFL arg: ((s %fcntl: F_GETFL) bit|: O_NONBLOCK)
+    try-io: [
+        # Yes, we have to use sockaddr size, not sockaddr_in.
+        s %connect: sockaddr addrlen: c-sockaddr .size
+    ] except-errnos: { EINPROGRESS } then: [
+        epoll-suspend-fd: s events: EPOLLOUT
+        with-disposal: [
+            let: optval = (malloc: sizeof-sint) ^dispose
+            let: optlen = (malloc: c-socklen_t .size) ^dispose
+            optlen foreign-write-socklen_t-at-offset: 0 value: sizeof-sint
+            s %getsockopt: SOL_SOCKET optname: SO_ERROR optval: optval optlen: optlen
+            assert: (optlen foreign-read-sint-at-offset: 0) = sizeof-sint
+            let: sock-errno = (optval foreign-read-sint-at-offset: 0)
+            if: sock-errno != 0 then: [ sock-errno signal-io-error ]
+        ]
+    ]
     let: handle = (AutoCloseFileHandle fd: s refcnt: 0)
     let: sock-in = (NonBlockingFileInputStream handle: handle add-ref eof?: #f)
     let: sock-out = (NonBlockingFileOutputStream handle: handle add-ref eof?: #f)
@@ -72,11 +84,9 @@ with-io: [
     ]
     print: "response:"
     with-input-stream: sock-in do: [
-        mut: done? = #f
-        until: [end-of-input? or done?] do: [
+        until: [end-of-input?] do: [
             let: r = (read-into: 1 zeros-byte-array)
             write-from: r
-            if: (r like: 0 zeros-byte-array) byte-array>string = "." then: [ done?: #t ]
         ]
     ]
     # Make sure handle was refcounted and disposed properly.
