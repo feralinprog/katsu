@@ -131,6 +131,18 @@ let: F_GETFL = 3
 let: F_SETFL = 4
 let: F_DUPFD_CLOEXEC = 1030
 
+let: &mkdir = new-CIFRef
+let: (%mkdir: (pathname: String) mode: (mode: Fixnum)) do: [
+    # TODO: somehow get rid of the >c-string ^dispose pattern.
+    with-disposal: [
+        (&mkdir .args at: 0) foreign-write-foreign-at-offset: 0 value: pathname >c-string ^dispose
+        (&mkdir .args at: 1) foreign-write-uint-at-offset: 0 value: mode
+        (&mkdir ffi-call foreign-read-sint-at-offset: 0) %check-syscall
+        #null
+    ]
+]
+
+
 # Must be called from within a with-disposal: block.
 let: setup-file-syscalls do: [
     let: libc = (dlopen: "libc.so.6" flags: RTLD_LAZY) ^dispose
@@ -150,6 +162,9 @@ let: setup-file-syscalls do: [
     &fcntl<void> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
     &fcntl<int> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_sint } rtype: &ffi_type_sint
     &fcntl<ptr> prep-ffi-call: libc symbol: "fcntl" atypes: { &ffi_type_sint; &ffi_type_sint; &ffi_type_pointer } rtype: &ffi_type_sint
+
+    # int mkdir(const char *pathname, mode_t mode);
+    &mkdir prep-ffi-call: libc symbol: "mkdir" atypes: { &ffi_type_pointer; &mode_t } rtype: &ffi_type_sint
 
     # TODO: ioctl
 ]
