@@ -220,6 +220,13 @@ let: ((seq: Sequence) reject: bad?) do: [
     seq reject: bad? like: seq
 ]
 
+let: ((seq: Sequence) remove: value like: (exemplar: Sequence)) do: [
+    seq keep: [ it != value ] like: exemplar
+]
+let: ((seq: Sequence) remove: value) do: [
+    seq remove: value like: seq
+]
+
 let: ((seq: Sequence) reduce: accumulate initial: initial-value) do: [
     mut: reduced = initial-value
     seq each: [ reduced: (accumulate call*: reduced, it) ]
