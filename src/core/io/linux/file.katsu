@@ -63,22 +63,22 @@ let: O_NDELAY    = 2048 # 04000
 let: O_PATH      = 2097152 # 010000000
 let: O_SYNC      = 1052672 # 04010000
 
-# TODO: define the mode bits
-# let: S_IXOTH = 
-# let: S_IWOTH = 
-# let: S_IROTH = 
-# let: S_IRWXO = 
-# let: S_IXGRP = 
-# let: S_IWGRP = 
-# let: S_IRGRP = 
-# let: S_IRWXG = 
-# let: S_IXUSR = 
-# let: S_IWUSR = 
-# let: S_IRUSR = 
-# let: S_IRWXU = 
-# let: S_ISVTX = 
-# let: S_ISGID = 
-# let: S_ISUID = 
+# TODO: octal
+let: S_IXOTH = 1 # 0001
+let: S_IWOTH = 2 # 0002
+let: S_IROTH = 4 # 0004
+let: S_IRWXO = 7 # 0007
+let: S_IXGRP = 8 # 0010
+let: S_IWGRP = 16 # 0020
+let: S_IRGRP = 32 # 0040
+let: S_IRWXG = 56 # 0070
+let: S_IXUSR = 64 # 0100
+let: S_IWUSR = 128 # 0200
+let: S_IRUSR = 256 # 0400
+let: S_IRWXU = 448 # 0700
+let: S_ISVTX = 512 # 1000
+let: S_ISGID = 1024 # 2000
+let: S_ISUID = 2048 # 4000
 
 let: &read = new-CIFRef
 let: ((fd: Fixnum) %read: (buf: ByteArray) count: (count: Fixnum) at: (offset: Fixnum)) do: [
@@ -215,6 +215,9 @@ let: (open-output: (pathname: String)) do: [
 ]
 let: (open-output/blocking: (pathname: String)) do: [
     BlockingFileOutputStream handle: (open-handle: pathname flags: O_WRONLY mode: 0) add-ref eof?: #f
+]
+let: (create-output/blocking: (pathname: String) mode: (mode: Fixnum)) do: [
+    BlockingFileOutputStream handle: (open-handle: pathname flags: (O_WRONLY bit|: (O_CREAT bit|: O_TRUNC)) mode: mode) add-ref eof?: #f
 ]
 
 let: (s: NonBlockingFileInputStream) end-of-stream? do: [ s .eof? ]
