@@ -102,7 +102,11 @@ katsu ()
 gen_docs ()
 {
     echo "============== GENERATING DOCS =============="
+    # Some files are hand-written (and live in docs-src/), but most are generated.
     rm -rf docs/*
+    pushd docs-src/ >/dev/null
+        find ./ -type f -exec ln -s ../docs-src/{} ../docs/{} \;
+    popd >/dev/null
     out/katsu example.generate-docs src/example/generate-docs.katsu
 }
 

@@ -1,6 +1,7 @@
 use: {
     "core.builtin.ffi"
     "core.builtin.misc"
+    "core.combinator"
     "core.dynamic-variable"
     "core.ffi"
     "core.io"
@@ -31,34 +32,154 @@ let: (mkdir: (pathname: String)) do: [
     } bit|
 ]
 
+# NOTE: these sanitizers are not necessarily injective, but should be close enough for
+# non-adversarial use cases. If you run into issues generating docs, maybe don't name
+# things super weirdly.
+
+let: (s: String) path-sanitize do: [
+    # https://stackoverflow.com/questions/4814040/allowed-characters-in-filename
+    # TODO: replace:
+    # - '/' with (let's say) '&sol;'
+    # - NUL with (let's say) '&nul;'
+    # (Maybe in the future, escape more things so this is a bit more portable.)
+    s
+]
+
+let: (s: String) html-sanitize do: [
+    # https://stackoverflow.com/questions/7381974/which-characters-need-to-be-escaped-in-html
+    # TODO: replace:
+    # - '&' with '&amp;'
+    # - '<' with '&lt;'
+    # - '>' with '&gt;'
+    # - '"' with '&quot;'
+    # - ''' with '&#39;'
+    s
+]
+
+let: (s: String) url-sanitize do: [
+    # https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/encodeURIComponent
+    # TODO: %-escape everything except
+    #   A-Z a-z 0-9 - _ . ! ~ * ' ( )
+    s
+]
+
+data: XMLEntity has: {
+    name # String
+    attrs # Vector of String (for now, to keep things simple)
+    body # Null, String, or else a Sequence of (String | XMLEntity)
+}
+let: ((e: XMLEntity) write/indent: (indent: Fixnum)) do: [
+    mut: s = ""
+    indent times: [ s: s ~ "  " ]
+    s: s ~ "<" ~ e .name
+    e .attrs each: [ s: s ~ " " ~ it ]
+    if: e .body = #null then: [
+        writeln: s ~ "/>"
+    ] else: [
+        if: e .body type = String then: [
+            writeln: s ~ ">" ~ e .body ~ "</" ~ e .name ~ ">"
+        ] else: [
+            writeln: s ~ ">"
+            e .body each: [ write/indent: indent + 1 ]
+            s: ""
+            indent times: [ s: s ~ "  " ]
+            writeln: s ~ "</" ~ e .name ~ ">"
+        ]
+    ]
+]
+let: ((s: String) write/indent: (indent: Fixnum)) do: [
+    mut: t = ""
+    indent times: [ t: t ~ "  " ]
+    writeln: t ~ s
+]
+
+let: ((name: String) attrs: (attrs: Sequence) :: gen-body) do: [
+    XMLEntity name: name attrs: attrs body: gen-body call
+]
+let: ((name: String) :: gen-body) do: [
+    XMLEntity name: name attrs: {} body: gen-body call
+]
+let: ((name: String) attrs: (attrs: Sequence)) do: [
+    XMLEntity name: name attrs: attrs body: #null
+]
+
+let: building = (make-dynamic: "building")
+let: (body build: (exemplar: Sequence)) do: [
+    building with-value: (resizable-like: exemplar capacity: 0) do: [
+        body call: building get
+        building get like: exemplar
+    ]
+]
+let: body build do: [ body build: {} ]
+let: (insert: val) do: [
+    building get append: val
+]
+let: (insert-all: vals) do: [
+    building get extend: vals
+]
+
+let: ((title: String) write-page/header: header main: main footer: footer) do: [
+    let: html = ("html" :: {
+        "head" :: {
+            "title" :: title
+            "link" attrs: { "rel='icon'"; "href='/porkchop.webp'" }
+            "link" attrs: { "rel='stylesheet'"; "href='/style.css'" }
+        }
+        "body" :: {
+            "header" :: header
+            "main" :: main
+            "footer" :: footer
+        }
+    })
+    html write/indent: 0
+]
+let: ((title: String) write-page: main) do: [
+    let: html = ("html" :: {
+        "head" :: {
+            "title" :: title
+            "link" attrs: { "rel='icon'"; "href='/porkchop.webp'" }
+            "link" attrs: { "rel='stylesheet'"; "href='/style.css'" }
+        }
+        "body" :: {
+            "header" :: {
+            }
+            "main" :: main
+            "footer" :: {
+            }
+        }
+    })
+    html write/indent: 0
+]
+
 with-io: [
     mkdir: "docs/module/"
     mkdir: "docs/article/"
 
     print: "Generating index..."
     with-output-stream: (create-output/blocking: "docs/index.html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
-        writeln: "<html>"
-        writeln: "  <head>"
-        writeln: "    <title>Katsu Index</title>"
-        writeln: "  </head>"
-        writeln: "  <body>"
-        writeln: "    <h1>Full Index</h1>"
-        loaded-modules each-entry: \module-name module [
-            if: module != current-module then: [
-        writeln: "    <h2><a href='module/" ~ module-name ~ ".html'>" ~ module-name ~ "</a></h2>"
-        writeln: "    <ul>"
-                module each-entry: \name value [
-                    if: name type = String then: [
-        writeln: "      <li><pre>" ~ name ~ "</pre></li>"
-                    ] else: [
-        writeln: "      <li>(not a string name)</li>"
-                    ]
+        "Katsu - Module Index" write-page: [
+            insert: ("h1" :: "Full Module Index")
+            loaded-modules each-entry: \module-name module [
+                if: module != current-module then: [
+                    insert: ("h2" :: {
+                        "a" attrs: {
+                            "href='module/" ~ module-name path-sanitize url-sanitize html-sanitize ~ ".html'"
+                        } :: module-name html-sanitize
+                    })
+                    insert: ("ul" :: [
+                        module each-entry: \name value [
+                            if: name type = String then: [
+                                insert: ("li" :: {
+                                    "pre" :: name html-sanitize
+                                })
+                            ] else: [
+                                insert: ("li" :: "(not a string name)")
+                            ]
+                        ]
+                    ] build)
                 ]
             ]
-        writeln: "    </ul>"
-        ]
-        writeln: "  </body>"
-        writeln: "</html>"
+        ] build
     ]
 
     mut: i = 0
@@ -68,25 +189,23 @@ with-io: [
             print: "Skipping generating page for " ~ module-name
         ] else: [
             print: "Generating pages for " ~ module-name
-            with-output-stream: (create-output/blocking: "docs/module/" ~ module-name ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
-                writeln: "<html>"
-                writeln: "  <head>"
-                writeln: "    <title>" ~ module-name ~ " - Module</title>"
-                writeln: "  </head>"
-                writeln: "  <body>"
-                writeln: "    <h1>Module: " ~ module-name ~ "</h1>"
-                writeln: "    <h2>Module Contents</h2>"
-                writeln: "    <ul>"
-                    module each-entry: \name value [
-                        if: name type = String then: [
-                writeln: "      <li><pre>" ~ name ~ "</pre></li>"
-                        ] else: [
-                writeln: "      <li>(not a string name)</li>"
+            with-output-stream: (create-output/blocking: "docs/module/" ~ module-name path-sanitize ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
+                "Katsu - " ~ module-name html-sanitize write-page: {
+                    "h1" :: module-name html-sanitize
+                    "p" :: { "Back to "; "a" attrs: { "href='/index.html'" } :: "Full Index"; "." }
+                    "h2" :: "Module Contents"
+                    "ul" :: [
+                        module each-entry: \name value [
+                            if: name type = String then: [
+                                insert: ("li" :: {
+                                    "pre" :: name html-sanitize
+                                })
+                            ] else: [
+                                insert: ("li" :: "(not a string name)")
+                            ]
                         ]
-                    ]
-                writeln: "    </ul>"
-                writeln: "  </body>"
-                writeln: "</html>"
+                    ] build
+                }
             ]
         ]
         i: i + 1
