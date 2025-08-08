@@ -3,6 +3,7 @@ use: {
     "core.ffi"
     "core.resource"
     "core.sequence"
+    "core.sequence.string"
 }
 
 with-disposal: [
@@ -19,7 +20,7 @@ with-disposal: [
     # Call 'puts' and decode the result.
     (&puts .args at: 0) foreign-write-foreign-at-offset: 0 value: s >c-string ^dispose
     let: result = (&puts ffi-call foreign-read-sint-at-offset: 0)
-    assert: result = (s length + 1)
+    assert: result = (s code-units length + 1)
 ]
 
 (malloc: 1024) dispose-on-cleanup

@@ -1,0 +1,14 @@
+use: {
+    "core.builtin.misc"
+    "core.sequence"
+}
+
+# newtype wrapper
+data: CodeUnits extends: { MutableSequence } has: { str }
+let: (s: String) code-units do: [ CodeUnits str: s ]
+
+let: (c: CodeUnits) length do: [ c .str ~length ]
+let: ((c: CodeUnits) unsafe-at: (i: Fixnum)) do: [ c .str unsafe-read-u8-at-offset: 16 + i ]
+let: ((c: CodeUnits) unsafe-at: (i: Fixnum) put: (code-unit: Fixnum)) do: [ c .str unsafe-write-u8-at-offset: 16 + i value: code-unit ]
+
+# TODO: code-points

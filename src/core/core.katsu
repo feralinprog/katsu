@@ -395,11 +395,10 @@ with-namestack: [
         "core.sequence.assoc"
         "core.sequence.byte-array"
         "core.sequence.resizable"
+        "core.sequence.string"
         "core.sequence.vector"
         "core.stack-trace"
-        "core.string"
         "core.tuple"
-        "core.vector"
     }
 
     *all-core-modules* ~each: \m [

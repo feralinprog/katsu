@@ -5,7 +5,7 @@ use: {
     "core.mixin"
     "core.resource"
     "core.sequence"
-    "core.string"
+    "core.sequence.string"
 }
 
 # Default disposal for a foreign value is to free it.
@@ -15,11 +15,12 @@ Disposable mix-in-to: Foreign
 
 let: (s: String) >c-string do: [
     # Null-terminate.
-    let: cs = (malloc: (s length + 1))
+    let: cu = s code-units
+    let: cs = (malloc: (cu length + 1))
     # TODO: memcpy / memmove
     mut: i = 0
-    while: [i < s length] do: [
-        cs foreign-write-u8-at-offset: i value: (s unsafe-read-u8-at-offset: 16 + i)
+    while: [i < cu length] do: [
+        cs foreign-write-u8-at-offset: i value: (cu unsafe-at: i)
         i: i + 1
     ]
     cs foreign-write-u8-at-offset: i value: 0

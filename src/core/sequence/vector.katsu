@@ -2,7 +2,6 @@ use: {
     "core.builtin.misc"
     "core.mixin"
     "core.sequence"
-    "core.vector"
 }
 
 let: (v: Vector) length do: [

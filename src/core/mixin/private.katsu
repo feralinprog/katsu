@@ -2,7 +2,6 @@ use: {
     "core.array"
     "core.builtin.misc"
     "core.combinator"
-    "core.vector"
 }
 
 # Unfortunately: duplicate some of core.sequence, since Vector / Array are not actually Sequence

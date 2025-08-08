@@ -2,6 +2,7 @@ use: {
     "core.builtin.misc"
     "core.combinator"
     "core.sequence"
+    "core.sequence.string"
 }
 
 let: (seq: Sequence) pprint-all do: [
@@ -42,12 +43,12 @@ pretty-print: ({ 1; 2; 3 } each: [ it * 10 ])
 
 pretty-print: ({ "abc"; "a"; "shouldn't print this!" } all?: [
     print: it
-    length > 1
+    code-units length > 1
 ])
 
 pretty-print: ({ "abc"; "a"; "shouldn't print this!" } any?: [
     print: it
-    length = 1
+    code-units length = 1
 ])
 
 pretty-print: ({ "ab"; "cd"; "ef" } contains?: "a")
@@ -58,13 +59,13 @@ pretty-print: ({ "ab"; "cd"; "ef" } contains?: "cd" starting-at: 2)
 pretty-print: (
     { "abc"; "ab"; "a" } first: [
         print: it
-        length
+        code-units length
     ] where: [ it = 2 ] else: "nope"
 )
 pretty-print: (
     { "abc"; "ab"; "cd" } first: [
         print: it
-        length
+        code-units length
     ] where: [ it = 1 ] else: "nope"
 )
 
@@ -96,10 +97,10 @@ do: [
 ]
 
 
-pretty-print: ({ "abcd"; "abcde" } map: [ length ] like: {} vector>array)
+pretty-print: ({ "abcd"; "abcde" } map: [ code-units length ] like: {} vector>array)
 
-pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } keep: [ length > 3 ])
-pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } reject: [ length > 3 ])
+pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } keep: [ code-units length > 3 ])
+pretty-print: ({ "abc"; "abcde"; "abcd"; "def" } reject: [ code-units length > 3 ])
 
 pretty-print: ({ "abc"; "def"; "ghi" } reduce: \a b [ a ~ b ] initial: "")
 
