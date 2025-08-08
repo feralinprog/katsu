@@ -122,16 +122,16 @@ let: ((title: String) write-page: main) do: [
     let: html = ("html" :: {
         "head" :: {
             "title" :: title
-            "link" attrs: { "rel='icon'"; "href='/porkchop.webp'" }
+            "link" attrs: { "rel='icon'"; "href='/porkchop.ico'" }
             "link" attrs: { "rel='stylesheet'"; "href='/style.css'" }
         }
         "body" :: {
             "header" :: {
                 "span" attrs: { "class='header-span'" } :: {
                     "a" attrs: { "href='/index.html'" } :: {
-                        "img" attrs: { "id='logo'"; "src='/porkchop.webp'"; "alt='katsu porkchop'" }
+                        "img" attrs: { "id='logo'"; "src='/porkchop.ico'"; "alt='katsu porkchop'" }
                     }
-                    "Katsu Language"
+                    "Katsu Programming Language"
                 }
             }
             "main" :: {
