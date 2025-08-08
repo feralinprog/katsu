@@ -150,18 +150,23 @@ let: (insert-all: vals) do: [
     building get extend: vals
 ]
 
-let: ((title: String) write-page: main) do: [
+# depth is to create the write relative links.
+# TODO: do actual URI relative path computations.
+let: ((title: String) write-page: main depth: (depth: Fixnum)) do: [
+    assert: depth >= 0
+    mut: p = ""
+    depth times: [ p: p ~ "../" ]
     let: html = ("html" :: {
         "head" :: {
             "title" :: title
-            "link" attrs: { "rel='icon'"; "href='/porkchop.ico'" }
-            "link" attrs: { "rel='stylesheet'"; "href='/style.css'" }
+            "link" attrs: { "rel='icon'"; "href='" ~ p ~ "porkchop.ico'" }
+            "link" attrs: { "rel='stylesheet'"; "href='" ~ p ~ "style.css'" }
         }
         "body" :: {
             "header" :: {
                 ("span" attrs: { "class='header-span'" } :: {
-                    "a" attrs: { "href='/index.html'" } :: {
-                        "img" attrs: { "id='logo'"; "src='/porkchop.ico'"; "alt='katsu porkchop'" }
+                    "a" attrs: { "href='" ~ p ~ "index.html'" } :: {
+                        "img" attrs: { "id='logo'"; "src='" ~ p ~ "porkchop.ico'"; "alt='katsu porkchop'" }
                     }
                     "Katsu Programming Language"
                 }) inline!
@@ -207,7 +212,7 @@ with-io: [
                     ] build)
                 ]
             ]
-        ] build
+        ] build depth: 0
     ]
 
     mut: i = 0
@@ -220,7 +225,7 @@ with-io: [
             with-output-stream: (create-output/blocking: "docs/module/" ~ module-name path-sanitize ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
                 "Katsu - " ~ module-name html-sanitize write-page: {
                     "h1" :: module-name html-sanitize
-                    ("p" :: { "Back to "; "a" attrs: { "href='/index.html'" } :: "Full Index"; "." }) inline!
+                    ("p" :: { "Back to "; "a" attrs: { "href='../index.html'" } :: "Full Index"; "." }) inline!
                     "h2" :: "Module Contents"
                     "ul" :: [
                         module each-entry: \name value [
@@ -233,7 +238,7 @@ with-io: [
                             ]
                         ]
                     ] build
-                }
+                } depth: 1
             ]
         ]
         i: i + 1
