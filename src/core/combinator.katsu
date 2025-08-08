@@ -16,6 +16,9 @@ let: (_it until: cond do: body) do: [
 ]
 
 let: (x do: f) do: [f call: x]
+let: ((t: Tuple) do*: body) do: [
+    body call*: t
+]
 
 let: (x if-not-null: body) do: [
     if: x != #null then: [ body call: x ]

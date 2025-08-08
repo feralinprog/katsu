@@ -1,0 +1,12 @@
+use: {
+    "core.builtin.misc"
+    "core.sequence"
+    "core.sequence.string"
+}
+
+# See https://en.wikipedia.org/wiki/UTF-8, "UTF-8 encoding example"
+let: s = "WΒ위𐍅"
+print: "code units:"
+s code-units each: [ pretty-print: it ]
+print: "code points:"
+s code-points each: [ pretty-print: it ]
