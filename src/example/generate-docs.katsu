@@ -67,7 +67,11 @@ data: XMLEntity has: {
     name # String
     attrs # Vector of String (for now, to keep things simple)
     body # Null, String, or else a Sequence of (String | XMLEntity)
+    body-inline? # Bool
 }
+
+defer: write/inline
+
 let: ((e: XMLEntity) write/indent: (indent: Fixnum)) do: [
     mut: s = ""
     indent times: [ s: s ~ "  " ]
@@ -79,11 +83,17 @@ let: ((e: XMLEntity) write/indent: (indent: Fixnum)) do: [
         if: e .body type = String then: [
             writeln: s ~ ">" ~ e .body ~ "</" ~ e .name ~ ">"
         ] else: [
-            writeln: s ~ ">"
-            e .body each: [ write/indent: indent + 1 ]
-            s: ""
-            indent times: [ s: s ~ "  " ]
-            writeln: s ~ "</" ~ e .name ~ ">"
+            if: e .body-inline? then: [
+                write: s ~ ">"
+                e .body each: [ write/inline ]
+                writeln: "</" ~ e .name ~ ">"
+            ] else: [
+                writeln: s ~ ">"
+                e .body each: [ write/indent: indent + 1 ]
+                s: ""
+                indent times: [ s: s ~ "  " ]
+                writeln: s ~ "</" ~ e .name ~ ">"
+            ]
         ]
     ]
 ]
@@ -93,15 +103,37 @@ let: ((s: String) write/indent: (indent: Fixnum)) do: [
     writeln: t ~ s
 ]
 
+let: (e: XMLEntity) write/inline do: [
+    mut: s = ""
+    s: s ~ "<" ~ e .name
+    e .attrs each: [ s: s ~ " " ~ it ]
+    if: e .body = #null then: [
+        write: s ~ "/>"
+    ] else: [
+        if: e .body type = String then: [
+            write: s ~ ">" ~ e .body ~ "</" ~ e .name ~ ">"
+        ] else: [
+            write: s ~ ">"
+            e .body each: [ write/inline ]
+            write: "</" ~ e .name ~ ">"
+        ]
+    ]
+]
+let: (s: String) write/inline do: [
+    write: s
+]
+
 let: ((name: String) attrs: (attrs: Sequence) :: gen-body) do: [
-    XMLEntity name: name attrs: attrs body: gen-body call
+    XMLEntity name: name attrs: attrs body: gen-body call body-inline?: #f
 ]
 let: ((name: String) :: gen-body) do: [
-    XMLEntity name: name attrs: {} body: gen-body call
+    XMLEntity name: name attrs: {} body: gen-body call body-inline?: #f
 ]
 let: ((name: String) attrs: (attrs: Sequence)) do: [
-    XMLEntity name: name attrs: attrs body: #null
+    XMLEntity name: name attrs: attrs body: #null body-inline?: #f
 ]
+
+let: (e: XMLEntity) inline! do: [ e body-inline?: #t; e ]
 
 let: building = (make-dynamic: "building")
 let: (body build-like: (exemplar: Sequence)) do: [
@@ -127,20 +159,20 @@ let: ((title: String) write-page: main) do: [
         }
         "body" :: {
             "header" :: {
-                "span" attrs: { "class='header-span'" } :: {
+                ("span" attrs: { "class='header-span'" } :: {
                     "a" attrs: { "href='/index.html'" } :: {
                         "img" attrs: { "id='logo'"; "src='/porkchop.ico'"; "alt='katsu porkchop'" }
                     }
                     "Katsu Programming Language"
-                }
+                }) inline!
             }
             "main" :: {
                 "div" attrs: { "class='main-div'" } :: main
             }
             "footer" :: {
-                "span" attrs: { "class='footer-span'" } :: {
+                ("span" attrs: { "class='footer-span'" } :: {
                     "Katsu Language"
-                }
+                }) inline!
             }
         }
     })
@@ -188,7 +220,7 @@ with-io: [
             with-output-stream: (create-output/blocking: "docs/module/" ~ module-name path-sanitize ~ ".html" mode: {S_IRUSR; S_IWUSR} bit|) do: [
                 "Katsu - " ~ module-name html-sanitize write-page: {
                     "h1" :: module-name html-sanitize
-                    "p" :: { "Back to "; "a" attrs: { "href='/index.html'" } :: "Full Index"; "." }
+                    ("p" :: { "Back to "; "a" attrs: { "href='/index.html'" } :: "Full Index"; "." }) inline!
                     "h2" :: "Module Contents"
                     "ul" :: [
                         module each-entry: \name value [
