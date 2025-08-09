@@ -4,6 +4,22 @@ use: {
     "core.sequence"
 }
 
+# TODO: find a better place for this... core.sequence uses core.combinator, so can't put this in core.combinator.
+let: (_it switch: (cases: Sequence) from: (i: Fixnum)) do: [
+    TAIL-CALL: (if: i = cases length then: [ #null ] else: [
+        TAIL-CALL: (\cond body [
+            TAIL-CALL: (if: (cond call: _it) then: [
+                body call: _it
+            ] else: [
+                TAIL-CALL: (_it switch: cases from: i + 1)
+            ])
+        ] call*: (cases at: i))
+    ])
+]
+let: (_it switch: (cases: Sequence)) do: [
+    TAIL-CALL: (_it switch: cases from: 0)
+]
+
 # newtype wrapper
 data: CodeUnits extends: { Sequence } has: { str }
 let: (s: String) code-units do: [ CodeUnits str: s ]
@@ -23,45 +39,44 @@ let: (s: String) code-points do: [ CodePoints str: s ]
 let: ((u: CodeUnits) decode-code-point-at: (i: Fixnum)) do: [
     # See https://en.wikipedia.org/wiki/UTF-8 for Code point <-> UTF-8 conversion.
     let: b1 = (u at: i)
-    if: b1 < 128 then: [
-        # Single-unit code point.
-        (b1, 1)
-    ] else: [
-        if: b1 < 224 then: [
-            # Two-unit code point.
+    b1 switch: {
+        # Single-unit code point:
+        [it < 128], [ (b1, 1) ]
+        # Two-unit code point:
+        [it < 224], [
             if: u length <= i + 1 then: [ (u .str invalid-utf8: "truncated code point") signal ]
             let: b2 = (u at: i + 1)
             if: not (b1 >= 194) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
             if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
             ((b1 - 192) * 64 + (b2 - 128), 2)
-        ] else: [
-            if: b1 < 240 then: [
-                # Three-unit code point.
-                if: u length <= i + 2 then: [ (u .str invalid-utf8: "truncated code point") signal ]
-                let: b2 = (u at: i + 1)
-                let: b3 = (u at: i + 2)
-                if: (b1 = 224) and not (b2 >= 144) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
-                if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
-                if: not (b3 >= 128 and b3 < 192) then: [ (u .str invalid-utf8: "code unit 3 out of range") signal ]
-                ((b1 - 224) * 64 * 64 + (b2 - 128) * 64 + (b3 - 128), 3)
-            ] else: [
-                if: b1 < 248 then: [
-                    # Four-unit code point.
-                    if: u length <= i + 3 then: [ (u .str invalid-utf8: "truncated code point") signal ]
-                    let: b2 = (u at: i + 1)
-                    let: b3 = (u at: i + 2)
-                    let: b4 = (u at: i + 3)
-                    if: (b1 = 240) and not (b2 >= 144) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
-                    if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
-                    if: not (b3 >= 128 and b3 < 192) then: [ (u .str invalid-utf8: "code unit 3 out of range") signal ]
-                    if: not (b4 >= 128 and b4 < 192) then: [ (u .str invalid-utf8: "code unit 4 out of range") signal ]
-                    ((b1 - 240) * 64 * 64 * 64 + (b2 - 128) * 64 * 64 + (b3 - 128) * 64 + (b4 - 128), 4)
-                ] else: [
-                    (u .str invalid-utf8: "code unit 1 out of range") signal
-                ]
-            ]
         ]
-    ]
+        # Three-unit code point:
+        [it < 240], [
+            if: u length <= i + 2 then: [ (u .str invalid-utf8: "truncated code point") signal ]
+            let: b2 = (u at: i + 1)
+            let: b3 = (u at: i + 2)
+            if: (b1 = 224) and not (b2 >= 144) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
+            if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
+            if: not (b3 >= 128 and b3 < 192) then: [ (u .str invalid-utf8: "code unit 3 out of range") signal ]
+            ((b1 - 224) * 64 * 64 + (b2 - 128) * 64 + (b3 - 128), 3)
+        ]
+        # Four-unit code point:
+        [it < 248], [
+            if: u length <= i + 3 then: [ (u .str invalid-utf8: "truncated code point") signal ]
+            let: b2 = (u at: i + 1)
+            let: b3 = (u at: i + 2)
+            let: b4 = (u at: i + 3)
+            if: (b1 = 240) and not (b2 >= 144) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
+            if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
+            if: not (b3 >= 128 and b3 < 192) then: [ (u .str invalid-utf8: "code unit 3 out of range") signal ]
+            if: not (b4 >= 128 and b4 < 192) then: [ (u .str invalid-utf8: "code unit 4 out of range") signal ]
+            ((b1 - 240) * 64 * 64 * 64 + (b2 - 128) * 64 * 64 + (b3 - 128) * 64 + (b4 - 128), 4)
+        ]
+        # Otherwise, invalid UTF-8:
+        [#t], [
+            (u .str invalid-utf8: "code unit 1 out of range") signal
+        ]
+    }
 ]
 
 let: ((p: CodePoints) each: body) do: [
