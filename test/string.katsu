@@ -10,3 +10,21 @@ print: "code units:"
 s code-units each: [ pretty-print: it ]
 print: "code points:"
 s code-points each: [ pretty-print: it ]
+
+let: (bytes: Sequence) bytes>string do: [
+    (bytes like: 0 zeros-byte-array) byte-array>string
+]
+
+let: ((bytes: Sequence) verify-not-utf8: (message: String)) do: [
+    try: [
+        bytes bytes>string verify-utf8
+    ] except: {
+        InvalidUTF8, \c [ assert: c .message = message ]
+    }
+]
+
+{ 127 } bytes>string verify-utf8
+{ 193; 191 } verify-not-utf8: "overlong encoding"
+{ 224; 129; 191 } verify-not-utf8: "overlong encoding"
+{ 240; 128; 129; 191 } verify-not-utf8: "overlong encoding"
+# TODO: more testcases for truncation / continuation bytes
