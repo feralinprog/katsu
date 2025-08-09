@@ -12,7 +12,7 @@ let: (u: CodeUnits) length do: [ u .str ~length ]
 let: ((u: CodeUnits) unsafe-at: (i: Fixnum)) do: [ u .str unsafe-read-u8-at-offset: 16 + i ]
 
 data: InvalidUTF8 extends: { Condition } has: { str }
-let: ((str: String) invalid-utf8: (message: String)) do: [ InvalidUTF8 condition: "invalid-utf8" message: message stack: #null ]
+let: ((str: String) invalid-utf8: (message: String)) do: [ InvalidUTF8 condition: "invalid-utf8" message: message stack: #null str: str ]
 
 # newtype wrapper
 data: CodePoints has: { str }
@@ -31,6 +31,7 @@ let: ((u: CodeUnits) decode-code-point-at: (i: Fixnum)) do: [
             # Two-unit code point.
             if: u length <= i + 1 then: [ (u .str invalid-utf8: "truncated code point") signal ]
             let: b2 = (u at: i + 1)
+            if: not (b1 >= 194) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
             if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
             ((b1 - 192) * 64 + (b2 - 128), 2)
         ] else: [
@@ -39,6 +40,7 @@ let: ((u: CodeUnits) decode-code-point-at: (i: Fixnum)) do: [
                 if: u length <= i + 2 then: [ (u .str invalid-utf8: "truncated code point") signal ]
                 let: b2 = (u at: i + 1)
                 let: b3 = (u at: i + 2)
+                if: (b1 = 224) and not (b2 >= 144) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
                 if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
                 if: not (b3 >= 128 and b3 < 192) then: [ (u .str invalid-utf8: "code unit 3 out of range") signal ]
                 ((b1 - 224) * 64 * 64 + (b2 - 128) * 64 + (b3 - 128), 3)
@@ -49,6 +51,7 @@ let: ((u: CodeUnits) decode-code-point-at: (i: Fixnum)) do: [
                     let: b2 = (u at: i + 1)
                     let: b3 = (u at: i + 2)
                     let: b4 = (u at: i + 3)
+                    if: (b1 = 240) and not (b2 >= 144) then: [ (u .str invalid-utf8: "overlong encoding") signal ]
                     if: not (b2 >= 128 and b2 < 192) then: [ (u .str invalid-utf8: "code unit 2 out of range") signal ]
                     if: not (b3 >= 128 and b3 < 192) then: [ (u .str invalid-utf8: "code unit 3 out of range") signal ]
                     if: not (b4 >= 128 and b4 < 192) then: [ (u .str invalid-utf8: "code unit 4 out of range") signal ]
@@ -70,4 +73,8 @@ let: ((p: CodePoints) each: body) do: [
             i: i + num-units
         ]
     ]
+]
+
+let: (s: String) verify-utf8 do: [
+    s code-points each: [ #null ]
 ]
