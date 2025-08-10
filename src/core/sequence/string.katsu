@@ -37,7 +37,7 @@ let: (s: String) code-points do: [ CodePoints str: s ]
 # Returns a pair (code-point: Fixnum, num-code-points: Fixnum),
 # or else returns (!) an InvalidUTF8 condition.
 # The input sequence is expected to be a sequence of bytes (for instance, a CodeUnits instance).
-let: (b: Sequence) decode-code-point* do: [
+let: (b: Sequence) decode-code-point do: [
     # See https://en.wikipedia.org/wiki/UTF-8 for Code point <-> UTF-8 conversion.
     let: b1 = (b at: 0)
     b1 switch: {
@@ -82,13 +82,13 @@ let: (b: Sequence) decode-code-point* do: [
 
 # Returns a pair (code-point: Fixnum, num-code-points: Fixnum),
 # or else returns an InvalidUTF8 condition.
-let: ((u: CodeUnits) decode-code-point-at*: (i: Fixnum)) do: [
-    (u from: i to<: u length) decode-code-point*
+let: ((u: CodeUnits) decode-code-point-at: (i: Fixnum)) do: [
+    (u from: i to<: u length) decode-code-point
 ]
 # Returns a pair (code-point: Fixnum, num-code-points: Fixnum),
 # or else signals an InvalidUTF8 condition.
-let: ((u: CodeUnits) decode-code-point-at: (i: Fixnum)) do: [
-    (u decode-code-point-at*: i) if*: [InvalidUTF8?] then: [ signal ] else: [ it ]
+let: ((u: CodeUnits) decode-code-point-at*: (i: Fixnum)) do: [
+    (u decode-code-point-at: i) if*: [InvalidUTF8?] then: [ signal ] else: [ it ]
 ]
 
 let: ((p: CodePoints) each: body) do: [
