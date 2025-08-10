@@ -28,3 +28,12 @@ let: ((bytes: Sequence) verify-not-utf8: (message: String)) do: [
 { 224; 129; 191 } verify-not-utf8: "overlong encoding"
 { 240; 128; 129; 191 } verify-not-utf8: "overlong encoding"
 # TODO: more testcases for truncation / continuation bytes
+
+print: "another example"
+"∃y ∀x ¬(x ≺ y)" code-points each: [ pretty-print: it ]
+
+print: "another example"
+"🐨" code-points each: [ pretty-print: it ]
+
+print: "another example"
+"Приве́т नमस्ते שָׁלוֹם" code-points each: [ pretty-print: it ]
