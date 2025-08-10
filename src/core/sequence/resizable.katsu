@@ -44,7 +44,3 @@ let: (resizable-like: (r: Resizable) capacity: n) do: [
 let: (resizable-like: (s: Sequence) capacity: n) do: [
     Resizable backing: (mutable-like: s length: n) used: 0
 ]
-
-
-
-
